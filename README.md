@@ -4,7 +4,7 @@
 
 ## Description 
 
-We aims to benchmark various distillation algorithms for QA and NER tasks. 
+We aim to benchmark various distillation algorithms for QA and NER tasks. 
 
 For QA task, you can download Natural Questions dataset from this https://ai.google.com/research/NaturalQuestions/download
 
