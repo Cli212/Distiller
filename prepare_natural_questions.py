@@ -31,13 +31,14 @@ if __name__ == '__main__':
         for url in [DEV_DATA_URL, TRAIN_DATA_URL]:
             filename = DEV_DATA_NAME if first else TRAIN_DATA_NAME
             try:
-                 key=url
-                 obj = s3.Object('gluonnlp-numpy-data',key)
-                 n = obj.get()['Body'].read()
-                 gzipfile = BytesIO(n)
-                 gzipfile = gzip.GzipFile(fileobj=gzipfile)
-                 content = gzipfile.read()
-                 open(os.path.join(DATA_DIR, filename), "wb+").write(content)
+                s3 = boto3.resource('s3')
+                key=url
+                obj = s3.Object('gluonnlp-numpy-data',key)
+                n = obj.get()['Body'].read()
+                gzipfile = BytesIO(n)
+                gzipfile = gzip.GzipFile(fileobj=gzipfile)
+                content = gzipfile.read()
+                open(os.path.join(DATA_DIR, filename), "wb+").write(content)
             except Exception as e:
                 print(e)
                 raise e
