@@ -1,6 +1,7 @@
 import json
 import boto3
 from io import BytesIO
+from boto3.session import Session
 import gzip
 import os
 import argparse
@@ -20,14 +21,16 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--all',default=False,type=ast.literal_eval)
     args = parser.parse_args()
+
+    session = Session(aws_access_key_id=ACCESS_KEY, aws_secret_access_key=SECRET_KEY, region_name='us-west-2')
+    s3 = session.client("s3")
     if args.all:
         pass
     else:
         first = True
         for url in [DEV_DATA_URL, TRAIN_DATA_URL]:
-            filename = TRAIN_DATA_NAME if first else DEV_DATA_NAME
+            filename = DEV_DATA_NAME if first else TRAIN_DATA_NAME
             try:
-                 s3 = boto3.resource('s3')
                  key=url
                  obj = s3.Object('gluonnlp-numpy-data',key)
                  n = obj.get()['Body'].read()
