@@ -4,8 +4,8 @@ from io import BytesIO
 import gzip
 import os
 
-ACCESS_KEY = os.getenv('ACCESS_KEY')
-SECRET_KEY = os.getenv('SECRET_KEY')
+ACCESS_KEY = os.getenv('AWS_ACCESS_KEY_ID')
+SECRET_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
 TRAIN_DATA_URL = 'https://gluonnlp-numpy-data.s3-us-west-2.amazonaws.com/NaturalQuestions/v1.0-simplified_simplified-nq-train.jsonl.gz'
 DEV_DATA_URL = 'https://gluonnlp-numpy-data.s3-us-west-2.amazonaws.com/NaturalQuestions/nq-dev-all.jsonl.gz'
 DATA_DIR = './datasets/NaturalQuestions'
