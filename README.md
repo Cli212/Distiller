@@ -6,11 +6,25 @@
 
 We aim to benchmark various distillation algorithms for QA and NER tasks. 
 
-For QA task, you can download Natural Questions dataset from this https://ai.google.com/research/NaturalQuestions/download
+Code for experiements can be put in directory /models.
 
-Other datasets can be found here https://github.com/dmlc/gluon-nlp/tree/master/scripts/datasets/question_answering
+## Dataset
 
-We can put code for experiments in directory /models
+For QA task, you can download simplified Natural Questions dataset by execute:
+
+``` shell
+python prepare_natural_questions.py
+```
+
+If you want to download all data(42G), you can execute
+
+```shell
+python prepare_natural_questions.py --all True
+```
+
+You can also find the official statement of NaturalQuestions here: https://ai.google.com/research/NaturalQuestions/download
+
+For other datasets, see this: https://github.com/dmlc/gluon-nlp/tree/master/scripts/datasets/question_answering
 
 
 
