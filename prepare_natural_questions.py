@@ -12,8 +12,8 @@ SECRET_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
 TRAIN_DATA_URL = 'NaturalQuestions/v1.0-simplified_simplified-nq-train.jsonl.gz'
 DEV_DATA_URL = 'NaturalQuestions/nq-dev-all.jsonl.gz'
 DATA_DIR = './datasets/NaturalQuestions'
-TRAIN_DATA_NAME = 'simplified-nq-train.jsonl.gz'
-DEV_DATA_NAME = 'nq-dev-all.jsonl.gz'
+TRAIN_DATA_NAME = 'simplified-nq-train.jsonl'
+DEV_DATA_NAME = 'nq-dev-all.jsonl'
 
 
 
