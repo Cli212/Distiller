@@ -6,8 +6,8 @@ import os
 
 ACCESS_KEY = os.getenv('AWS_ACCESS_KEY_ID')
 SECRET_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
-TRAIN_DATA_URL = 'https://gluonnlp-numpy-data.s3-us-west-2.amazonaws.com/NaturalQuestions/v1.0-simplified_simplified-nq-train.jsonl.gz'
-DEV_DATA_URL = 'https://gluonnlp-numpy-data.s3-us-west-2.amazonaws.com/NaturalQuestions/nq-dev-all.jsonl.gz'
+TRAIN_DATA_URL = 'NaturalQuestions/v1.0-simplified_simplified-nq-train.jsonl.gz'
+DEV_DATA_URL = 'NaturalQuestions/nq-dev-all.jsonl.gz'
 DATA_DIR = './datasets/NaturalQuestions'
 TRAIN_DATA_NAME = 'simplified-nq-train.jsonl.gz'
 DEV_DATA_NAME = 'nq-dev-all.jsonl.gz'
@@ -17,7 +17,7 @@ for url in [TRAIN_DATA_URL, DEV_DATA_URL]:
     filename = TRAIN_DATA_NAME if first else DEV_DATA_NAME
     try:
          s3 = boto3.resource('s3')
-         key='v1.0-simplified_simplified-nq-train.jsonl.gz'
+         key=url
          obj = s3.Object('gluonnlp-numpy-data',key)
          n = obj.get()['Body'].read()
          gzipfile = BytesIO(n)
