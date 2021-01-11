@@ -18,7 +18,7 @@ from common.io import load_examples
 from features import get_record_parser
 from tasks import get_task_model_class
 
-
+os.environ["CUDA_VISIBLE_DEVICES"] = '3'
 def evaluate(config):
     start = datetime.now()
     tf.set_random_seed(config.random_seed or 1)

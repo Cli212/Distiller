@@ -12,7 +12,7 @@ from common.config import get_config_from_args
 from features import get_record_parser
 from tasks import get_task_model_class
 
-
+os.environ["CUDA_VISIBLE_DEVICES"] = '3'
 def train(config):
     start = datetime.now()
     tf.set_random_seed(config.random_seed or 1)
