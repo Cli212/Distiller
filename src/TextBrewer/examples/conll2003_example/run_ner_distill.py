@@ -138,7 +138,7 @@ def train(args, train_dataset,model_T, model, tokenizer, labels, pad_token_label
                     'logits_mask':(batch['attention_mask'],)}
 
         distiller=GeneralDistiller(train_config,distill_config,model_T,model,adaptor_T,adaptor_S,)
-        distiller.train(optimizer,train_dataloader,,args.num_train_epochs,
+        distiller.train(optimizer,train_dataloader,args.num_train_epochs,
                         scheduler_class=scheduler_class, scheduler_args=scheduler_args,
                         max_grad_norm=1.0, callback=predict_callback)
         return
