@@ -6,28 +6,24 @@
 
 We aim to benchmark various distillation algorithms for QA and NER tasks. 
 
-Code for experiements can be put in directory /models.
+Code for experiements can be put in directory /src.
 
 ## Dataset
 
-For QA task, you can download simplified Natural Questions dataset by execute:
+For QA task, you can download SQuAD dataset by using gluon-nlp command:
 
 ``` shell
-python prepare_natural_questions.py
+nlp_data prepare_squad --version 1.1
 ```
 
-If you want to download all data(42G), you can execute
+For downloading other datasets, follow this: https://github.com/dmlc/gluon-nlp/tree/master/scripts/datasets/question_answering
 
-```shell
-python prepare_natural_questions.py --all True
-```
-
-You can also find the official statement of NaturalQuestions here: https://ai.google.com/research/NaturalQuestions/download
-
-For other datasets, see this: https://github.com/dmlc/gluon-nlp/tree/master/scripts/datasets/question_answering
+If you want to download all data of NaturalQuestions(42G), you can check out the official statement of NaturalQuestions here: https://ai.google.com/research/NaturalQuestions/download
 
 
 
 ## TO DOs
 
-Benchmark TextBrewer, DynaBERT, TinyBERT in NER, classification tasks and QA task.
+1. I am going to develop a toolkit which can be used to do KD related experiments easily and support customization. The idea is to use both textbrewer and transformers and the project lies in directory /src/Experiments/.
+
+2. Benchmark TextBrewer, DynaBERT, TinyBERT in NER, classification tasks and QA task.
