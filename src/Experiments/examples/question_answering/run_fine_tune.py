@@ -8,8 +8,8 @@ import random
 import timeit
 import numpy as np
 import torch
-from seqeval.metrics import precision_score, recall_score, f1_score
-from tensorboardX import SummaryWriter
+# from seqeval.metrics import precision_score, recall_score, f1_score
+# from tensorboardX import SummaryWriter
 from torch.nn import CrossEntropyLoss
 from preprocessing import convert_examples_to_features, read_examples_from_file, convert_features_to_dataset,SquadResult
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
@@ -17,10 +17,9 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 from transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
 
-os.environ['CUDA_AVAILABLE_DEVICES'] = '1'
 logger = logging.getLogger(__name__)
 
-ALL_MODELS = config.ALL_MODELS
+# ALL_MODELS = config.ALL_MODELS
 
 MODEL_CLASSES = config.MODEL_CLASSES
 
@@ -33,7 +32,7 @@ def set_seed(args):
         torch.cuda.manual_seed_all(args.seed)
 
 
-def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
+def load_and_cache_examples(args, tokenizer, mode, return_features = False):
     if args.local_rank not in [-1, 0] and mode != "train":
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
@@ -44,7 +43,7 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
-        dataset = convert_features_to_dataset(features)
+        dataset = convert_features_to_dataset(features, is_training = True if mode == 'train' else False)
         ## This place need to be more flexible
         examples = None
     else:
@@ -62,16 +61,16 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
 
     if args.local_rank == 0 and mode != "train":
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-    if return_examples:
-        return dataset, examples, features
+    if return_features:
+        return dataset, features
     # Convert to Tensors and build dataset
     return dataset
 
 
-def train(args, train_dataset, eval_dataset, model, tokenizer, pad_token_label_id):
+def train(args, train_dataset, model, tokenizer):
     """ train the model """
-    if args.local_rank in [-1, 0]:
-        tb_writer = SummaryWriter()
+    # if args.local_rank in [-1, 0]:
+    #     tb_writer = SummaryWriter()
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
@@ -93,6 +92,7 @@ def train(args, train_dataset, eval_dataset, model, tokenizer, pad_token_label_i
         {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    args.warmup_steps = int(t_total * args.warmup_proportion)
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
     )
@@ -223,16 +223,16 @@ def train(args, train_dataset, eval_dataset, model, tokenizer, pad_token_label_i
                 model.zero_grad()
                 global_step += 1
 
-                # Log metrics
-                if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
-                    # Only evaluate when single GPU otherwise metrics may not average well
-                    if args.local_rank == -1 and args.evaluate_during_training:
-                        results = evaluate(args, model, tokenizer)
-                        for key, value in results.items():
-                            tb_writer.add_scalar("eval_{}".format(key), value, global_step)
-                    tb_writer.add_scalar("lr", scheduler.get_lr()[0], global_step)
-                    tb_writer.add_scalar("loss", (tr_loss - logging_loss) / args.logging_steps, global_step)
-                    logging_loss = tr_loss
+                # # Log metrics
+                # if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
+                #     # Only evaluate when single GPU otherwise metrics may not average well
+                #     if args.local_rank == -1 and args.evaluate_during_training:
+                #         results = evaluate(args, model, tokenizer)
+                #         for key, value in results.items():
+                #             tb_writer.add_scalar("eval_{}".format(key), value, global_step)
+                #     tb_writer.add_scalar("lr", scheduler.get_lr()[0], global_step)
+                #     tb_writer.add_scalar("loss", (tr_loss - logging_loss) / args.logging_steps, global_step)
+                #     logging_loss = tr_loss
 
                 # Save model checkpoint
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
@@ -256,14 +256,14 @@ def train(args, train_dataset, eval_dataset, model, tokenizer, pad_token_label_i
             train_iterator.close()
             break
 
-    if args.local_rank in [-1, 0]:
-        tb_writer.close()
+    # if args.local_rank in [-1, 0]:
+    #     tb_writer.close()
 
     return global_step, tr_loss / global_step
 
 
 def evaluate(args, model, tokenizer, prefix=""):
-    dataset, examples, features = load_and_cache_examples(args, tokenizer, mode="dev", return_examples=True)
+    dataset, features = load_and_cache_examples(args, tokenizer, mode="dev", return_features=True)
 
     if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
         os.makedirs(args.output_dir)
@@ -376,7 +376,8 @@ def main(args):
                                           cache_dir=args.cache_dir if args.cache_dir else None)
     tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
                                                 do_lower_case=args.do_lower_case,
-                                                cache_dir=args.cache_dir if args.cache_dir else None)
+                                                cache_dir=args.cache_dir if args.cache_dir else None,
+                                                use_fast = False)
     model = model_class.from_pretrained(args.model_name_or_path,
                                         from_tf=bool(".ckpt" in args.model_name_or_path),
                                         config=config,
@@ -404,7 +405,7 @@ def main(args):
 
     # Training
     if args.do_train:
-        train_dataset = load_and_cache_examples(args, tokenizer, mode="train", return_examples=False)
+        train_dataset = load_and_cache_examples(args, tokenizer, mode="train", return_features=False)
         global_step, tr_loss = train(args, train_dataset, model, tokenizer)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 

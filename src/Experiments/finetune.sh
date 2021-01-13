@@ -5,12 +5,12 @@ DATA_ROOT_DIR=../../datasets/squad
 
 accu=1
 ep=2
-lr=3
+lr=1
 batch_size=12
 length=512
 torch_seed=9580
 
-NAME=cmrc2018_base_lr${lr}e${ep}_teacher
+NAME=squad_base_lr${lr}e${ep}_teacher
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
 
 
@@ -27,15 +27,16 @@ python -u examples/question_answering/run_fine_tune.py \
     --do_predict \
     --doc_stride 320 \
     --max_seq_length ${length} \
-    --train_batch_size ${batch_size} \
+    --per_gpu_train_batch_size ${batch_size} \
     --random_seed $torch_seed \
     --num_train_epochs ${ep} \
-    --learning_rate ${lr}e-5 \
+    --learning_rate ${lr}e-4 \
     --ckpt_frequency 1 \
-    --thread 1 \
+    --thread 40 \
     --schedule slanted_triangular \
     --s_opt1 30 \
     --output_dir $OUTPUT_DIR \
     --gradient_accumulation_steps ${accu} \
+    --overwrite_output_dir \
     --output_encoded_layers false \
     --output_attention_layers false

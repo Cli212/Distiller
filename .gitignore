@@ -1,3 +1,6 @@
+.idea
+.ipynb_checkpoints
+.env/
 datasets/*
 models/*
 *.ipynb
