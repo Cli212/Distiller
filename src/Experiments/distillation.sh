@@ -17,7 +17,7 @@ OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
 
 mkdir -p $OUTPUT_DIR
 
-python -u examples/question_answering/run_finetune.py \
+python -u examples/question_answering/run_distiller.py \
     --model_type bert \
     --data_dir $DATA_ROOT_DIR \
     --model_name_or_path $BERT_DIR \

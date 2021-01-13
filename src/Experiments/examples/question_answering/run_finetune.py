@@ -1,6 +1,6 @@
 import importlib
 import config
-import argparse
+from utils import write_predictions_google, evaluate as eval_func
 import glob
 import logging
 import os
@@ -10,7 +10,8 @@ import numpy as np
 import torch
 # from seqeval.metrics import precision_score, recall_score, f1_score
 # from tensorboardX import SummaryWriter
-from torch.nn import CrossEntropyLoss
+from collections import OrderedDict
+import json
 from preprocessing import convert_examples_to_features, read_examples_from_file, convert_features_to_dataset,SquadResult
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
@@ -32,7 +33,7 @@ def set_seed(args):
         torch.cuda.manual_seed_all(args.seed)
 
 
-def load_and_cache_examples(args, tokenizer, mode, return_features = False):
+def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
     if args.local_rank not in [-1, 0] and mode != "train":
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
@@ -40,15 +41,14 @@ def load_and_cache_examples(args, tokenizer, mode, return_features = False):
     cached_features_file = os.path.join(args.data_dir, "cached_{}_{}_{}".format(mode,
         list(filter(None, args.model_name_or_path.split("/"))).pop(),
         str(args.max_seq_length)))
+    examples = read_examples_from_file(args.data_dir, mode, args.version)
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
         dataset = convert_features_to_dataset(features, is_training = True if mode == 'train' else False)
         ## This place need to be more flexible
-        examples = None
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
-        examples = read_examples_from_file(args.data_dir, mode, args.version)
         features, dataset = convert_examples_to_features(examples, tokenizer, args.max_seq_length,
                                                               args.doc_stride,
                                                               args.max_query_length,
@@ -61,10 +61,38 @@ def load_and_cache_examples(args, tokenizer, mode, return_features = False):
 
     if args.local_rank == 0 and mode != "train":
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-    if return_features:
-        return dataset, features
+    if return_examples:
+        return dataset, features, examples
     # Convert to Tensors and build dataset
     return dataset
+
+
+def write_evaluation(model, tokenizer, eval_examples, eval_features, all_results):
+    logger.info("Write predictions...")
+    output_prediction_file = os.path.join(args.output_dir, f"predictions.json")
+
+    all_predictions, scores_diff_json = \
+        write_predictions_google(tokenizer, eval_examples, eval_features, all_results,
+                                 args.n_best_size, args.max_answer_length,
+                                 args.do_lower_case, output_prediction_file,
+                                 output_nbest_file=None, output_null_log_odds_file=None)
+    model.train()
+    if args.do_eval:
+        eval_data = json.load(open(os.path.join(args.data_dir, f"dev-v{args.version}.json"), 'r', encoding='utf-8'))
+        F1, EM, TOTAL, SKIP = eval_func(eval_data, all_predictions)  # ,scores_diff_json, na_prob_thresh=0)
+        AVG = (EM + F1) * 0.5
+        output_result = OrderedDict()
+        output_result['AVERAGE'] = '%.3f' % AVG
+        output_result['F1'] = '%.3f' % F1
+        output_result['EM'] = '%.3f' % EM
+        output_result['TOTAL'] = TOTAL
+        output_result['SKIP'] = SKIP
+        logger.info("***** Eval results *****")
+        logger.info(json.dumps(output_result) + '\n')
+
+        output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
+        with open(output_eval_file, "a") as writer:
+            writer.write(f"Output: {json.dumps(output_result)}\n")
 
 
 def train(args, train_dataset, model, tokenizer):
@@ -223,20 +251,15 @@ def train(args, train_dataset, model, tokenizer):
                 model.zero_grad()
                 global_step += 1
 
-                # # Log metrics
-                # if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
-                #     # Only evaluate when single GPU otherwise metrics may not average well
-                #     if args.local_rank == -1 and args.evaluate_during_training:
-                #         results = evaluate(args, model, tokenizer)
-                #         for key, value in results.items():
-                #             tb_writer.add_scalar("eval_{}".format(key), value, global_step)
-                #     tb_writer.add_scalar("lr", scheduler.get_lr()[0], global_step)
-                #     tb_writer.add_scalar("loss", (tr_loss - logging_loss) / args.logging_steps, global_step)
-                #     logging_loss = tr_loss
+                # Log metrics
+                if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
+                    # Only evaluate when single GPU otherwise metrics may not average well
+                    if args.local_rank == -1 and args.evaluate_during_training:
+                        results = evaluate(args, model, tokenizer)
 
                 # Save model checkpoint
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
-                    output_dir = os.path.join(args.output_dir, "checkpoint-{}".format(global_step))
+                    output_dir = os.path.join(args.output_dir, "checkpoint")
                     # Take care of distributed/parallel training
                     model_to_save = model.module if hasattr(model, "module") else model
                     model_to_save.save_pretrained(output_dir)
@@ -263,7 +286,7 @@ def train(args, train_dataset, model, tokenizer):
 
 
 def evaluate(args, model, tokenizer, prefix=""):
-    dataset, features = load_and_cache_examples(args, tokenizer, mode="dev", return_features=True)
+    dataset, features, examples = load_and_cache_examples(args, tokenizer, mode="dev", return_examples=True)
 
     if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
         os.makedirs(args.output_dir)
@@ -341,7 +364,8 @@ def evaluate(args, model, tokenizer, prefix=""):
                 result = SquadResult(unique_id, start_logits, end_logits)
 
             all_results.append(result)
-
+    write_evaluation(model, tokenizer, examples, features, all_results)
+    return all_results
 
 def main(args):
 
@@ -372,7 +396,7 @@ def main(args):
 
     args.model_type = args.model_type.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
-    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
+    config = config_class.from_pretrained(args.bert_config_file_T if args.bert_config_file_T else args.model_name_or_path,
                                           cache_dir=args.cache_dir if args.cache_dir else None)
     tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
                                                 do_lower_case=args.do_lower_case,
@@ -405,7 +429,7 @@ def main(args):
 
     # Training
     if args.do_train:
-        train_dataset = load_and_cache_examples(args, tokenizer, mode="train", return_features=False)
+        train_dataset = load_and_cache_examples(args, tokenizer, mode="train", return_examples=False)
         global_step, tr_loss = train(args, train_dataset, model, tokenizer)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
@@ -455,10 +479,9 @@ def main(args):
             model.to(args.device)
 
             # Evaluate
-            result = evaluate(args, model, tokenizer, prefix=global_step)
-
-            result = dict((k + ("_{}".format(global_step) if global_step else ""), v) for k, v in result.items())
-            results.update(result)
+            results = evaluate(args, model, tokenizer, prefix=global_step)
+            # result = dict((k + ("_{}".format(global_step) if global_step else ""), v) for k, v in result.items())
+            # results.update(result)
 
     logger.info("Results: {}".format(results))
 

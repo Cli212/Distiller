@@ -9,8 +9,6 @@ import numpy as np
 from transformers.models.bert.tokenization_bert import whitespace_tokenize
 from tokenization_utils import TruncationStrategy
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
-from torch.utils.data.distributed import DistributedSampler
-
 # This file defines data preprocessing methods for various datasets
 # These methods changes different data structure in datasets to what we can use for our experiments
 logger = logging.getLogger(__name__)
@@ -689,5 +687,8 @@ def _is_whitespace(c):
     if c == " " or c == "\t" or c == "\r" or c == "\n" or ord(c) == 0x202F:
         return True
     return False
+
+
+
 
 

@@ -25,17 +25,17 @@ def parse(opt=None):
     parser.add_argument("--model_type", default=None, type=str, required=True,
                         help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
-                        help="Path to pre-trained model or shortcut name selected in the list: ")
+                        help="Path to pre-trained model or shortcut name")
+    parser.add_argument("--model_name_or_path_student", default=None, type=str,
+                        help="Path to pre-trained model or shortcut name for student model")
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model predictions and checkpoints will be written.")
-
+    parser.add_argument("--evaluate_during_training", action="store_true")
     ## Other parameters
     parser.add_argument("--version", default="1.1", type=str, help="squad data version")
     # parser.add_argument("--train_file", default=None, type=str, help="SQuAD json for training. E.g., train-v2.0.json")
     # parser.add_argument("--predict_file", default=None, type=str,
     #                     help="SQuAD json for predictions. E.g., dev-v2.0.json or test-v2.0.json")
-    parser.add_argument("--config_name", default="", type=str,
-                        help="Pretrained config name or path if not the same as model_name")
     parser.add_argument("--tokenizer_name", default="", type=str,
                         help="Pretrained tokenizer name or path if not the same as model_name")
     parser.add_argument("--cache_dir", default="", type=str,
@@ -71,7 +71,8 @@ def parse(opt=None):
                         help="Overwrite the cached training and evaluation sets")
     parser.add_argument("--seed", type=int, default=42,
                         help="random seed for initialization")
-
+    parser.add_argument("--bert_config_file_T", default=None, type=str, required=False)
+    parser.add_argument("--bert_config_file_S", default=None, type=str, required=False)
     parser.add_argument("--num_train_epochs", default=3.0, type=float,
                         help="Total number of training epochs to perform.")
     parser.add_argument("--warmup_proportion", default=0.1, type=float,
@@ -116,21 +117,16 @@ def parse(opt=None):
     parser.add_argument('--do_eval',action='store_true')
     parser.add_argument('--PRINT_EVERY',type=int,default=200)
     parser.add_argument('--weight',type=float,default=1.0)
-    parser.add_argument('--ckpt_frequency',type=int,default=2)
 
     parser.add_argument('--tuned_checkpoint_T',type=str,default=None)
     parser.add_argument('--tuned_checkpoint_S',type=str,default=None)
     parser.add_argument("--init_checkpoint_S", default=None, type=str)
-    parser.add_argument("--bert_config_file_T", default=None, type=str, required=False)
-    parser.add_argument("--bert_config_file_S", default=None, type=str, required=False)
     parser.add_argument("--temperature", default=1, type=float, required=False)
     parser.add_argument("--teacher_cached",action='store_true')
 
     parser.add_argument('--s_opt1',type=float,default=1.0, help="release_start / step1 / ratio")
     parser.add_argument('--s_opt2',type=float,default=0.0, help="release_level / step2")
     parser.add_argument('--s_opt3',type=float,default=1.0, help="not used / decay rate")
-    parser.add_argument('--schedule',type=str,default='warmup_linear_release')
-    parser.add_argument('--null_score_diff_threshold',type=float,default=99.0)
 
     parser.add_argument('--tag',type=str,default='RB')
     parser.add_argument('--no_inputs_mask',action='store_true')
