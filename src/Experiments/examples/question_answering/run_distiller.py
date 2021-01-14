@@ -12,7 +12,7 @@ import torch
 # from tensorboardX import SummaryWriter
 from torch.nn import CrossEntropyLoss
 from preprocessing import convert_examples_to_features, read_examples_from_file, convert_features_to_dataset,SquadResult
-from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset, Dataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 from transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
@@ -20,9 +20,30 @@ from transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
 logger = logging.getLogger(__name__)
 
 # ALL_MODELS = config.ALL_MODELS
-
 MODEL_CLASSES = config.MODEL_CLASSES
 
+
+class MyDataset(Dataset):
+    def __init__(self, all_input_ids, all_attention_masks, all_token_type_ids, all_start_positions, all_end_positions):
+        super(MyDataset, self).__init__()
+        self.all_input_ids = all_input_ids
+        self.all_attention_masks = all_attention_masks
+        self.all_token_type_ids =all_token_type_ids
+        self.all_start_positions = all_start_positions
+        self.all_end_positions = all_end_positions
+    def __getitem__(self, index):
+        input_ids = self.all_input_ids[index]
+        attention_masks = self.all_attention_masks[index]
+        token_type_ids = self.all_token_type_ids[index]
+        start_positions = self.all_start_positions[index]
+        end_positions = self.all_end_positions[index]
+        return {'input_ids':input_ids,
+                'attention_mask':attention_masks,
+                'token_type_ids':token_type_ids,
+                'start_positions':start_positions,
+                "end_positions":end_positions}
+    def __len__(self):
+        return len(self.all_input_ids)
 
 
 def set_seed(args):
@@ -33,7 +54,7 @@ def set_seed(args):
         torch.cuda.manual_seed_all(args.seed)
 
 
-def load_and_cache_examples(args, tokenizer, mode, return_features = False):
+def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
     if args.local_rank not in [-1, 0] and mode != "train":
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
@@ -41,15 +62,14 @@ def load_and_cache_examples(args, tokenizer, mode, return_features = False):
     cached_features_file = os.path.join(args.data_dir, "cached_{}_{}_{}".format(mode,
         list(filter(None, args.model_name_or_path.split("/"))).pop(),
         str(args.max_seq_length)))
+    examples = read_examples_from_file(args.data_dir, mode, args.version)
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
         dataset = convert_features_to_dataset(features, is_training = True if mode == 'train' else False)
         ## This place need to be more flexible
-        examples = None
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
-        examples = read_examples_from_file(args.data_dir, mode, args.version)
         features, dataset = convert_examples_to_features(examples, tokenizer, args.max_seq_length,
                                                               args.doc_stride,
                                                               args.max_query_length,
@@ -62,10 +82,19 @@ def load_and_cache_examples(args, tokenizer, mode, return_features = False):
 
     if args.local_rank == 0 and mode != "train":
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-    if return_features:
-        return dataset, features
+
+    if mode == "train":
+        all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+        all_attention_masks = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
+        all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
+        all_start_positions = torch.tensor([f.start_position for f in features], dtype=torch.long)
+        all_end_positions = torch.tensor([f.end_position for f in features], dtype=torch.long)
+        dataset = MyDataset(all_input_ids,all_attention_masks,all_token_type_ids,all_start_positions,all_end_positions)
     # Convert to Tensors and build dataset
+    if return_examples:
+        return dataset, features, examples
     return dataset
+
 
 def train(args, train_dataset,model_T, model, tokenizer, predict_callback):
     """ Train the model """
@@ -88,6 +117,7 @@ def train(args, train_dataset,model_T, model, tokenizer, predict_callback):
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler_class = get_linear_schedule_with_warmup
+    args.warmup_steps = int(t_total * args.warmup_proportion)
     scheduler_args = {'num_warmup_steps':int(args.warmup_steps*t_total), 'num_training_steps':t_total}
     if args.fp16:
         try:
@@ -118,23 +148,35 @@ def train(args, train_dataset,model_T, model, tokenizer, predict_callback):
     logger.info("  Total optimization steps = %d", t_total)
     if args.do_train and args.do_distill:
         from textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller
+        from matches import matches
+        intermediate_matches = None
+        if isinstance(args.matches, (list, tuple)):
+            intermediate_matches = []
+            for match in args.matches:
+                intermediate_matches += matches[match]
+        logger.info(f"{intermediate_matches}")
         distill_config = DistillationConfig(
-            temperature = 8,
-              # intermediate_matches = [{'layer_T':10, 'layer_S':3, 'feature':'hidden','loss': 'hidden_mse', 'weight' : 1}]
-            )
+            temperature=args.temperature,
+            intermediate_matches=intermediate_matches)
         train_config = TrainingConfig(device="cuda",log_dir=args.output_dir,output_dir=args.output_dir)
-        def adaptor_T(batch,model_output):
-            return {"logits":(model_output[1],),
-                    'logits_mask':(batch['attention_mask'],)}
-        def adaptor_S(batch,model_output):
-            return {"logits":(model_output[1],),
-                    'logits_mask':(batch['attention_mask'],)}
-
+        adaptor_T = BertForQAAdaptor
+        adaptor_S = BertForQAAdaptor
         distiller=GeneralDistiller(train_config,distill_config,model_T,model,adaptor_T,adaptor_S,)
-        distiller.train(optimizer,train_dataloader,args.num_train_epochs,
-                        scheduler_class=scheduler_class, scheduler_args=scheduler_args,
-                        max_grad_norm=1.0, callback=predict_callback)
+        # distiller.train(optimizer,train_dataloader,args.num_train_epochs,
+        #                 scheduler_class=scheduler_class, scheduler_args=scheduler_args,
+        #                 max_grad_norm=1.0, callback=predict_callback)
+        with distiller:
+            distiller.train(optimizer, scheduler=None, dataloader=train_dataloader,
+                              num_epochs=args.num_train_epochs, callback=predict_callback)
         return
+
+def BertForQAAdaptor(batch, model_outputs, no_mask=False, no_logits=False):
+    dict_obj = {'hidden':      model_outputs.hidden_states, 'attention':   model_outputs.attentions}
+    if no_mask is False:
+        dict_obj['inputs_mask'] = batch['attention_mask']
+    if no_logits is False:
+        dict_obj['logits'] = (model_outputs.start_logits,model_outputs.end_logits)
+    return dict_obj
 
 
 def evaluate(args, model, tokenizer, prefix=""):
@@ -255,8 +297,10 @@ def main(args):
 
     args.model_type = args.model_type.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
-    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
+    config = config_class.from_pretrained(args.bert_config_file_T if args.bert_config_file_T else args.model_name_or_path,
                                           cache_dir=args.cache_dir if args.cache_dir else None)
+    config.output_hidden_states = True
+    config.output_attentions = True
     tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
                                                 do_lower_case=args.do_lower_case,
                                                 cache_dir=args.cache_dir if args.cache_dir else None)
@@ -265,17 +309,21 @@ def main(args):
                                         config=config,
                                         cache_dir=args.cache_dir if args.cache_dir else None)
     if args.model_name_or_path_student != None:
-        config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path_student,
+        config = config_class.from_pretrained(args.bert_config_file_S if args.bert_config_file_S else args.model_name_or_path_student,
                                               cache_dir=args.cache_dir if args.cache_dir else None)
-        config.num_hidden_layers=args.num_hidden_layers
+        config.output_hidden_states = True
+        config.output_attentions = True
+        # config.num_hidden_layers=args.num_hidden_layers
         model = model_class.from_pretrained(args.model_name_or_path_student,
                                         from_tf=bool(".ckpt" in args.model_name_or_path),
                                         config=config,
                                         cache_dir=args.cache_dir if args.cache_dir else None)
     else:
-        config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path,
+        config = config_class.from_pretrained(args.bert_config_file_S if args.bert_config_file_S else args.model_name_or_path,
                                           cache_dir=args.cache_dir if args.cache_dir else None)
-        config.num_hidden_layers=args.num_hidden_layers
+        # config.num_hidden_layers=args.num_hidden_layers
+        config.output_hidden_states = True
+        config.output_attentions = True
         model = model_class.from_pretrained(args.model_name_or_path,
                                         from_tf=bool(".ckpt" in args.model_name_or_path),
                                         config=config,
@@ -373,5 +421,6 @@ def main(args):
     return results
 
 if __name__ == '__main__':
+    config.parse()
     args = config.args
     main(args)

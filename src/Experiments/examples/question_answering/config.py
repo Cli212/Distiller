@@ -52,9 +52,10 @@ def parse(opt=None):
                         help="The maximum number of tokens for the question. Questions longer than this will "
                              "be truncated to this length.")
     parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
+    parser.add_argument("do_distill", default=False, action="store_true", help="Whether to do distillation")
     parser.add_argument("--do_predict", default=False, action='store_true', help="Whether to run eval on the dev set.")
     parser.add_argument("--learning_rate", default=3e-5, type=float, help="The initial learning rate for Adam.")
-
+    parser.add_argument("--num_hidden_layers", default=12, type=int)
     parser.add_argument("--max_steps", default=-1, type=int,
                         help="If > 0: set total number of training steps to perform. Override num_train_epochs.")
 
