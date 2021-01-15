@@ -1,6 +1,6 @@
 import importlib
 import config
-from utils import write_predictions_google, evaluate as eval_func
+from utils import write_evaluation, evaluate as eval_func
 import glob
 import logging
 import os
@@ -17,7 +17,6 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Tenso
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 from transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
-
 logger = logging.getLogger(__name__)
 
 # ALL_MODELS = config.ALL_MODELS
@@ -34,7 +33,7 @@ def set_seed(args):
 
 
 def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
-    if args.local_rank not in [-1, 0] and mode != "train":
+    if args.local_rank not in [-1, 0] and mode != "dev":
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Load data features from cache or dataset file
@@ -59,40 +58,12 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
 
-    if args.local_rank == 0 and mode != "train":
+    if args.local_rank == 0 and mode != "dev":
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
     if return_examples:
         return dataset, features, examples
     # Convert to Tensors and build dataset
     return dataset
-
-
-def write_evaluation(model, tokenizer, eval_examples, eval_features, all_results):
-    logger.info("Write predictions...")
-    output_prediction_file = os.path.join(args.output_dir, f"predictions.json")
-
-    all_predictions, scores_diff_json = \
-        write_predictions_google(tokenizer, eval_examples, eval_features, all_results,
-                                 args.n_best_size, args.max_answer_length,
-                                 args.do_lower_case, output_prediction_file,
-                                 output_nbest_file=None, output_null_log_odds_file=None)
-    model.train()
-    if args.do_eval:
-        eval_data = json.load(open(os.path.join(args.data_dir, f"dev-v{args.version}.json"), 'r', encoding='utf-8'))
-        F1, EM, TOTAL, SKIP = eval_func(eval_data, all_predictions)  # ,scores_diff_json, na_prob_thresh=0)
-        AVG = (EM + F1) * 0.5
-        output_result = OrderedDict()
-        output_result['AVERAGE'] = '%.3f' % AVG
-        output_result['F1'] = '%.3f' % F1
-        output_result['EM'] = '%.3f' % EM
-        output_result['TOTAL'] = TOTAL
-        output_result['SKIP'] = SKIP
-        logger.info("***** Eval results *****")
-        logger.info(json.dumps(output_result) + '\n')
-
-        output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
-        with open(output_eval_file, "a") as writer:
-            writer.write(f"Output: {json.dumps(output_result)}\n")
 
 
 def train(args, train_dataset, model, tokenizer):
@@ -142,7 +113,7 @@ def train(args, train_dataset, model, tokenizer):
         model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
 
     # multi-gpu training (should be after apex fp16 initialization)
-    if args.n_gpu > 1:
+    if args.n_gpu > 1 and args.local_rank == -1:
         model = torch.nn.DataParallel(model)
 
     # Distributed training (should be after apex fp16 initialization)
@@ -189,8 +160,6 @@ def train(args, train_dataset, model, tokenizer):
     train_iterator = trange(
         epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0]
     )
-    # Added here for reproductibility
-    set_seed(args)
 
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
@@ -226,7 +195,7 @@ def train(args, train_dataset, model, tokenizer):
 
             outputs = model(**inputs)
             # model outputs are always tuple in transformers (see doc)
-            loss = outputs[0]
+            loss = outputs.loss
 
             if args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel (not distributed) training
@@ -255,7 +224,8 @@ def train(args, train_dataset, model, tokenizer):
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
                     # Only evaluate when single GPU otherwise metrics may not average well
                     if args.local_rank == -1 and args.evaluate_during_training:
-                        results = evaluate(args, model, tokenizer)
+                        examples, features, results = evaluate(args, model, tokenizer)
+                        write_evaluation(args, model, tokenizer, examples, features, results, prefix=str(step)+"step")
 
                 # Save model checkpoint
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
@@ -294,7 +264,7 @@ def evaluate(args, model, tokenizer, prefix=""):
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
 
     # Note that DistributedSampler samples randomly
-    eval_sampler = SequentialSampler(dataset)
+    eval_sampler = SequentialSampler(dataset) if args.local_rank == -1 else DistributedSampler(dataset)
     eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
     # multi-gpu evaluate
@@ -334,41 +304,43 @@ def evaluate(args, model, tokenizer, prefix=""):
                         {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * args.lang_id).to(args.device)}
                     )
             outputs = model(**inputs)
-
+        batch_start_logits = outputs.start_logits.detach().cpu().tolist()
+        batch_end_logits = outputs.end_logits.detach().cpu().tolist()
         for i, feature_index in enumerate(feature_indices):
             eval_feature = features[feature_index.item()]
             unique_id = int(eval_feature.unique_id)
 
-            output = [output[i].detach().cpu().tolist() for output in outputs.to_tuple()]
-
+            # output = [output[i].detach().cpu().tolist() for output in outputs.to_tuple()]
+            start_logits= batch_start_logits[i]
+            end_logits = batch_end_logits[i]
             # Some models (XLNet, XLM) use 5 arguments for their predictions, while the other "simpler"
             # models only use two.
-            if len(output) >= 5:
-                start_logits = output[0]
-                start_top_index = output[1]
-                end_logits = output[2]
-                end_top_index = output[3]
-                cls_logits = output[4]
-
-                result = SquadResult(
-                    unique_id,
-                    start_logits,
-                    end_logits,
-                    start_top_index=start_top_index,
-                    end_top_index=end_top_index,
-                    cls_logits=cls_logits,
-                )
-
-            else:
-                start_logits, end_logits = output
-                result = SquadResult(unique_id, start_logits, end_logits)
+            # if len(output) >= 5:
+            #     start_top_index = output[1]
+            #     end_top_index = output[3]
+            #     cls_logits = output.cls_logits
+            #
+            #     result = SquadResult(
+            #         unique_id,
+            #         start_logits,
+            #         end_logits,
+            #         start_top_index=start_top_index,
+            #         end_top_index=end_top_index,
+            #         cls_logits=cls_logits,
+            #     )
+            #
+            # else:
+            result = SquadResult(unique_id, start_logits, end_logits)
 
             all_results.append(result)
-    write_evaluation(model, tokenizer, examples, features, all_results)
-    return all_results
+    return examples, features, all_results
 
 def main(args):
-
+    if os.path.exists(args.output_dir) and os.listdir(
+            args.output_dir) and args.do_train and not args.overwrite_output_dir:
+        raise ValueError(
+            "Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(
+                args.output_dir))
 # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
@@ -394,6 +366,12 @@ def main(args):
         args.fp16,
     )
 
+    # Added here for reproductibility
+    set_seed(args)
+    # Load pretrained model and tokenizer
+    if args.local_rank not in [-1, 0]:
+        torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
+
     args.model_type = args.model_type.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
     config = config_class.from_pretrained(args.bert_config_file_T if args.bert_config_file_T else args.model_name_or_path,
@@ -408,12 +386,9 @@ def main(args):
                                         cache_dir=args.cache_dir if args.cache_dir else None)
 
     if args.local_rank == 0:
-        # Make sure only the first process in distributed training will download model & vocab
-        torch.distributed.barrier()
+        torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
     model.to(args.device)
-
-
 
     logger.info("Training/evaluation parameters %s", args)
 
@@ -479,13 +454,14 @@ def main(args):
             model.to(args.device)
 
             # Evaluate
-            results = evaluate(args, model, tokenizer, prefix=global_step)
+            examples, features, results = evaluate(args, model, tokenizer, prefix=global_step)
+            write_evaluation(args, model, tokenizer, examples, features, results, prefix=str(global_step)+" step")
             # result = dict((k + ("_{}".format(global_step) if global_step else ""), v) for k, v in result.items())
             # results.update(result)
 
     logger.info("Results: {}".format(results))
 
-    return results
+    return
 
 
 

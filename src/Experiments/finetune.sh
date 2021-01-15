@@ -3,8 +3,8 @@ BERT_DIR=../../models/bert-base-cased
 OUTPUT_ROOT_DIR=output-bert-base
 DATA_ROOT_DIR=../../datasets/squad
 
-accu=1
-ep=5
+accu=5
+ep=3
 lr=1
 batch_size=12
 length=512
@@ -12,12 +12,11 @@ torch_seed=9580
 
 NAME=squad_base_lr${lr}e${ep}_teacher
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
-
-
+gpu_nums=4
 
 mkdir -p $OUTPUT_DIR
 
-python -u examples/question_answering/run_finetune.py \
+python -m torch.distributed.launch --nproc_per_node=${gpu_nums} examples/question_answering/run_finetune.py \
     --model_type bert \
     --data_dir $DATA_ROOT_DIR \
     --model_name_or_path $BERT_DIR \
@@ -25,7 +24,6 @@ python -u examples/question_answering/run_finetune.py \
     --max_seq_length ${length} \
     --do_train \
     --do_eval \
-    --do_predict \
     --doc_stride 320 \
     --per_gpu_train_batch_size ${batch_size} \
     --random_seed $torch_seed \

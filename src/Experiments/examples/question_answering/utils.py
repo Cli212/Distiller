@@ -8,11 +8,39 @@ import six
 from scipy.misc import logsumexp
 from collections import Counter, OrderedDict
 import re
-import argparse
+import os
 import json
 import sys
 import nltk
 logger = logging.getLogger(__name__)
+
+def write_evaluation(args, model, tokenizer, eval_examples, eval_features, all_results, prefix=""):
+
+    output_prediction_file = os.path.join(args.output_dir, f"{prefix}_predictions.json")
+    logger.info(f"Write predictions to {output_prediction_file}...")
+    all_predictions, scores_diff_json = \
+        write_predictions_google(tokenizer, eval_examples, eval_features, all_results,
+                                 args.n_best_size, args.max_answer_length,
+                                 args.do_lower_case, output_prediction_file,
+                                 output_nbest_file=None, output_null_log_odds_file=None)
+    model.train()
+    if args.do_eval:
+        eval_data = json.load(open(os.path.join(args.data_dir, f"dev-v{args.version}.json"), 'r', encoding='utf-8'))
+        F1, EM, TOTAL, SKIP = evaluate(eval_data, all_predictions)  # ,scores_diff_json, na_prob_thresh=0)
+        AVG = (EM + F1) * 0.5
+        output_result = OrderedDict()
+        output_result['AVERAGE'] = '%.3f' % AVG
+        output_result['F1'] = '%.3f' % F1
+        output_result['EM'] = '%.3f' % EM
+        output_result['TOTAL'] = TOTAL
+        output_result['SKIP'] = SKIP
+        logger.info("***** Eval results *****")
+        logger.info(json.dumps(output_result) + '\n')
+
+        output_eval_file = os.path.join(args.output_dir, f"{prefix}_eval_results.txt")
+        logger.info(f"Write evaluation result to {output_eval_file}...")
+        with open(output_eval_file, "a") as writer:
+            writer.write(f"Output: {json.dumps(output_result)}\n")
 
 def write_predictions_google(tokenizer, all_examples, all_features, all_results, n_best_size,
                       max_answer_length, do_lower_case, output_prediction_file,

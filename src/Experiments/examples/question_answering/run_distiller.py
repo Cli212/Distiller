@@ -9,11 +9,8 @@ import timeit
 import numpy as np
 import torch
 import json
-from utils import write_predictions_google, evaluate as eval_func
+from utils import write_evaluation, evaluate as eval_func
 from collections import OrderedDict
-# from seqeval.metrics import precision_score, recall_score, f1_score
-# from tensorboardX import SummaryWriter
-from torch.nn import CrossEntropyLoss
 from preprocessing import convert_examples_to_features, read_examples_from_file, convert_features_to_dataset,SquadResult
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset, Dataset
 from torch.utils.data.distributed import DistributedSampler
@@ -58,7 +55,7 @@ def set_seed(args):
 
 
 def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
-    if args.local_rank not in [-1, 0] and mode != "train":
+    if args.local_rank not in [-1, 0] and mode != "dev":
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Load data features from cache or dataset file
@@ -83,7 +80,7 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
 
-    if args.local_rank == 0 and mode != "train":
+    if args.local_rank == 0 and mode != "dev":
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     if mode == "train":
@@ -130,7 +127,7 @@ def train(args, train_dataset,model_T, model, tokenizer, predict_callback):
         model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
 
     # multi-gpu training (should be after apex fp16 initialization)
-    if args.n_gpu > 1:
+    if args.n_gpu > 1 and args.local_rank == -1:
         model = torch.nn.DataParallel(model)
 
     # Distributed training (should be after apex fp16 initialization)
@@ -161,7 +158,7 @@ def train(args, train_dataset,model_T, model, tokenizer, predict_callback):
         distill_config = DistillationConfig(
             temperature=args.temperature,
             intermediate_matches=intermediate_matches)
-        train_config = TrainingConfig(device="cuda",log_dir=args.output_dir,output_dir=args.output_dir)
+        train_config = TrainingConfig(device="cuda",log_dir=args.output_dir,output_dir=args.output_dir,local_rank=args.local_rank)
         adaptor_T = BertForQAAdaptor
         adaptor_S = BertForQAAdaptor
         distiller=GeneralDistiller(train_config,distill_config,model_T,model,adaptor_T,adaptor_S,)
@@ -182,34 +179,6 @@ def BertForQAAdaptor(batch, model_outputs, no_mask=False, no_logits=False):
     return dict_obj
 
 
-def write_evaluation(model, tokenizer, eval_examples, eval_features, all_results):
-    logger.info("Write predictions...")
-    output_prediction_file = os.path.join(args.output_dir, f"predictions.json")
-
-    all_predictions, scores_diff_json = \
-        write_predictions_google(tokenizer, eval_examples, eval_features, all_results,
-                                 args.n_best_size, args.max_answer_length,
-                                 args.do_lower_case, output_prediction_file,
-                                 output_nbest_file=None, output_null_log_odds_file=None)
-    model.train()
-    if args.do_eval:
-        eval_data = json.load(open(os.path.join(args.data_dir, f"dev-v{args.version}.json"), 'r', encoding='utf-8'))
-        F1, EM, TOTAL, SKIP = eval_func(eval_data, all_predictions)  # ,scores_diff_json, na_prob_thresh=0)
-        AVG = (EM + F1) * 0.5
-        output_result = OrderedDict()
-        output_result['AVERAGE'] = '%.3f' % AVG
-        output_result['F1'] = '%.3f' % F1
-        output_result['EM'] = '%.3f' % EM
-        output_result['TOTAL'] = TOTAL
-        output_result['SKIP'] = SKIP
-        logger.info("***** Eval results *****")
-        logger.info(json.dumps(output_result) + '\n')
-
-        output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
-        with open(output_eval_file, "a") as writer:
-            writer.write(f"Output: {json.dumps(output_result)}\n")
-
-
 def evaluate(args, model, tokenizer, prefix=""):
     dataset, features, examples = load_and_cache_examples(args, tokenizer, mode="dev", return_examples=True)
 
@@ -219,7 +188,7 @@ def evaluate(args, model, tokenizer, prefix=""):
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
 
     # Note that DistributedSampler samples randomly
-    eval_sampler = SequentialSampler(dataset)
+    eval_sampler = SequentialSampler(dataset) if args.local_rank == -1 else DistributedSampler(dataset)
     eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
     # multi-gpu evaluate
@@ -289,8 +258,7 @@ def evaluate(args, model, tokenizer, prefix=""):
                 result = SquadResult(unique_id, start_logits, end_logits)
 
             all_results.append(result)
-    write_evaluation(model, tokenizer, examples, features, all_results)
-    return all_results
+    return examples, features, all_results
 
 
 
@@ -416,7 +384,8 @@ def main(args):
             global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
-            results = evaluate(args, model, tokenizer, prefix=global_step)
+            examples, features, results = evaluate(args, model, tokenizer, prefix=global_step)
+            write_evaluation(args, model, tokenizer, examples, features, results, prefix=str(global_step) + " step")
             # if global_step:
             #     result = {"{}_{}".format(global_step, k): v for k, v in result.items()}
             # results.update(result)
@@ -425,7 +394,7 @@ def main(args):
         #     for key in sorted(results.keys()):
         #         writer.write("{} = {}\n".format(key, str(results[key])))
 
-    return results
+    return
 
 if __name__ == '__main__':
     config.parse()

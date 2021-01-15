@@ -53,7 +53,7 @@ def parse(opt=None):
                              "be truncated to this length.")
     parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
     parser.add_argument("do_distill", default=False, action="store_true", help="Whether to do distillation")
-    parser.add_argument("--do_predict", default=False, action='store_true', help="Whether to run eval on the dev set.")
+    parser.add_argument('--do_eval', default=False, action='store_true', help="Whether to run eval on the dev set.")
     parser.add_argument("--learning_rate", default=3e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--num_hidden_layers", default=12, type=int)
     parser.add_argument("--max_steps", default=-1, type=int,
@@ -94,7 +94,7 @@ def parse(opt=None):
                         help="Whether not to use CUDA when available")
     parser.add_argument("--per_gpu_train_batch_size", default=8, type=int,
                         help="Batch size per GPU/CPU for training.")
-    parser.add_argument("--per_gpu_eval_batch_size", default=8, type=int,
+    parser.add_argument("--per_gpu_eval_batch_size", default=16, type=int,
                         help="Batch size per GPU/CPU for evaluation.")
     parser.add_argument('--gradient_accumulation_steps',
                         type=int,
@@ -115,7 +115,6 @@ def parse(opt=None):
     parser.add_argument('--fake_file_2',type=str,default=None)
     parser.add_argument("--weight_decay", default=0.1, type=float,
                         help="Weight decay if we apply some.")
-    parser.add_argument('--do_eval',action='store_true')
     parser.add_argument('--PRINT_EVERY',type=int,default=200)
     parser.add_argument('--weight',type=float,default=1.0)
 
