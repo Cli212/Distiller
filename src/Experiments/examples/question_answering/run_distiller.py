@@ -8,6 +8,9 @@ import random
 import timeit
 import numpy as np
 import torch
+import json
+from utils import write_predictions_google, evaluate as eval_func
+from collections import OrderedDict
 # from seqeval.metrics import precision_score, recall_score, f1_score
 # from tensorboardX import SummaryWriter
 from torch.nn import CrossEntropyLoss
@@ -179,8 +182,36 @@ def BertForQAAdaptor(batch, model_outputs, no_mask=False, no_logits=False):
     return dict_obj
 
 
+def write_evaluation(model, tokenizer, eval_examples, eval_features, all_results):
+    logger.info("Write predictions...")
+    output_prediction_file = os.path.join(args.output_dir, f"predictions.json")
+
+    all_predictions, scores_diff_json = \
+        write_predictions_google(tokenizer, eval_examples, eval_features, all_results,
+                                 args.n_best_size, args.max_answer_length,
+                                 args.do_lower_case, output_prediction_file,
+                                 output_nbest_file=None, output_null_log_odds_file=None)
+    model.train()
+    if args.do_eval:
+        eval_data = json.load(open(os.path.join(args.data_dir, f"dev-v{args.version}.json"), 'r', encoding='utf-8'))
+        F1, EM, TOTAL, SKIP = eval_func(eval_data, all_predictions)  # ,scores_diff_json, na_prob_thresh=0)
+        AVG = (EM + F1) * 0.5
+        output_result = OrderedDict()
+        output_result['AVERAGE'] = '%.3f' % AVG
+        output_result['F1'] = '%.3f' % F1
+        output_result['EM'] = '%.3f' % EM
+        output_result['TOTAL'] = TOTAL
+        output_result['SKIP'] = SKIP
+        logger.info("***** Eval results *****")
+        logger.info(json.dumps(output_result) + '\n')
+
+        output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
+        with open(output_eval_file, "a") as writer:
+            writer.write(f"Output: {json.dumps(output_result)}\n")
+
+
 def evaluate(args, model, tokenizer, prefix=""):
-    dataset, features = load_and_cache_examples(args, tokenizer, mode="dev", return_features=True)
+    dataset, features, examples = load_and_cache_examples(args, tokenizer, mode="dev", return_examples=True)
 
     if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
         os.makedirs(args.output_dir)
@@ -258,6 +289,8 @@ def evaluate(args, model, tokenizer, prefix=""):
                 result = SquadResult(unique_id, start_logits, end_logits)
 
             all_results.append(result)
+    write_evaluation(model, tokenizer, examples, features, all_results)
+    return all_results
 
 
 
@@ -383,40 +416,14 @@ def main(args):
             global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
-            result, _ = evaluate(args, model, tokenizer, prefix=global_step)
-            if global_step:
-                result = {"{}_{}".format(global_step, k): v for k, v in result.items()}
-            results.update(result)
-        output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
-        with open(output_eval_file, "w") as writer:
-            for key in sorted(results.keys()):
-                writer.write("{} = {}\n".format(key, str(results[key])))
-
-    if args.do_predict and args.local_rank in [-1, 0]:
-        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
-        model = model_class.from_pretrained(args.output_dir)
-        model.to(args.device)
-        result, predictions = evaluate(args, model, tokenizer)
-        # Save results
-        output_test_results_file = os.path.join(args.output_dir, "test_results.txt")
-        with open(output_test_results_file, "w") as writer:
-            for key in sorted(result.keys()):
-                writer.write("{} = {}\n".format(key, str(result[key])))
-        # Save predictions
-        output_test_predictions_file = os.path.join(args.output_dir, "test_predictions.txt")
-        with open(output_test_predictions_file, "w") as writer:
-            with open(os.path.join(args.data_dir, "test.txt"), "r") as f:
-                example_id = 0
-                for line in f:
-                    if line.startswith("-DOCSTART-") or line == "" or line == "\n":
-                        writer.write(line)
-                        if not predictions[example_id]:
-                            example_id += 1
-                    elif predictions[example_id]:
-                        output_line = line.split()[0] + " " + predictions[example_id].pop(0) + "\n"
-                        writer.write(output_line)
-                    else:
-                        logger.warning("Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0])
+            results = evaluate(args, model, tokenizer, prefix=global_step)
+            # if global_step:
+            #     result = {"{}_{}".format(global_step, k): v for k, v in result.items()}
+            # results.update(result)
+        # output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
+        # with open(output_eval_file, "w") as writer:
+        #     for key in sorted(results.keys()):
+        #         writer.write("{} = {}\n".format(key, str(results[key])))
 
     return results
 
