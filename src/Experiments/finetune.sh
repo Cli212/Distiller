@@ -26,7 +26,7 @@ python -m torch.distributed.launch --nproc_per_node=${gpu_nums} examples/questio
     --do_eval \
     --doc_stride 320 \
     --per_gpu_train_batch_size ${batch_size} \
-    --random_seed $torch_seed \
+    --seed ${torch_seed} \
     --num_train_epochs ${ep} \
     --learning_rate ${lr}e-4 \
     --thread 40 \
