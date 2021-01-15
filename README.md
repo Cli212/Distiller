@@ -8,6 +8,10 @@ We aim to benchmark various distillation algorithms for QA and NER tasks.
 
 Code for experiements can be put in directory /src.
 
+## Experiments
+
+You can do KD experiments now using our code [here](./src/Experiments/README.md). We only support experiments on QA tasks now but I am very confident that we will support NER tasks soon.
+
 ## Dataset
 
 For QA task, you can download SQuAD dataset by using gluon-nlp command:
@@ -24,6 +28,4 @@ If you want to download all data of NaturalQuestions(42G), you can check out the
 
 ## TO DOs
 
-1. I am going to develop a toolkit which can be used to do KD related experiments easily and support customization. The idea is to use both textbrewer and transformers and the project lies in directory /src/Experiments/.
-
-2. Benchmark TextBrewer, DynaBERT, TinyBERT in NER, classification tasks and QA task.
+1. Benchmark DynaBERT, TinyBERT in NER and QA task.
