@@ -3,14 +3,14 @@ BERT_DIR=../../models/bert-base-cased
 OUTPUT_ROOT_DIR=output-bert-base
 DATA_ROOT_DIR=../../datasets/squad
 
-accu=5
-ep=3
-lr=1
+accu=4
+ep=2
+lr=3
 batch_size=12
 length=512
 torch_seed=9580
 
-NAME=squad_base_lr${lr}e${ep}_teacher
+NAME=squad_base_cased_lr${lr}e${ep}_teacher
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
 gpu_nums=4
 
@@ -24,16 +24,15 @@ python -m torch.distributed.launch --nproc_per_node=${gpu_nums} examples/questio
     --max_seq_length ${length} \
     --do_train \
     --do_eval \
-    --doc_stride 320 \
+    --doc_stride 128 \
     --per_gpu_train_batch_size ${batch_size} \
     --seed ${torch_seed} \
     --num_train_epochs ${ep} \
-    --learning_rate ${lr}e-4 \
+    --learning_rate ${lr}e-5 \
     --thread 40 \
     --s_opt1 30 \
     --gradient_accumulation_steps ${accu} \
     --overwrite_output_dir \
     --save_steps 1000 \
-    --do_lower_case \
     --output_encoded_layers false \
     --output_attention_layers false

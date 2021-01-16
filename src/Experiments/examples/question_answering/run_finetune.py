@@ -33,20 +33,20 @@ def set_seed(args):
 
 
 def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
-    if args.local_rank not in [-1, 0] and mode != "dev":
+    if args.local_rank not in [-1, 0]:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-
+    examples = read_examples_from_file(args.data_dir, mode, args.version)
     # Load data features from cache or dataset file
     cached_features_file = os.path.join(args.data_dir, "cached_{}_{}_{}".format(mode,
         list(filter(None, args.model_name_or_path.split("/"))).pop(),
         str(args.max_seq_length)))
-    examples = read_examples_from_file(args.data_dir, mode, args.version)
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
         dataset = convert_features_to_dataset(features, is_training = True if mode == 'train' else False)
         ## This place need to be more flexible
     else:
+
         logger.info("Creating features from dataset file at %s", args.data_dir)
         features, dataset = convert_examples_to_features(examples, tokenizer, args.max_seq_length,
                                                               args.doc_stride,
@@ -58,7 +58,7 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
 
-    if args.local_rank == 0 and mode != "dev":
+    if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
     if return_examples:
         return dataset, features, examples
@@ -229,7 +229,7 @@ def train(args, train_dataset, model, tokenizer):
 
                 # Save model checkpoint
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
-                    output_dir = os.path.join(args.output_dir, "checkpoint")
+                    output_dir = os.path.join(args.output_dir, f"checkpoint_{global_step}")
                     # Take care of distributed/parallel training
                     model_to_save = model.module if hasattr(model, "module") else model
                     model_to_save.save_pretrained(output_dir)
@@ -262,7 +262,6 @@ def evaluate(args, model, tokenizer, prefix=""):
         os.makedirs(args.output_dir)
 
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
-
     # Note that DistributedSampler samples randomly
     eval_sampler = SequentialSampler(dataset) if args.local_rank == -1 else DistributedSampler(dataset)
     eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
@@ -455,11 +454,9 @@ def main(args):
 
             # Evaluate
             examples, features, results = evaluate(args, model, tokenizer, prefix=global_step)
-            write_evaluation(args, model, tokenizer, examples, features, results, prefix=str(global_step)+" step")
+            write_evaluation(args, model, tokenizer, examples, features, results)
             # result = dict((k + ("_{}".format(global_step) if global_step else ""), v) for k, v in result.items())
             # results.update(result)
-
-    logger.info("Results: {}".format(results))
 
     return
 

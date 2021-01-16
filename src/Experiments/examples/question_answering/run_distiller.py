@@ -55,7 +55,7 @@ def set_seed(args):
 
 
 def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
-    if args.local_rank not in [-1, 0] and mode != "dev":
+    if args.local_rank not in [-1, 0]:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Load data features from cache or dataset file
@@ -80,7 +80,7 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
 
-    if args.local_rank == 0 and mode != "dev":
+    if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     if mode == "train":
@@ -186,7 +186,6 @@ def evaluate(args, model, tokenizer, prefix=""):
         os.makedirs(args.output_dir)
 
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
-
     # Note that DistributedSampler samples randomly
     eval_sampler = SequentialSampler(dataset) if args.local_rank == -1 else DistributedSampler(dataset)
     eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
@@ -228,34 +227,36 @@ def evaluate(args, model, tokenizer, prefix=""):
                         {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * args.lang_id).to(args.device)}
                     )
             outputs = model(**inputs)
-
+        batch_start_logits = outputs.start_logits.detach().cpu().tolist()
+        batch_end_logits = outputs.end_logits.detach().cpu().tolist()
         for i, feature_index in enumerate(feature_indices):
             eval_feature = features[feature_index.item()]
             unique_id = int(eval_feature.unique_id)
-
-            output = [output[i].detach().cpu().tolist() for output in outputs.to_tuple()]
+            start_logits = batch_start_logits[i]
+            end_logits = batch_end_logits[i]
+            # output = [output[i].detach().cpu().tolist() for output in outputs.to_tuple()]
 
             # Some models (XLNet, XLM) use 5 arguments for their predictions, while the other "simpler"
             # models only use two.
-            if len(output) >= 5:
-                start_logits = output[0]
-                start_top_index = output[1]
-                end_logits = output[2]
-                end_top_index = output[3]
-                cls_logits = output[4]
-
-                result = SquadResult(
-                    unique_id,
-                    start_logits,
-                    end_logits,
-                    start_top_index=start_top_index,
-                    end_top_index=end_top_index,
-                    cls_logits=cls_logits,
-                )
-
-            else:
-                start_logits, end_logits = output
-                result = SquadResult(unique_id, start_logits, end_logits)
+            # if len(output) >= 5:
+            #     start_logits = output[0]
+            #     start_top_index = output[1]
+            #     end_logits = output[2]
+            #     end_top_index = output[3]
+            #     cls_logits = output[4]
+            #
+            #     result = SquadResult(
+            #         unique_id,
+            #         start_logits,
+            #         end_logits,
+            #         start_top_index=start_top_index,
+            #         end_top_index=end_top_index,
+            #         cls_logits=cls_logits,
+            #     )
+            #
+            # else:
+            #     start_logits, end_logits = output
+            result = SquadResult(unique_id, start_logits, end_logits)
 
             all_results.append(result)
     return examples, features, all_results
@@ -274,7 +275,7 @@ def main(args):
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        args.n_gpu = torch.cuda.device_count()
+        args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
@@ -304,11 +305,12 @@ def main(args):
     config.output_attentions = True
     tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
                                                 do_lower_case=args.do_lower_case,
-                                                cache_dir=args.cache_dir if args.cache_dir else None)
+                                                cache_dir=args.cache_dir if args.cache_dir else None,
+                                                use_fast=False)
     model_T = model_class.from_pretrained(args.model_name_or_path,
-                                        from_tf=bool(".ckpt" in args.model_name_or_path),
-                                        config=config,
-                                        cache_dir=args.cache_dir if args.cache_dir else None)
+                                          from_tf=bool(".ckpt" in args.model_name_or_path),
+                                          config=config,
+                                          cache_dir=args.cache_dir if args.cache_dir else None)
     if args.model_name_or_path_student != None:
         config = config_class.from_pretrained(args.bert_config_file_S if args.bert_config_file_S else args.model_name_or_path_student,
                                               cache_dir=args.cache_dir if args.cache_dir else None)
@@ -316,19 +318,19 @@ def main(args):
         config.output_attentions = True
         # config.num_hidden_layers=args.num_hidden_layers
         model = model_class.from_pretrained(args.model_name_or_path_student,
-                                        from_tf=bool(".ckpt" in args.model_name_or_path),
-                                        config=config,
-                                        cache_dir=args.cache_dir if args.cache_dir else None)
+                                            from_tf=bool(".ckpt" in args.model_name_or_path),
+                                            config=config,
+                                            cache_dir=args.cache_dir if args.cache_dir else None)
     else:
         config = config_class.from_pretrained(args.bert_config_file_S if args.bert_config_file_S else args.model_name_or_path,
-                                          cache_dir=args.cache_dir if args.cache_dir else None)
+                                              cache_dir=args.cache_dir if args.cache_dir else None)
         # config.num_hidden_layers=args.num_hidden_layers
         config.output_hidden_states = True
         config.output_attentions = True
         model = model_class.from_pretrained(args.model_name_or_path,
-                                        from_tf=bool(".ckpt" in args.model_name_or_path),
-                                        config=config,
-                                        cache_dir=args.cache_dir if args.cache_dir else None)
+                                            from_tf=bool(".ckpt" in args.model_name_or_path),
+                                            config=config,
+                                            cache_dir=args.cache_dir if args.cache_dir else None)
 
 
 
@@ -345,7 +347,8 @@ def main(args):
     def predict_callback(model,step):
         if args.do_eval and args.local_rank in [-1, 0]:
             tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, do_lower_case=args.do_lower_case)
-            evaluate(args, model, tokenizer)
+            examples, features, results = evaluate(args, model, tokenizer)
+            write_evaluation(args, model, tokenizer, examples, features, results, prefix=str(step) + " step")
         model.train()
 
     # Training
@@ -367,14 +370,20 @@ def main(args):
         model_to_save = model.module if hasattr(model, "module") else model  # Take care of distributed/parallel training
         model_to_save.save_pretrained(args.output_dir)
         tokenizer.save_pretrained(args.output_dir)
-
-        # Good practice: save your training arguments together with the trained model
         torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
+        model = model_class.from_pretrained(args.output_dir)  # , force_download=True)
+
+        # SquadDataset is not compatible with Fast tokenizers which have a smarter overflow handeling
+        # So we use use_fast=False here for now until Fast-tokenizer-compatible-examples are out
+
+        model.to(args.device)
+        # Good practice: save your training arguments together with the trained model
 
     # Evaluation
     results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
-        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
+        # tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
+        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case, use_fast=False)
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
             checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True)))

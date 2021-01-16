@@ -12,12 +12,12 @@ import os
 import json
 import sys
 import nltk
+import string
 logger = logging.getLogger(__name__)
 
 def write_evaluation(args, model, tokenizer, eval_examples, eval_features, all_results, prefix=""):
 
     output_prediction_file = os.path.join(args.output_dir, f"{prefix}_predictions.json")
-    logger.info(f"Write predictions to {output_prediction_file}...")
     all_predictions, scores_diff_json = \
         write_predictions_google(tokenizer, eval_examples, eval_features, all_results,
                                  args.n_best_size, args.max_answer_length,
@@ -25,22 +25,29 @@ def write_evaluation(args, model, tokenizer, eval_examples, eval_features, all_r
                                  output_nbest_file=None, output_null_log_odds_file=None)
     model.train()
     if args.do_eval:
-        eval_data = json.load(open(os.path.join(args.data_dir, f"dev-v{args.version}.json"), 'r', encoding='utf-8'))
-        F1, EM, TOTAL, SKIP = evaluate(eval_data, all_predictions)  # ,scores_diff_json, na_prob_thresh=0)
-        AVG = (EM + F1) * 0.5
-        output_result = OrderedDict()
-        output_result['AVERAGE'] = '%.3f' % AVG
-        output_result['F1'] = '%.3f' % F1
-        output_result['EM'] = '%.3f' % EM
-        output_result['TOTAL'] = TOTAL
-        output_result['SKIP'] = SKIP
+        eval_data = json.load(open(os.path.join(args.data_dir, f"dev-v{args.version}.json"), 'r', encoding='utf-8'))['data']
+        qid_to_has_ans = make_qid_to_has_ans(eval_data)
+        na_probs = {k: 0.0 for k in all_predictions}
+        has_ans_qids = [k for k, v in qid_to_has_ans.items() if v]
+        no_ans_qids = [k for k, v in qid_to_has_ans.items() if not v]
+        EM_raw, F1_raw = evaluate(eval_data, all_predictions)  # ,scores_diff_json, na_prob_thresh=0)
+        # exact_thresh = apply_no_ans_threshold(EM_raw, na_probs, qid_to_has_ans, 0.0)
+
+        out_eval = make_eval_dict(EM_raw, F1_raw)
+        if has_ans_qids:
+            has_ans_eval = make_eval_dict(EM_raw, F1_raw, qid_list=has_ans_qids)
+            merge_eval(out_eval, has_ans_eval, "HasAns")
+        if no_ans_qids:
+            no_ans_eval = make_eval_dict(EM_raw, F1_raw, qid_list=no_ans_qids)
+            merge_eval(out_eval, no_ans_eval, "NoAns")
+        # AVG = (EM + F1) * 0.5
         logger.info("***** Eval results *****")
-        logger.info(json.dumps(output_result) + '\n')
+        logger.info(json.dumps(out_eval, indent=2) + '\n')
 
         output_eval_file = os.path.join(args.output_dir, f"{prefix}_eval_results.txt")
         logger.info(f"Write evaluation result to {output_eval_file}...")
         with open(output_eval_file, "a") as writer:
-            writer.write(f"Output: {json.dumps(output_result)}\n")
+            writer.write(f"Output: {json.dumps(out_eval, indent=2)}\n")
 
 def write_predictions_google(tokenizer, all_examples, all_features, all_results, n_best_size,
                       max_answer_length, do_lower_case, output_prediction_file,
@@ -267,7 +274,7 @@ def _get_best_indexes(logits, n_best_size, offset=0):
     sorted_indices = np.argsort(logits)[::-1] + offset
     return list(sorted_indices[:n_best_size])
 
-def get_final_text(pred_text, orig_text, tokenizer, do_lower_case, verbose_logging=False):
+def get_final_text(pred_text, orig_text, tokenizer, verbose_logging=False):
     """Project the tokenized prediction back to the original text."""
 
     # When we created the data, we kept track of the alignment between original
@@ -362,117 +369,110 @@ def get_final_text(pred_text, orig_text, tokenizer, do_lower_case, verbose_loggi
     return output_text
 
 
-
-# split Chinese with English
-def mixed_segmentation(in_str, rm_punc=False):
-	in_str = (in_str).lower().strip()
-	segs_out = []
-	temp_str = ""
-	sp_char = ['-',':','_','*','^','/','\\','~','`','+','=',
-			   '，','。','：','？','！','“','”','；','’','《','》','……','·','、',
-			   '「','」','（','）','－','～','『','』']
-	for char in in_str:
-		if rm_punc and char in sp_char:
-			continue
-		if re.search(r'[\u4e00-\u9fa5]', char) or char in sp_char:
-			if temp_str != "":
-				ss = nltk.word_tokenize(temp_str)
-				segs_out.extend(ss)
-				temp_str = ""
-			segs_out.append(char)
-		else:
-			temp_str += char
-
-	#handling last part
-	if temp_str != "":
-		ss = nltk.word_tokenize(temp_str)
-		segs_out.extend(ss)
-
-	return segs_out
+def get_tokens(s):
+    if not s:
+        return []
+    return normalize_answer(s).split()
 
 
-# remove punctuation
-def remove_punctuation(in_str):
-	in_str = str(in_str).lower().strip()
-	sp_char = ['-',':','_','*','^','/','\\','~','`','+','=',
-			   '，','。','：','？','！','“','”','；','’','《','》','……','·','、',
-			   '「','」','（','）','－','～','『','』']
-	out_segs = []
-	for char in in_str:
-		if char in sp_char:
-			continue
-		else:
-			out_segs.append(char)
-	return ''.join(out_segs)
+def normalize_answer(s):
+    """Lower text and remove punctuation, articles and extra whitespace."""
+
+    def remove_articles(text):
+        regex = re.compile(r"\b(a|an|the)\b", re.UNICODE)
+        return re.sub(regex, " ", text)
+
+    def white_space_fix(text):
+        return " ".join(text.split())
+
+    def remove_punc(text):
+        exclude = set(string.punctuation)
+        return "".join(ch for ch in text if ch not in exclude)
+
+    def lower(text):
+        return text.lower()
+
+    return white_space_fix(remove_articles(remove_punc(lower(s))))
+
+def compute_exact(a_gold, a_pred):
+    return int(normalize_answer(a_gold) == normalize_answer(a_pred))
+
+def compute_f1(a_gold, a_pred):
+    gold_toks = get_tokens(a_gold)
+    pred_toks = get_tokens(a_pred)
+    common = collections.Counter(gold_toks) & collections.Counter(pred_toks)
+    num_same = sum(common.values())
+    if len(gold_toks) == 0 or len(pred_toks) == 0:
+        # If either is no-answer, then F1 is 1 if they agree, 0 otherwise
+        return int(gold_toks == pred_toks)
+    if num_same == 0:
+        return 0
+    precision = 1.0 * num_same / len(pred_toks)
+    recall = 1.0 * num_same / len(gold_toks)
+    f1 = (2 * precision * recall) / (precision + recall)
+    return f1
 
 
-# find longest common string
-def find_lcs(s1, s2):
-	m = [[0 for i in range(len(s2)+1)] for j in range(len(s1)+1)]
-	mmax = 0
-	p = 0
-	for i in range(len(s1)):
-		for j in range(len(s2)):
-			if s1[i] == s2[j]:
-				m[i+1][j+1] = m[i][j]+1
-				if m[i+1][j+1] > mmax:
-					mmax=m[i+1][j+1]
-					p=i+1
-	return s1[p-mmax:p], mmax
-
-#
-def evaluate(ground_truth_file, prediction_file):
-	f1 = 0
-	em = 0
-	total_count = 0
-	skip_count = 0
-	for instance in ground_truth_file["data"]:
-		#context_id   = instance['context_id'].strip()
-		#context_text = instance['context_text'].strip()
-		for para in instance["paragraphs"]:
-			for qas in para['qas']:
-				total_count += 1
-				query_id    = qas['id'].strip()
-				query_text  = qas['question'].strip()
-				answers 	= [x["text"] for x in qas['answers']]
-
-				if query_id not in prediction_file:
-					sys.stderr.write('Unanswered question: {}\n'.format(query_id))
-					skip_count += 1
-					continue
-
-				prediction 	= (prediction_file[query_id])
-				f1 += calc_f1_score(answers, prediction)
-				em += calc_em_score(answers, prediction)
-
-	f1_score = 100.0 * f1 / total_count
-	em_score = 100.0 * em / total_count
-	return f1_score, em_score, total_count, skip_count
+def evaluate(dataset, preds):
+    exact_scores = {}
+    f1_scores = {}
+    for article in dataset:
+        for p in article["paragraphs"]:
+            for qa in p["qas"]:
+                qid = qa["id"]
+                gold_answers = [t['text'] for t in qa["answers"] if normalize_answer(t['text'])]
+                if not gold_answers:
+                    # For unanswerable questions, only correct answer is empty string
+                    gold_answers = [""]
+                if qid not in preds:
+                    print("Missing prediction for %s" % qid)
+                    continue
+                a_pred = preds[qid]
+                # Take max over all gold answers
+                exact_scores[qid] = max(compute_exact(a, a_pred) for a in gold_answers)
+                f1_scores[qid] = max(compute_f1(a, a_pred) for a in gold_answers)
+    return exact_scores, f1_scores
 
 
-def calc_f1_score(answers, prediction):
-	f1_scores = []
-	for ans in answers:
-		ans_segs = mixed_segmentation(ans, rm_punc=True)
-		prediction_segs = mixed_segmentation(prediction, rm_punc=True)
-		lcs, lcs_len = find_lcs(ans_segs, prediction_segs)
-		if lcs_len == 0:
-			f1_scores.append(0)
-			continue
-		precision 	= 1.0*lcs_len/len(prediction_segs)
-		recall 		= 1.0*lcs_len/len(ans_segs)
-		f1 			= (2*precision*recall)/(precision+recall)
-		f1_scores.append(f1)
-	return max(f1_scores)
+def make_qid_to_has_ans(dataset):
+    qid_to_has_ans = {}
+    for article in dataset:
+        for p in article["paragraphs"]:
+            for qa in p["qas"]:
+                qid_to_has_ans[qa["id"]] = bool(qa["answers"])
+    return qid_to_has_ans
 
 
-def calc_em_score(answers, prediction):
-	em = 0
-	for ans in answers:
-		ans_ = remove_punctuation(ans)
-		prediction_ = remove_punctuation(prediction)
-		if ans_ == prediction_:
-			em = 1
-			break
-	return em
+def apply_no_ans_threshold(scores, na_probs, qid_to_has_ans, na_prob_thresh):
+    new_scores = {}
+    for qid, s in scores.items():
+        pred_na = na_probs[qid] > na_prob_thresh
+        if pred_na:
+            new_scores[qid] = float(not qid_to_has_ans[qid])
+        else:
+            new_scores[qid] = s
+    return new_scores
 
+def make_eval_dict(exact_scores, f1_scores, qid_list=None):
+    if not qid_list:
+        total = len(exact_scores)
+        return collections.OrderedDict(
+            [
+                ("exact", 100.0 * sum(exact_scores.values()) / total),
+                ("f1", 100.0 * sum(f1_scores.values()) / total),
+                ("total", total),
+            ]
+        )
+    else:
+        total = len(qid_list)
+        return collections.OrderedDict(
+            [
+                ("exact", 100.0 * sum(exact_scores[k] for k in qid_list) / total),
+                ("f1", 100.0 * sum(f1_scores[k] for k in qid_list) / total),
+                ("total", total),
+            ]
+        )
+
+def merge_eval(main_eval, new_eval, prefix):
+    for k in new_eval:
+        main_eval["%s_%s" % (prefix, k)] = new_eval[k]

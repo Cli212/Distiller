@@ -94,7 +94,7 @@ def parse(opt=None):
                         help="Whether not to use CUDA when available")
     parser.add_argument("--per_gpu_train_batch_size", default=8, type=int,
                         help="Batch size per GPU/CPU for training.")
-    parser.add_argument("--per_gpu_eval_batch_size", default=16, type=int,
+    parser.add_argument("--per_gpu_eval_batch_size", default=12, type=int,
                         help="Batch size per GPU/CPU for evaluation.")
     parser.add_argument('--gradient_accumulation_steps',
                         type=int,

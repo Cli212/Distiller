@@ -1,13 +1,13 @@
 #set hyperparameters
-BERT_DIR=output-bert-base/squad_base_lr1e3_teacher
+BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
 OUTPUT_ROOT_DIR=output-bert-base-student
 DATA_ROOT_DIR=../../datasets/squad
 
-STUDENT_CONF_DIR=./configs/bert_base_uncased_config/bert_config_L6.json
+STUDENT_CONF_DIR=./configs/bert_base_cased_config/bert_config_L6.json
 accu=8
-ep=1
-lr=1
-batch_size=20
+ep=10
+lr=3
+batch_size=12
 temperature=8
 length=512
 torch_seed=9580
@@ -28,18 +28,18 @@ python -m torch.distributed.launch --nproc_per_node=${gpu_nums} examples/questio
     --max_seq_length ${length} \
     --bert_config_file_S $STUDENT_CONF_DIR \
     --do_train \
-    --doc_stride 320 \
+    --do_eval \
+    --doc_stride 128 \
     --per_gpu_train_batch_size ${batch_size} \
     --seed ${torch_seed} \
     --num_train_epochs ${ep} \
-    --learning_rate ${lr}e-4 \
+    --learning_rate ${lr}e-5 \
     --thread 40 \
     --s_opt1 30 \
     --gradient_accumulation_steps ${accu} \
     --temperature ${temperature} \
     --overwrite_output_dir \
     --save_steps 1000 \
-    --do_lower_case \
     --output_encoded_layers false \
     --output_attention_layers false \
     --output_att_score true \
