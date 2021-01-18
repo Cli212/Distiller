@@ -15,7 +15,7 @@ import nltk
 import string
 logger = logging.getLogger(__name__)
 
-def write_evaluation(args, model, tokenizer, eval_examples, eval_features, all_results, prefix=""):
+def write_evaluation(args, tokenizer, eval_examples, eval_features, all_results, prefix=""):
 
     output_prediction_file = os.path.join(args.output_dir, f"{prefix}_predictions.json")
     all_predictions, scores_diff_json = \
@@ -23,7 +23,6 @@ def write_evaluation(args, model, tokenizer, eval_examples, eval_features, all_r
                                  args.n_best_size, args.max_answer_length,
                                  args.do_lower_case, output_prediction_file,
                                  output_nbest_file=None, output_null_log_odds_file=None)
-    model.train()
     if args.do_eval:
         eval_data = json.load(open(os.path.join(args.data_dir, f"dev-v{args.version}.json"), 'r', encoding='utf-8'))['data']
         qid_to_has_ans = make_qid_to_has_ans(eval_data)
@@ -319,7 +318,8 @@ def get_final_text(pred_text, orig_text, tokenizer, verbose_logging=False):
     # length, we assume the characters are one-to-one aligned.
 
     tok_text = " ".join(tokenizer.tokenize(orig_text))
-
+    tok_text = tok_text.replace(" ##", "")
+    tok_text = tok_text.replace("##", "")
     start_position = tok_text.find(pred_text)
     if start_position == -1:
         if verbose_logging:

@@ -16,6 +16,7 @@ from preprocessing import convert_examples_to_features, read_examples_from_file,
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
+from transformers.trainer_pt_utils import SequentialDistributedSampler
 from transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def set_seed(args):
 
 
 def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
-    if args.local_rank not in [-1, 0]:
+    if args.local_rank not in [-1, 0] and mode != "dev":
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
     examples = read_examples_from_file(args.data_dir, mode, args.version)
     # Load data features from cache or dataset file
@@ -58,7 +59,7 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
 
-    if args.local_rank == 0:
+    if args.local_rank == 0 and mode != "dev":
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
     if return_examples:
         return dataset, features, examples
@@ -225,7 +226,7 @@ def train(args, train_dataset, model, tokenizer):
                     # Only evaluate when single GPU otherwise metrics may not average well
                     if args.local_rank == -1 and args.evaluate_during_training:
                         examples, features, results = evaluate(args, model, tokenizer)
-                        write_evaluation(args, model, tokenizer, examples, features, results, prefix=str(step)+"step")
+                        write_evaluation(args, tokenizer, examples, features, results, prefix=str(step)+"step")
 
                 # Save model checkpoint
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
@@ -263,12 +264,18 @@ def evaluate(args, model, tokenizer, prefix=""):
 
     args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
     # Note that DistributedSampler samples randomly
-    eval_sampler = SequentialSampler(dataset) if args.local_rank == -1 else DistributedSampler(dataset)
+    eval_sampler = SequentialSampler(dataset)
     eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
-    # multi-gpu evaluate
+    # multi-gpu training (should be after apex fp16 initialization)
     if args.n_gpu > 1 and not isinstance(model, torch.nn.DataParallel):
         model = torch.nn.DataParallel(model)
+
+    # Distributed training (should be after apex fp16 initialization)
+    # if args.local_rank != -1:
+    #     model = torch.nn.parallel.DistributedDataParallel(
+    #         model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True
+    #     )
 
     # Eval!
     logger.info("***** Running evaluation {} *****".format(prefix))
@@ -454,7 +461,7 @@ def main(args):
 
             # Evaluate
             examples, features, results = evaluate(args, model, tokenizer, prefix=global_step)
-            write_evaluation(args, model, tokenizer, examples, features, results)
+            write_evaluation(args, tokenizer, examples, features, results)
             # result = dict((k + ("_{}".format(global_step) if global_step else ""), v) for k, v in result.items())
             # results.update(result)
 

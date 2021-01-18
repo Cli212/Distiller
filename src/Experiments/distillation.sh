@@ -1,13 +1,14 @@
 #set hyperparameters
-BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
+#BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
+BERT_DIR=bert-base-uncased-squad-v1
 OUTPUT_ROOT_DIR=output-bert-base-student
 DATA_ROOT_DIR=../../datasets/squad
 
-STUDENT_CONF_DIR=./configs/bert_base_cased_config/bert_config_L6.json
-accu=8
-ep=10
+STUDENT_CONF_DIR=./configs/bert_base_uncased_config/bert_config_L6.json
+accu=4
+ep=30
 lr=3
-batch_size=12
+batch_size=16
 temperature=8
 length=512
 torch_seed=9580
@@ -40,6 +41,7 @@ python -m torch.distributed.launch --nproc_per_node=${gpu_nums} examples/questio
     --temperature ${temperature} \
     --overwrite_output_dir \
     --save_steps 1000 \
+    --do_lower_case \
     --output_encoded_layers false \
     --output_attention_layers false \
     --output_att_score true \
