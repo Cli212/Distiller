@@ -5,9 +5,9 @@ OUTPUT_ROOT_DIR=output-bert-base-student
 DATA_ROOT_DIR=../../datasets/squad
 
 STUDENT_CONF_DIR=./configs/bert_base_uncased_config/bert_config_L6.json
-accu=4
-ep=30
-lr=3
+accu=2
+ep=50
+lr=1
 batch_size=16
 temperature=8
 length=512
@@ -34,7 +34,7 @@ python -m torch.distributed.launch --nproc_per_node=${gpu_nums} examples/questio
     --per_gpu_train_batch_size ${batch_size} \
     --seed ${torch_seed} \
     --num_train_epochs ${ep} \
-    --learning_rate ${lr}e-5 \
+    --learning_rate ${lr}e-4 \
     --thread 40 \
     --s_opt1 30 \
     --gradient_accumulation_steps ${accu} \

@@ -1,28 +1,51 @@
 import logging
 import collections
-from collections import OrderedDict
 import math
 import numpy as np
-import json
 import six
-from scipy.misc import logsumexp
-from collections import Counter, OrderedDict
+from scipy.special import logsumexp
+from preprocessing import convert_examples_to_features, read_examples_from_file, convert_features_to_dataset
+import torch
 import re
 import os
 import json
-import sys
-import nltk
+from torch.utils.data import Dataset
 import string
+
+
 logger = logging.getLogger(__name__)
 
-def write_evaluation(args, tokenizer, eval_examples, eval_features, all_results, prefix=""):
+
+class MyDataset(Dataset):
+    def __init__(self, all_input_ids, all_attention_masks, all_token_type_ids, all_start_positions, all_end_positions):
+        super(MyDataset, self).__init__()
+        self.all_input_ids = all_input_ids
+        self.all_attention_masks = all_attention_masks
+        self.all_token_type_ids =all_token_type_ids
+        self.all_start_positions = all_start_positions
+        self.all_end_positions = all_end_positions
+    def __getitem__(self, index):
+        input_ids = self.all_input_ids[index]
+        attention_masks = self.all_attention_masks[index]
+        token_type_ids = self.all_token_type_ids[index]
+        start_positions = self.all_start_positions[index]
+        end_positions = self.all_end_positions[index]
+        return {'input_ids':input_ids,
+                'attention_mask':attention_masks,
+                'token_type_ids':token_type_ids,
+                'start_positions':start_positions,
+                "end_positions":end_positions}
+    def __len__(self):
+        return len(self.all_input_ids)
+
+def write_evaluation(args, tokenizer, eval_examples, eval_features, all_results, prefix="", write_prediction=True):
 
     output_prediction_file = os.path.join(args.output_dir, f"{prefix}_predictions.json")
     all_predictions, scores_diff_json = \
         write_predictions_google(tokenizer, eval_examples, eval_features, all_results,
                                  args.n_best_size, args.max_answer_length,
                                  args.do_lower_case, output_prediction_file,
-                                 output_nbest_file=None, output_null_log_odds_file=None)
+                                 output_nbest_file=None, output_null_log_odds_file=None,write_prediction=write_prediction)
     if args.do_eval:
         eval_data = json.load(open(os.path.join(args.data_dir, f"dev-v{args.version}.json"), 'r', encoding='utf-8'))['data']
         qid_to_has_ans = make_qid_to_has_ans(eval_data)
@@ -50,9 +73,10 @@ def write_evaluation(args, tokenizer, eval_examples, eval_features, all_results,
 
 def write_predictions_google(tokenizer, all_examples, all_features, all_results, n_best_size,
                       max_answer_length, do_lower_case, output_prediction_file,
-                      output_nbest_file, output_null_log_odds_file):
+                      output_nbest_file, output_null_log_odds_file,write_prediction):
     """Write final predictions to the json file."""
-    logger.info("Writing predictions to: %s" % (output_prediction_file))
+    if write_prediction:
+        logger.info("Writing predictions to: %s" % (output_prediction_file))
     #logger.info("Writing nbest to: %s" % (output_nbest_file))
 
     example_index_to_features = collections.defaultdict(list)
@@ -245,9 +269,9 @@ def write_predictions_google(tokenizer, all_examples, all_features, all_results,
 
         all_predictions[example.qas_id] = nbest_json[0]["text"]
         all_nbest_json[example.qas_id] = nbest_json
-
-    with open(output_prediction_file, "w",encoding='utf-8') as writer:
-        writer.write(json.dumps(all_predictions, indent=4,ensure_ascii=False) + "\n")
+    if write_prediction:
+        with open(output_prediction_file, "w",encoding='utf-8') as writer:
+            writer.write(json.dumps(all_predictions, indent=4,ensure_ascii=False) + "\n")
 
     #with open(output_nbest_file, "w") as writer:
     #    writer.write(json.dumps(all_nbest_json, indent=4) + "\n")
@@ -453,6 +477,7 @@ def apply_no_ans_threshold(scores, na_probs, qid_to_has_ans, na_prob_thresh):
             new_scores[qid] = s
     return new_scores
 
+
 def make_eval_dict(exact_scores, f1_scores, qid_list=None):
     if not qid_list:
         total = len(exact_scores)
@@ -473,6 +498,49 @@ def make_eval_dict(exact_scores, f1_scores, qid_list=None):
             ]
         )
 
+
 def merge_eval(main_eval, new_eval, prefix):
     for k in new_eval:
         main_eval["%s_%s" % (prefix, k)] = new_eval[k]
+
+
+def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
+    if args.local_rank not in [-1, 0] and mode != "dev":
+        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+
+    # Load data features from cache or dataset file
+    cached_features_file = os.path.join(args.data_dir, "cached_{}_{}_{}".format(mode,
+        list(filter(None, args.model_name_or_path.split("/"))).pop(),
+        str(args.max_seq_length)))
+    examples = read_examples_from_file(args.data_dir, mode, args.version)
+    if os.path.exists(cached_features_file) and not args.overwrite_cache:
+        logger.info("Loading features from cached file %s", cached_features_file)
+        features = torch.load(cached_features_file)
+        dataset = convert_features_to_dataset(features, is_training = True if mode == 'train' else False)
+        ## This place need to be more flexible
+    else:
+        logger.info("Creating features from dataset file at %s", args.data_dir)
+        features, dataset = convert_examples_to_features(examples, tokenizer, args.max_seq_length,
+                                                              args.doc_stride,
+                                                              args.max_query_length,
+                                                              is_training = True if mode == 'train' else False,
+                                                              threads = args.thread
+                                                              )
+        if args.local_rank in [-1, 0]:
+            logger.info("Saving features into cached file %s", cached_features_file)
+            torch.save(features, cached_features_file)
+
+    if args.local_rank == 0 and mode != "dev":
+        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+
+    if mode == "train":
+        all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+        all_attention_masks = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
+        all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
+        all_start_positions = torch.tensor([f.start_position for f in features], dtype=torch.long)
+        all_end_positions = torch.tensor([f.end_position for f in features], dtype=torch.long)
+        dataset = MyDataset(all_input_ids,all_attention_masks,all_token_type_ids,all_start_positions,all_end_positions)
+    # Convert to Tensors and build dataset
+    if return_examples:
+        return dataset, features, examples
+    return dataset

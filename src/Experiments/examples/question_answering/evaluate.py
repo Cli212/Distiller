@@ -1,82 +1,96 @@
-import json
+from tqdm import tqdm
+import os
+import torch
+from preprocessing import SquadResult
+from torch.utils.data import DataLoader, SequentialSampler
 import argparse
-from transformers import Trainer
-from transformers.trainer_utils import PredictionOutput
+from utils import load_and_cache_examples
+import logging
 
-class QuestionAnsweringTrainer(Trainer):
-    def __init__(self, *args, eval_examples=None, post_process_function=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.eval_examples = eval_examples
-        self.post_process_function = post_process_function
+logger = logging.getLogger(__name__ )
+def evaluate(args, model, tokenizer, prefix=""):
+    dataset, features, examples = load_and_cache_examples(args, tokenizer, mode="dev", return_examples=True)
 
-    def evaluate(self, eval_dataset=None, eval_examples=None, ignore_keys=None):
-        eval_dataset = self.eval_dataset if eval_dataset is None else eval_dataset
-        eval_dataloader = self.get_eval_dataloader(eval_dataset)
-        eval_examples = self.eval_examples if eval_examples is None else eval_examples
+    if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
+        os.makedirs(args.output_dir)
 
-        # Temporarily disable metric computation, we will do it in the loop here.
-        compute_metrics = self.compute_metrics
-        self.compute_metrics = None
-        try:
-            output = self.prediction_loop(
-                eval_dataloader,
-                description="Evaluation",
-                # No point gathering the predictions if there are no metrics, otherwise we defer to
-                # self.args.prediction_loss_only
-                prediction_loss_only=True if compute_metrics is None else None,
-                ignore_keys=ignore_keys,
-            )
-        finally:
-            self.compute_metrics = compute_metrics
+    args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
+    # Note that DistributedSampler samples randomly
+    eval_sampler = SequentialSampler(dataset)
+    eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
-        # We might have removed columns from the dataset so we put them back.
-        if isinstance(eval_dataset, datasets.Dataset):
-            eval_dataset.set_format(type=eval_dataset.format["type"], columns=list(eval_dataset.features.keys()))
+    # multi-gpu training (should be after apex fp16 initialization)
+    if args.n_gpu > 1 and not isinstance(model, torch.nn.DataParallel):
+        model = torch.nn.DataParallel(model)
 
-        if self.post_process_function is not None and self.compute_metrics is not None:
-            eval_preds = self.post_process_function(eval_examples, eval_dataset, output.predictions)
-            metrics = self.compute_metrics(eval_preds)
+    # Distributed training (should be after apex fp16 initialization)
+    # if args.local_rank != -1:
+    #     model = torch.nn.parallel.DistributedDataParallel(
+    #         model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True
+    #     )
 
-            self.log(metrics)
-        else:
-            metrics = {}
+    # Eval!
+    logger.info("***** Running evaluation {} *****".format(prefix))
+    logger.info("  Num examples = %d", len(dataset))
+    logger.info("  Batch size = %d", args.eval_batch_size)
 
-        if self.args.tpu_metrics_debug or self.args.debug:
-            # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
-            xm.master_print(met.metrics_report())
+    all_results = []
 
-        self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, metrics)
-        return metrics
+    for batch in tqdm(eval_dataloader, desc="Evaluating"):
+        model.eval()
+        batch = tuple(t.to(args.device) for t in batch)
 
-    def predict(self, test_dataset, test_examples, ignore_keys=None):
-        test_dataloader = self.get_test_dataloader(test_dataset)
+        with torch.no_grad():
+            inputs = {
+                "input_ids": batch[0],
+                "attention_mask": batch[1],
+                "token_type_ids": batch[2],
+            }
 
-        # Temporarily disable metric computation, we will do it in the loop here.
-        compute_metrics = self.compute_metrics
-        self.compute_metrics = None
-        try:
-            output = self.prediction_loop(
-                test_dataloader,
-                description="Evaluation",
-                # No point gathering the predictions if there are no metrics, otherwise we defer to
-                # self.args.prediction_loss_only
-                prediction_loss_only=True if compute_metrics is None else None,
-                ignore_keys=ignore_keys,
-            )
-        finally:
-            self.compute_metrics = compute_metrics
+            if args.model_type in ["xlm", "roberta", "distilbert", "camembert", "bart", "longformer"]:
+                del inputs["token_type_ids"]
 
-        if self.post_process_function is None or self.compute_metrics is None:
-            return output
+            feature_indices = batch[3]
 
-        # We might have removed columns from the dataset so we put them back.
-        if isinstance(test_dataset, datasets.Dataset):
-            test_dataset.set_format(type=test_dataset.format["type"], columns=list(test_dataset.features.keys()))
+            # XLNet and XLM use more arguments for their predictions
+            if args.model_type in ["xlnet", "xlm"]:
+                inputs.update({"cls_index": batch[4], "p_mask": batch[5]})
+                # for lang_id-sensitive xlm models
+                if hasattr(model, "config") and hasattr(model.config, "lang2id"):
+                    inputs.update(
+                        {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * args.lang_id).to(args.device)}
+                    )
+            outputs = model(**inputs)
+        batch_start_logits = outputs.start_logits.detach().cpu().tolist()
+        batch_end_logits = outputs.end_logits.detach().cpu().tolist()
+        for i, feature_index in enumerate(feature_indices):
+            eval_feature = features[feature_index.item()]
+            unique_id = int(eval_feature.unique_id)
 
-        eval_preds = self.post_process_function(test_examples, test_dataset, output.predictions)
-        metrics = self.compute_metrics(eval_preds)
+            # output = [output[i].detach().cpu().tolist() for output in outputs.to_tuple()]
+            start_logits= batch_start_logits[i]
+            end_logits = batch_end_logits[i]
+            # Some models (XLNet, XLM) use 5 arguments for their predictions, while the other "simpler"
+            # models only use two.
+            # if len(output) >= 5:
+            #     start_top_index = output[1]
+            #     end_top_index = output[3]
+            #     cls_logits = output.cls_logits
+            #
+            #     result = SquadResult(
+            #         unique_id,
+            #         start_logits,
+            #         end_logits,
+            #         start_top_index=start_top_index,
+            #         end_top_index=end_top_index,
+            #         cls_logits=cls_logits,
+            #     )
+            #
+            # else:
+            result = SquadResult(unique_id, start_logits, end_logits)
 
-        return PredictionOutput(predictions=eval_preds.predictions, label_ids=eval_preds.label_ids, metrics=metrics)
+            all_results.append(result)
+    return examples, features, all_results
 
 
 

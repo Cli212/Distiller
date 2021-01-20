@@ -1,50 +1,22 @@
-import importlib
 import config
-import argparse
 import glob
 import logging
 import os
 import random
-import timeit
 import numpy as np
 import torch
-import json
-from utils import write_evaluation, evaluate as eval_func
-from collections import OrderedDict
-from preprocessing import convert_examples_to_features, read_examples_from_file, convert_features_to_dataset,SquadResult
-from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset, Dataset
+from textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller
+from matches import matches
+from utils import write_evaluation, load_and_cache_examples
+from evaluate import evaluate
+from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
-from transformers.trainer_pt_utils import SequentialDistributedSampler
-from tqdm import tqdm, trange
 from transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
 
 logger = logging.getLogger(__name__)
 
 # ALL_MODELS = config.ALL_MODELS
 MODEL_CLASSES = config.MODEL_CLASSES
-
-
-class MyDataset(Dataset):
-    def __init__(self, all_input_ids, all_attention_masks, all_token_type_ids, all_start_positions, all_end_positions):
-        super(MyDataset, self).__init__()
-        self.all_input_ids = all_input_ids
-        self.all_attention_masks = all_attention_masks
-        self.all_token_type_ids =all_token_type_ids
-        self.all_start_positions = all_start_positions
-        self.all_end_positions = all_end_positions
-    def __getitem__(self, index):
-        input_ids = self.all_input_ids[index]
-        attention_masks = self.all_attention_masks[index]
-        token_type_ids = self.all_token_type_ids[index]
-        start_positions = self.all_start_positions[index]
-        end_positions = self.all_end_positions[index]
-        return {'input_ids':input_ids,
-                'attention_mask':attention_masks,
-                'token_type_ids':token_type_ids,
-                'start_positions':start_positions,
-                "end_positions":end_positions}
-    def __len__(self):
-        return len(self.all_input_ids)
 
 
 def set_seed(args):
@@ -55,49 +27,7 @@ def set_seed(args):
         torch.cuda.manual_seed_all(args.seed)
 
 
-def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
-    if args.local_rank not in [-1, 0] and mode != "dev":
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-
-    # Load data features from cache or dataset file
-    cached_features_file = os.path.join(args.data_dir, "cached_{}_{}_{}".format(mode,
-        list(filter(None, args.model_name_or_path.split("/"))).pop(),
-        str(args.max_seq_length)))
-    examples = read_examples_from_file(args.data_dir, mode, args.version)
-    if os.path.exists(cached_features_file) and not args.overwrite_cache:
-        logger.info("Loading features from cached file %s", cached_features_file)
-        features = torch.load(cached_features_file)
-        dataset = convert_features_to_dataset(features, is_training = True if mode == 'train' else False)
-        ## This place need to be more flexible
-    else:
-        logger.info("Creating features from dataset file at %s", args.data_dir)
-        features, dataset = convert_examples_to_features(examples, tokenizer, args.max_seq_length,
-                                                              args.doc_stride,
-                                                              args.max_query_length,
-                                                              is_training = True if mode == 'train' else False,
-                                                              threads = args.thread
-                                                              )
-        if args.local_rank in [-1, 0]:
-            logger.info("Saving features into cached file %s", cached_features_file)
-            torch.save(features, cached_features_file)
-
-    if args.local_rank == 0 and mode != "dev":
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-
-    if mode == "train":
-        all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-        all_attention_masks = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
-        all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
-        all_start_positions = torch.tensor([f.start_position for f in features], dtype=torch.long)
-        all_end_positions = torch.tensor([f.end_position for f in features], dtype=torch.long)
-        dataset = MyDataset(all_input_ids,all_attention_masks,all_token_type_ids,all_start_positions,all_end_positions)
-    # Convert to Tensors and build dataset
-    if return_examples:
-        return dataset, features, examples
-    return dataset
-
-
-def train(args, train_dataset,model_T, model, tokenizer, predict_callback):
+def train(args, train_dataset, model_T, model, tokenizer, predict_callback):
     """ Train the model """
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
@@ -148,8 +78,6 @@ def train(args, train_dataset,model_T, model, tokenizer, predict_callback):
     logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
     logger.info("  Total optimization steps = %d", t_total)
     if args.do_train and args.do_distill:
-        from textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller
-        from matches import matches
         intermediate_matches = None
         if isinstance(args.matches, (list, tuple)):
             intermediate_matches = []
@@ -166,103 +94,20 @@ def train(args, train_dataset,model_T, model, tokenizer, predict_callback):
         # distiller.train(optimizer,train_dataloader,args.num_train_epochs,
         #                 scheduler_class=scheduler_class, scheduler_args=scheduler_args,
         #                 max_grad_norm=1.0, callback=predict_callback)
+
         with distiller:
             distiller.train(optimizer, scheduler=None, dataloader=train_dataloader,
                               num_epochs=args.num_train_epochs, callback=predict_callback)
         return
 
+
 def BertForQAAdaptor(batch, model_outputs, no_mask=False, no_logits=False):
-    dict_obj = {'hidden':      model_outputs.hidden_states, 'attention':   model_outputs.attentions}
+    dict_obj = {'hidden':  model_outputs.hidden_states, 'attention':   model_outputs.attentions}
     if no_mask is False:
         dict_obj['inputs_mask'] = batch['attention_mask']
     if no_logits is False:
         dict_obj['logits'] = (model_outputs.start_logits,model_outputs.end_logits)
     return dict_obj
-
-
-def evaluate(args, model, tokenizer, prefix=""):
-    dataset, features, examples = load_and_cache_examples(args, tokenizer, mode="dev", return_examples=True)
-
-    if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
-        os.makedirs(args.output_dir)
-
-    args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
-    # Note that DistributedSampler samples randomly
-    eval_sampler = SequentialSampler(dataset)
-    eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
-
-    # multi-gpu evaluate
-    if args.n_gpu > 1 and not isinstance(model, torch.nn.DataParallel):
-        model = torch.nn.DataParallel(model)
-
-    # Eval!
-    logger.info("***** Running evaluation {} *****".format(prefix))
-    logger.info("  Num examples = %d", len(dataset))
-    logger.info("  Batch size = %d", args.eval_batch_size)
-
-    all_results = []
-    start_time = timeit.default_timer()
-
-    for batch in tqdm(eval_dataloader, desc="Evaluating"):
-        model.eval()
-        batch = tuple(t.to(args.device) for t in batch)
-
-        with torch.no_grad():
-            inputs = {
-                "input_ids": batch[0],
-                "attention_mask": batch[1],
-                "token_type_ids": batch[2],
-            }
-
-            if args.model_type in ["xlm", "roberta", "distilbert", "camembert", "bart", "longformer"]:
-                del inputs["token_type_ids"]
-
-            feature_indices = batch[3]
-
-            # XLNet and XLM use more arguments for their predictions
-            if args.model_type in ["xlnet", "xlm"]:
-                inputs.update({"cls_index": batch[4], "p_mask": batch[5]})
-                # for lang_id-sensitive xlm models
-                if hasattr(model, "config") and hasattr(model.config, "lang2id"):
-                    inputs.update(
-                        {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * args.lang_id).to(args.device)}
-                    )
-            outputs = model(**inputs)
-        batch_start_logits = outputs.start_logits.detach().cpu().tolist()
-        batch_end_logits = outputs.end_logits.detach().cpu().tolist()
-        for i, feature_index in enumerate(feature_indices):
-            eval_feature = features[feature_index.item()]
-            unique_id = int(eval_feature.unique_id)
-            start_logits = batch_start_logits[i]
-            end_logits = batch_end_logits[i]
-            # output = [output[i].detach().cpu().tolist() for output in outputs.to_tuple()]
-
-            # Some models (XLNet, XLM) use 5 arguments for their predictions, while the other "simpler"
-            # models only use two.
-            # if len(output) >= 5:
-            #     start_logits = output[0]
-            #     start_top_index = output[1]
-            #     end_logits = output[2]
-            #     end_top_index = output[3]
-            #     cls_logits = output[4]
-            #
-            #     result = SquadResult(
-            #         unique_id,
-            #         start_logits,
-            #         end_logits,
-            #         start_top_index=start_top_index,
-            #         end_top_index=end_top_index,
-            #         cls_logits=cls_logits,
-            #     )
-            #
-            # else:
-            #     start_logits, end_logits = output
-            result = SquadResult(unique_id, start_logits, end_logits)
-
-            all_results.append(result)
-    return examples, features, all_results
-
-
 
 
 def main(args):
@@ -312,30 +157,21 @@ def main(args):
                                           from_tf=bool(".ckpt" in args.model_name_or_path),
                                           config=config,
                                           cache_dir=args.cache_dir if args.cache_dir else None)
-    if args.model_name_or_path_student != None:
-        config = config_class.from_pretrained(args.bert_config_file_S if args.bert_config_file_S else args.model_name_or_path_student,
-                                              cache_dir=args.cache_dir if args.cache_dir else None)
-        config.output_hidden_states = True
-        config.output_attentions = True
-        # config.num_hidden_layers=args.num_hidden_layers
-        model = model_class.from_pretrained(args.model_name_or_path_student,
-                                            from_tf=bool(".ckpt" in args.model_name_or_path),
-                                            config=config,
-                                            cache_dir=args.cache_dir if args.cache_dir else None)
-    else:
-        config = config_class.from_pretrained(args.bert_config_file_S if args.bert_config_file_S else args.model_name_or_path,
-                                              cache_dir=args.cache_dir if args.cache_dir else None)
-        # config.num_hidden_layers=args.num_hidden_layers
-        config.output_hidden_states = True
-        config.output_attentions = True
-        model = model_class.from_pretrained(args.model_name_or_path,
-                                            from_tf=bool(".ckpt" in args.model_name_or_path),
-                                            config=config,
-                                            cache_dir=args.cache_dir if args.cache_dir else None)
 
-
-
-
+    model_name_or_path = args.model_name_or_path_student if args.model_name_or_path_student else args.model_name_or_path
+    config = config_class.from_pretrained(args.bert_config_file_S if args.bert_config_file_S else model_name_or_path,
+                                          cache_dir=args.cache_dir if args.cache_dir else None)
+    config.output_hidden_states = True
+    config.output_attentions = True
+    # config.num_hidden_layers=args.num_hidden_layers
+    try:
+        model = model_class.from_pretrained(model_name_or_path,
+                                        from_tf=bool(".ckpt" in args.model_name_or_path),
+                                        config=config,
+                                        cache_dir=args.cache_dir if args.cache_dir else None)
+    except:
+        logger.info("Fail to load pre-trained parameters, the model will be randomly initialized")
+        model = model_class(config)
 
 
     if args.local_rank == 0:
@@ -345,13 +181,14 @@ def main(args):
     model_T.to(args.device)
 
     logger.info("Training/evaluation parameters %s", args)
-    def predict_callback(model,step):
-        if args.do_eval:
-            tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, do_lower_case=args.do_lower_case)
-            examples, features, results = evaluate(args, model, tokenizer)
-            write_evaluation(args, tokenizer, examples, features, results, prefix=str(step) + " step")
-        model.train()
 
+    def predict_callback(model, step):
+        if args.do_eval and args.local_rank in [-1, 0]:
+            tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path,
+                                                        do_lower_case=args.do_lower_case)
+            examples, features, results = evaluate(args, model, tokenizer)
+            write_evaluation(args, tokenizer, examples, features, results, prefix=str(step) + " step",write_prediction=False)
+        model.train()
     # Training
     if args.do_train :
         train_dataset = load_and_cache_examples(args, tokenizer, mode="train")

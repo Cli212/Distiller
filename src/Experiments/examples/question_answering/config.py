@@ -109,8 +109,6 @@ def parse(opt=None):
                         default=False,
                         action='store_true',
                         help="Whether to use 16-bit float precisoin instead of 32-bit")
-
-    parser.add_argument('--random_seed',type=int,default=10236797)
     parser.add_argument('--fake_file_1',type=str,default=None)
     parser.add_argument('--fake_file_2',type=str,default=None)
     parser.add_argument("--weight_decay", default=0.1, type=float,
