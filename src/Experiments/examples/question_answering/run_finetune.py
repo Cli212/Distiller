@@ -1,6 +1,7 @@
 import config
-from utils import write_evaluation, load_and_cache_examples
+from utils import squad_evaluate, load_and_cache_examples
 import glob
+import json
 import logging
 import os
 import random
@@ -28,8 +29,6 @@ def set_seed(args):
 
 def train(args, train_dataset, model, tokenizer):
     """ train the model """
-    # if args.local_rank in [-1, 0]:
-    #     tb_writer = SummaryWriter()
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
@@ -131,8 +130,8 @@ def train(args, train_dataset, model, tokenizer):
                 continue
 
             model.train()
-            batch = tuple(t.to(args.device) for t in batch)
-
+            # batch = tuple(t.to(args.device) for t in batch)
+            batch = tuple(batch[t].to(args.device) for t in batch.keys())
             inputs = {
                 "input_ids": batch[0],
                 "attention_mask": batch[1],
@@ -178,33 +177,37 @@ def train(args, train_dataset, model, tokenizer):
                 optimizer.step()
                 scheduler.step()  # Update learning rate schedule
                 model.zero_grad()
-                global_step += 1
+        global_step += 1
+        if args.local_rank in [-1, 0]:
+            examples, features, results = evaluate(args, model, tokenizer)
+            squad_evaluate(args, tokenizer, examples, features, results, str(global_step) + "epoch", False)
 
                 # Log metrics
-                if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
-                    # Only evaluate when single GPU otherwise metrics may not average well
-                    if args.local_rank == -1 and args.evaluate_during_training:
-                        examples, features, results = evaluate(args, model, tokenizer)
-                        write_evaluation(args, tokenizer, examples, features, results, prefix=str(step)+"step")
+                # if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
+                #     # Only evaluate when single GPU otherwise metrics may not average well
+                #     if args.local_rank == -1 and args.evaluate_during_training:
+                #         examples, features, results = evaluate(args, model, tokenizer)
+                #         write_evaluation(args, tokenizer, examples, features, results, prefix=str(step)+"step")
 
                 # Save model checkpoint
-                if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
-                    output_dir = os.path.join(args.output_dir, f"checkpoint_{global_step}")
-                    # Take care of distributed/parallel training
-                    model_to_save = model.module if hasattr(model, "module") else model
-                    model_to_save.save_pretrained(output_dir)
-                    tokenizer.save_pretrained(output_dir)
+                # if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
+                #     output_dir = os.path.join(args.output_dir, f"checkpoint_{global_step}")
+                #     # Take care of distributed/parallel training
+                #     model_to_save = model.module if hasattr(model, "module") else model
+                #     model_to_save.save_pretrained(output_dir)
+                #     tokenizer.save_pretrained(output_dir)
+                #
+                #     torch.save(args, os.path.join(output_dir, "training_args.bin"))
+                #     logger.info("Saving model checkpoint to %s", output_dir)
+                #
+                #     torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
+                #     torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                #     logger.info("Saving optimizer and scheduler states to %s", output_dir)
 
-                    torch.save(args, os.path.join(output_dir, "training_args.bin"))
-                    logger.info("Saving model checkpoint to %s", output_dir)
 
-                    torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
-                    torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
-                    logger.info("Saving optimizer and scheduler states to %s", output_dir)
-
-            if args.max_steps > 0 and global_step > args.max_steps:
-                epoch_iterator.close()
-                break
+            # if args.max_steps > 0 and global_step > args.max_steps:
+            #     epoch_iterator.close()
+            #     break
         if args.max_steps > 0 and global_step > args.max_steps:
             train_iterator.close()
             break
@@ -337,7 +340,14 @@ def main(args):
 
             # Evaluate
             examples, features, results = evaluate(args, model, tokenizer, prefix=global_step)
-            write_evaluation(args, tokenizer, examples, features, results)
+            evaluation = squad_evaluate(args, tokenizer, examples, features, results)
+            logger.info("***** Eval results *****")
+            logger.info(json.dumps(evaluation, indent=2) + '\n')
+
+            output_eval_file = os.path.join(args.output_dir, "final_eval_results.txt")
+            logger.info(f"Write evaluation result to {output_eval_file}...")
+            with open(output_eval_file, "a") as writer:
+                writer.write(f"Output: {json.dumps(evaluation, indent=2)}\n")
             # result = dict((k + ("_{}".format(global_step) if global_step else ""), v) for k, v in result.items())
             # results.update(result)
 

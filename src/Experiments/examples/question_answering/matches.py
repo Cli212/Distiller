@@ -6,6 +6,18 @@ L3_attention_ce=[{"layer_T":4,  "layer_S":1, "feature":"attention", "loss":"atte
                  {"layer_T":8,  "layer_S":2, "feature":"attention", "loss":"attention_ce", "weight":1},
                  {"layer_T":12, "layer_S":3, "feature":"attention", "loss":"attention_ce", "weight":1}]
 
+L3_hybrid=[{"layer_T":[0,0],  "layer_S":[0,0], "feature":"hidden", "loss":"mmd", "weight":1},
+                {"layer_T":[1,1],  "layer_S":[1,1], "feature":"hidden", "loss":"mmd", "weight":1},
+                {"layer_T":[2,2],  "layer_S":[2,2], "feature":"hidden", "loss":"mmd", "weight":1},
+                {"layer_T":[3,3],"layer_S":[3,3], "feature":"hidden", "loss":"mmd", "weight":1},
+                {"layer_T":1,  "layer_S":1, "feature":"hidden", "loss":"hidden_ce", "weight":0.5},
+                {"layer_T":2,  "layer_S":1, "feature":"hidden", "loss":"hidden_ce", "weight":0.5},
+                {"layer_T":3, "layer_S":2, "feature":"hidden", "loss":"hidden_ce", "weight":0.5},
+                {"layer_T":4,  "layer_S":2, "feature":"hidden", "loss":"hidden_ce", "weight":0.5},
+                {"layer_T":5,  "layer_S":3, "feature":"hidden", "loss":"hidden_ce", "weight":0.5},
+                {"layer_T":6, "layer_S":3, "feature":"hidden", "loss":"hidden_ce", "weight":0.5}
+                ]
+
 
 L3_attention_mse_sum=[{"layer_T":4,  "layer_S":1, "feature":"attention", "loss":"attention_mse_sum", "weight":1},
                       {"layer_T":8,  "layer_S":2, "feature":"attention", "loss":"attention_mse_sum", "weight":1},
@@ -45,6 +57,11 @@ L4_attention_ce=[{"layer_T":3,  "layer_S":1, "feature":"attention", "loss":"atte
                  {"layer_T":9,  "layer_S":3, "feature":"attention", "loss":"attention_ce", "weight":1},
                  {"layer_T":12, "layer_S":4, "feature":"attention", "loss":"attention_ce", "weight":1}]
 
+L4_attention_ce_large=[{"layer_T":6,  "layer_S":1, "feature":"attention", "loss":"attention_ce", "weight":1},
+                 {"layer_T":12,  "layer_S":2, "feature":"attention", "loss":"attention_ce", "weight":1},
+                 {"layer_T":18,  "layer_S":3, "feature":"attention", "loss":"attention_ce", "weight":1},
+                 {"layer_T":24, "layer_S":4, "feature":"attention", "loss":"attention_ce", "weight":1}]
+
 L4_attention_mse_sum=[{"layer_T":3,  "layer_S":1, "feature":"attention", "loss":"attention_mse_sum", "weight":1},
                       {"layer_T":6,  "layer_S":2, "feature":"attention", "loss":"attention_mse_sum", "weight":1},
                       {"layer_T":9,  "layer_S":3, "feature":"attention", "loss":"attention_mse_sum", "weight":1},
@@ -61,11 +78,23 @@ L4_hidden_smmd=[{"layer_T":[0,0],  "layer_S":[0,0], "feature":"hidden", "loss":"
                 {"layer_T":[9,9],  "layer_S":[3,3], "feature":"hidden", "loss":"mmd", "weight":1},
                 {"layer_T":[12,12],"layer_S":[4,4], "feature":"hidden", "loss":"mmd", "weight":1}]
 
+L4_hidden_smmd_large=[{"layer_T":[0,0],  "layer_S":[0,0], "feature":"hidden", "loss":"mmd", "weight":1},
+                {"layer_T":[6,6],  "layer_S":[1,1], "feature":"hidden", "loss":"mmd", "weight":1},
+                {"layer_T":[12,12],  "layer_S":[2,2], "feature":"hidden", "loss":"mmd", "weight":1},
+                {"layer_T":[18,18],  "layer_S":[3,3], "feature":"hidden", "loss":"mmd", "weight":1},
+                {"layer_T":[24,24],"layer_S":[4,4], "feature":"hidden", "loss":"mmd", "weight":1}]
+
 L4t_hidden_mse=[{"layer_T":0, "layer_S":0, "feature":"hidden", "loss":"hidden_mse", "weight":1, "proj":["linear",312,768]},
                 {"layer_T":3, "layer_S":1, "feature":"hidden", "loss":"hidden_mse", "weight":1, "proj":["linear",312,768]},
                 {"layer_T":6, "layer_S":2, "feature":"hidden", "loss":"hidden_mse", "weight":1, "proj":["linear",312,768]},
                 {"layer_T":9, "layer_S":3, "feature":"hidden", "loss":"hidden_mse", "weight":1, "proj":["linear",312,768]},
                 {"layer_T":12,"layer_S":4, "feature":"hidden", "loss":"hidden_mse", "weight":1, "proj":["linear",312,768]}]
+
+L4t_hidden_mse_large=[{"layer_T":0, "layer_S":0, "feature":"hidden", "loss":"hidden_mse", "weight":1, "proj":["linear",312,1024]},
+                {"layer_T":6, "layer_S":1, "feature":"hidden", "loss":"hidden_mse", "weight":1, "proj":["linear",312,1024]},
+                {"layer_T":12, "layer_S":2, "feature":"hidden", "loss":"hidden_mse", "weight":1, "proj":["linear",312,1024]},
+                {"layer_T":18, "layer_S":3, "feature":"hidden", "loss":"hidden_mse", "weight":1, "proj":["linear",312,1024]},
+                {"layer_T":24,"layer_S":4, "feature":"hidden", "loss":"hidden_mse", "weight":1, "proj":["linear",312,1024]}]
 
 L6_hidden_mse=[{"layer_T":0, "layer_S":0, "feature":"hidden", "loss":"hidden_mse", "weight":1},
                {"layer_T":2, "layer_S":1, "feature":"hidden", "loss":"hidden_mse", "weight":1},
@@ -108,5 +137,7 @@ matches={'L3_attention_mse':L3_attention_mse,'L3_attention_mse_sum':L3_attention
          'L4_attention_ce' :L4_attention_ce, 'L4_attention_ce_mean':L4_attention_ce_mean,
          'L4t_hidden_mse'  :L4t_hidden_mse,  'L4_hidden_smmd'      :L4_hidden_smmd,
          'L6_hidden_mse' : L6_hidden_mse, 'L6_hidden_smmd' : L6_hidden_smmd,
-         'L6_attention_ce': L6_attention_ce, 'L6_attention_ce_mean': L6_attention_ce_mean
+         'L6_attention_ce': L6_attention_ce, 'L6_attention_ce_mean': L6_attention_ce_mean,
+         'L3_hybrid':L3_hybrid, 'L4_hidden_smmd_large':L4_hidden_smmd_large,
+         'L4t_hidden_mse_large':L4t_hidden_mse_large, 'L4_attention_ce_large':L4_attention_ce_large
         }

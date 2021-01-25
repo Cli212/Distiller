@@ -38,46 +38,90 @@ class MyDataset(Dataset):
     def __len__(self):
         return len(self.all_input_ids)
 
-def write_evaluation(args, tokenizer, eval_examples, eval_features, all_results, prefix="", write_prediction=True):
 
+def squad_evaluate(args, tokenizer, eval_examples, eval_features, all_results, prefix="", write_prediction=True, no_answer_probs=None, no_answer_probability_threshold=1.0):
     output_prediction_file = os.path.join(args.output_dir, f"{prefix}_predictions.json")
-    all_predictions, scores_diff_json = \
-        write_predictions_google(tokenizer, eval_examples, eval_features, all_results,
+    output_nbest_file = os.path.join(args.output_dir, f"nbest_predictions_{prefix}.json")
+    if args.version_2_with_negative:
+        output_null_log_odds_file = os.path.join(args.output_dir, "null_odds_{}.json".format(prefix))
+    else:
+        output_null_log_odds_file = None
+    all_predictions = write_predictions_google(tokenizer, eval_examples, eval_features, all_results,
                                  args.n_best_size, args.max_answer_length,
                                  args.do_lower_case, output_prediction_file,
-                                 output_nbest_file=None, output_null_log_odds_file=None,write_prediction=write_prediction)
-    if args.do_eval:
-        eval_data = json.load(open(os.path.join(args.data_dir, f"dev-v{args.version}.json"), 'r', encoding='utf-8'))['data']
-        qid_to_has_ans = make_qid_to_has_ans(eval_data)
-        na_probs = {k: 0.0 for k in all_predictions}
-        has_ans_qids = [k for k, v in qid_to_has_ans.items() if v]
-        no_ans_qids = [k for k, v in qid_to_has_ans.items() if not v]
-        EM_raw, F1_raw = evaluate(eval_data, all_predictions)  # ,scores_diff_json, na_prob_thresh=0)
-        # exact_thresh = apply_no_ans_threshold(EM_raw, na_probs, qid_to_has_ans, 0.0)
+                                 output_nbest_file, output_null_log_odds_file,args.version_2_with_negative,
+                                 args.null_score_diff_threshold,write_prediction=write_prediction)
+    qas_id_to_has_answer = {example.qas_id: bool(example.answers) for example in eval_examples}
+    has_answer_qids = [qas_id for qas_id, has_answer in qas_id_to_has_answer.items() if has_answer]
+    no_answer_qids = [qas_id for qas_id, has_answer in qas_id_to_has_answer.items() if not has_answer]
 
-        out_eval = make_eval_dict(EM_raw, F1_raw)
-        if has_ans_qids:
-            has_ans_eval = make_eval_dict(EM_raw, F1_raw, qid_list=has_ans_qids)
-            merge_eval(out_eval, has_ans_eval, "HasAns")
-        if no_ans_qids:
-            no_ans_eval = make_eval_dict(EM_raw, F1_raw, qid_list=no_ans_qids)
-            merge_eval(out_eval, no_ans_eval, "NoAns")
-        # AVG = (EM + F1) * 0.5
-        logger.info("***** Eval results *****")
-        logger.info(json.dumps(out_eval, indent=2) + '\n')
+    if no_answer_probs is None:
+        no_answer_probs = {k: 0.0 for k in all_predictions}
 
-        output_eval_file = os.path.join(args.output_dir, f"{prefix}_eval_results.txt")
-        logger.info(f"Write evaluation result to {output_eval_file}...")
-        with open(output_eval_file, "a") as writer:
-            writer.write(f"Output: {json.dumps(out_eval, indent=2)}\n")
+    exact, f1 = get_raw_scores(eval_examples, all_predictions)
+
+    exact_threshold = apply_no_ans_threshold(
+        exact, no_answer_probs, qas_id_to_has_answer, no_answer_probability_threshold
+    )
+    f1_threshold = apply_no_ans_threshold(f1, no_answer_probs, qas_id_to_has_answer, no_answer_probability_threshold)
+
+    evaluation = make_eval_dict(exact_threshold, f1_threshold)
+
+    if has_answer_qids:
+        has_ans_eval = make_eval_dict(exact_threshold, f1_threshold, qid_list=has_answer_qids)
+        merge_eval(evaluation, has_ans_eval, "HasAns")
+
+    if no_answer_qids:
+        no_ans_eval = make_eval_dict(exact_threshold, f1_threshold, qid_list=no_answer_qids)
+        merge_eval(evaluation, no_ans_eval, "NoAns")
+
+    if no_answer_probs:
+        find_all_best_thresh_v2(evaluation, all_predictions, exact, f1, no_answer_probs, qas_id_to_has_answer)
+    return evaluation
+
+# def write_evaluation(args, tokenizer, eval_examples, eval_features, all_results, prefix="", write_prediction=True):
+#
+#     output_prediction_file = os.path.join(args.output_dir, f"{prefix}_predictions.json")
+#     output_nbest_file = os.path.join(args.output_dir, f"nbest_predictions_{prefix}.json")
+#     if args.version_2_with_negative:
+#         output_null_log_odds_file = os.path.join(args.output_dir, "null_odds_{}.json".format(prefix))
+#     else:
+#         output_null_log_odds_file = None
+#     all_predictions = write_predictions_google(tokenizer, eval_examples, eval_features, all_results,
+#                                  args.n_best_size, args.max_answer_length,
+#                                  args.do_lower_case, output_prediction_file,
+#                                  output_nbest_file, output_null_log_odds_file,args.version_2_with_negative,
+#                                  args.null_score_diff_threshold,write_prediction=write_prediction)
+#     if args.do_eval:
+#         eval_data = json.load(open(os.path.join(args.data_dir, f"dev-v{args.version}.json"), 'r', encoding='utf-8'))['data']
+#         qid_to_has_ans = make_qid_to_has_ans(eval_data)
+#         na_probs = {k: 0.0 for k in all_predictions}
+#         has_ans_qids = [k for k, v in qid_to_has_ans.items() if v]
+#         no_ans_qids = [k for k, v in qid_to_has_ans.items() if not v]
+#         EM_raw, F1_raw = evaluate(eval_data, all_predictions)  # ,scores_diff_json, na_prob_thresh=0)
+#         # exact_thresh = apply_no_ans_threshold(EM_raw, na_probs, qid_to_has_ans, 0.0)
+#
+#         out_eval = make_eval_dict(EM_raw, F1_raw)
+#         if has_ans_qids:
+#             has_ans_eval = make_eval_dict(EM_raw, F1_raw, qid_list=has_ans_qids)
+#             merge_eval(out_eval, has_ans_eval, "HasAns")
+#         if no_ans_qids:
+#             no_ans_eval = make_eval_dict(EM_raw, F1_raw, qid_list=no_ans_qids)
+#             merge_eval(out_eval, no_ans_eval, "NoAns")
+#         # AVG = (EM + F1) * 0.5
+#         logger.info("***** Eval results *****")
+#         logger.info(json.dumps(out_eval, indent=2) + '\n')
+#
+#         output_eval_file = os.path.join(args.output_dir, f"{prefix}_eval_results.txt")
+#         logger.info(f"Write evaluation result to {output_eval_file}...")
+#         with open(output_eval_file, "a") as writer:
+#             writer.write(f"Output: {json.dumps(out_eval, indent=2)}\n")
 
 def write_predictions_google(tokenizer, all_examples, all_features, all_results, n_best_size,
                       max_answer_length, do_lower_case, output_prediction_file,
-                      output_nbest_file, output_null_log_odds_file,write_prediction):
-    """Write final predictions to the json file."""
-    if write_prediction:
-        logger.info("Writing predictions to: %s" % (output_prediction_file))
-    #logger.info("Writing nbest to: %s" % (output_nbest_file))
+                      output_nbest_file, output_null_log_odds_file,version_2_with_negative,
+                      null_score_diff_threshold,write_prediction):
+    """Write final predictions to the json file and log-odds of null if needed."""
 
     example_index_to_features = collections.defaultdict(list)
     for feature in all_features:
@@ -88,8 +132,8 @@ def write_predictions_google(tokenizer, all_examples, all_features, all_results,
         unique_id_to_result[result.unique_id] = result
 
     _PrelimPrediction = collections.namedtuple(  # pylint: disable=invalid-name
-        "PrelimPrediction",
-        ["feature_index", "start_index", "end_index", "start_logit", "end_logit"])
+        "PrelimPrediction", ["feature_index", "start_index", "end_index", "start_logit", "end_logit"]
+    )
 
     all_predictions = collections.OrderedDict()
     all_nbest_json = collections.OrderedDict()
@@ -101,29 +145,21 @@ def write_predictions_google(tokenizer, all_examples, all_features, all_results,
         prelim_predictions = []
         # keep track of the minimum score of null start+end of position 0
         score_null = 1000000  # large and positive
-        min_null_feature_index = 0
-        null_ls = 0
-        #null_end_logit = 0
+        min_null_feature_index = 0  # the paragraph slice with min null score
+        null_start_logit = 0  # the start logit at the slice with min null score
+        null_end_logit = 0  # the end logit at the slice with min null score
         for (feature_index, feature) in enumerate(features):
             result = unique_id_to_result[feature.unique_id]
-            result_start_ls = log_softmax1d(result.start_logits)
-            result_end_ls = log_softmax1d(result.end_logits)
-            start_indexes = _get_best_indexes(result_start_ls, n_best_size)
-            end_indexes   = _get_best_indexes(result_end_ls, n_best_size)
+            start_indexes = _get_best_indexes(result.start_logits, n_best_size)
+            end_indexes = _get_best_indexes(result.end_logits, n_best_size)
             # if we could have irrelevant answers, get the min score of irrelevant
-
-            #feature_null_score =   log_sigmoid(result.cls_logits) #result.start_logits[0] + result.end_logits[0]
-            #feature_HasAns_score = log_sigmoid(-result.cls_logits)
-            span_start_ls = result_start_ls #+ feature_HasAns_score
-            span_end_ls   = result_end_ls #+ feature_HasAns_score
-
-            #if feature_null_score < score_null:
-            #    score_null = feature_null_score
-            #    min_null_feature_index = feature_index
-            #    null_ls = feature_null_score #result.start_logits[0]
-            #    #null_end_logit = result.end_logits[0]
-
-
+            if version_2_with_negative:
+                feature_null_score = result.start_logits[0] + result.end_logits[0]
+                if feature_null_score < score_null:
+                    score_null = feature_null_score
+                    min_null_feature_index = feature_index
+                    null_start_logit = result.start_logits[0]
+                    null_end_logit = result.end_logits[0]
             for start_index in start_indexes:
                 for end_index in end_indexes:
                     # We could hypothetically create invalid predictions, e.g., predict
@@ -149,27 +185,25 @@ def write_predictions_google(tokenizer, all_examples, all_features, all_results,
                             feature_index=feature_index,
                             start_index=start_index,
                             end_index=end_index,
-                            start_logit=span_start_ls[start_index],
-                            end_logit=span_end_ls[end_index]))
-
-
-        #if FLAGS.version_2_with_negative:
-        #prelim_predictions.append(
-        #    _PrelimPrediction(
-        #        feature_index=min_null_feature_index,
-        #        start_index=0,
-        #        end_index=0,
-        #        start_logit=null_ls/2,
-        #        end_logit=null_ls/2))
-
-
-        prelim_predictions = sorted(
-            prelim_predictions,
-            key=lambda x: (x.start_logit + x.end_logit),
-            reverse=True)
+                            start_logit=result.start_logits[start_index],
+                            end_logit=result.end_logits[end_index],
+                        )
+                    )
+        if version_2_with_negative:
+            prelim_predictions.append(
+                _PrelimPrediction(
+                    feature_index=min_null_feature_index,
+                    start_index=0,
+                    end_index=0,
+                    start_logit=null_start_logit,
+                    end_logit=null_end_logit,
+                )
+            )
+        prelim_predictions = sorted(prelim_predictions, key=lambda x: (x.start_logit + x.end_logit), reverse=True)
 
         _NbestPrediction = collections.namedtuple(  # pylint: disable=invalid-name
-            "NbestPrediction", ["text", "start_logit", "end_logit"])
+            "NbestPrediction", ["text", "start_logit", "end_logit"]
+        )
 
         seen_predictions = {}
         nbest = []
@@ -178,22 +212,25 @@ def write_predictions_google(tokenizer, all_examples, all_features, all_results,
                 break
             feature = features[pred.feature_index]
             if pred.start_index > 0:  # this is a non-null prediction
-                tok_tokens = feature.tokens[pred.start_index:(pred.end_index + 1)]
+                tok_tokens = feature.tokens[pred.start_index: (pred.end_index + 1)]
                 orig_doc_start = feature.token_to_orig_map[pred.start_index]
                 orig_doc_end = feature.token_to_orig_map[pred.end_index]
-                orig_tokens = example.doc_tokens[orig_doc_start:(orig_doc_end + 1)]
-                tok_text = " ".join(tok_tokens)
+                orig_tokens = example.doc_tokens[orig_doc_start: (orig_doc_end + 1)]
 
-                # De-tokenize WordPieces that have been split off.
-                tok_text = tok_text.replace(" ##", "")
-                tok_text = tok_text.replace("##", "")
+                tok_text = tokenizer.convert_tokens_to_string(tok_tokens)
+
+                # tok_text = " ".join(tok_tokens)
+                #
+                # # De-tokenize WordPieces that have been split off.
+                # tok_text = tok_text.replace(" ##", "")
+                # tok_text = tok_text.replace("##", "")
 
                 # Clean whitespace
                 tok_text = tok_text.strip()
                 tok_text = " ".join(tok_text.split())
                 orig_text = " ".join(orig_tokens)
 
-                final_text = get_final_text(tok_text, orig_text, tokenizer, do_lower_case)
+                final_text = get_final_text(tok_text, orig_text, tokenizer)
                 if final_text in seen_predictions:
                     continue
 
@@ -202,42 +239,33 @@ def write_predictions_google(tokenizer, all_examples, all_features, all_results,
                 final_text = ""
                 seen_predictions[final_text] = True
 
-            nbest.append(
-                _NbestPrediction(
-                    text=final_text,
-                    start_logit=pred.start_logit,
-                    end_logit=pred.end_logit))
+            nbest.append(_NbestPrediction(text=final_text, start_logit=pred.start_logit, end_logit=pred.end_logit))
+        # if we didn't include the empty option in the n-best, include it
+        if version_2_with_negative:
+            if "" not in seen_predictions:
+                nbest.append(_NbestPrediction(text="", start_logit=null_start_logit, end_logit=null_end_logit))
 
-        # if we didn't inlude the empty option in the n-best, inlcude it
-
-        #if FLAGS.version_2_with_negative:
-        #if "" not in seen_predictions:
-        #    nbest.append(
-        #        _NbestPrediction(
-        #            text="",
-        #            start_logit=null_ls/2,
-        #            end_logit=null_ls/2))
-
+            # In very rare edge cases we could only have single null prediction.
+            # So we just create a nonce prediction in this case to avoid failure.
+            if len(nbest) == 1:
+                nbest.insert(0, _NbestPrediction(text="empty", start_logit=0.0, end_logit=0.0))
 
         # In very rare edge cases we could have no valid predictions. So we
         # just create a nonce prediction in this case to avoid failure.
         if not nbest:
-            nbest.append(
-                _NbestPrediction(text="", start_logit=0.0, end_logit=0.0))
+            nbest.append(_NbestPrediction(text="empty", start_logit=0.0, end_logit=0.0))
 
-        assert len(nbest) >= 1
+        assert len(nbest) >= 1, "No valid predictions"
 
         total_scores = []
         best_non_null_entry = None
-        #index_best_non_null_entry = None
-        for (i,entry) in enumerate(nbest):
+        for entry in nbest:
             total_scores.append(entry.start_logit + entry.end_logit)
             if not best_non_null_entry:
                 if entry.text:
-                    #index_best_non_null_entry = i
                     best_non_null_entry = entry
 
-        probs = np.exp(total_scores)
+        probs = _compute_softmax(total_scores)
 
         nbest_json = []
         for (i, entry) in enumerate(nbest):
@@ -248,39 +276,59 @@ def write_predictions_google(tokenizer, all_examples, all_features, all_results,
             output["end_logit"] = entry.end_logit
             nbest_json.append(output)
 
-        assert len(nbest_json) >= 1
+        assert len(nbest_json) >= 1, "No valid predictions"
 
-
-        #if not FLAGS.version_2_with_negative:
-        #    all_predictions[example.qas_id] = nbest_json[0]["text"]
-        #else:
+        if not version_2_with_negative:
+            all_predictions[example.qas_id] = nbest_json[0]["text"]
+        else:
             # predict "" iff the null score - the score of best non-null > threshold
-
-        #if best_non_null_entry is None:
-        #    score_diff = 999999
-        #else:
-        #    score_diff = np.exp(score_null) - np.exp((best_non_null_entry.start_logit + best_non_null_entry.end_logit))
-        #scores_diff_json[example.qas_id] = float(score_diff)
-        ##scores_diff_json[example.qas_id] = float(np.exp(score_null))
-        #if score_diff > config.args.null_score_diff_threshold:
-        #    all_predictions[example.qas_id] = ""
-        #else:
-        #    all_predictions[example.qas_id] = best_non_null_entry.text
-
-        all_predictions[example.qas_id] = nbest_json[0]["text"]
+            score_diff = score_null - best_non_null_entry.start_logit - (best_non_null_entry.end_logit)
+            scores_diff_json[example.qas_id] = score_diff
+            if score_diff > null_score_diff_threshold:
+                all_predictions[example.qas_id] = ""
+            else:
+                all_predictions[example.qas_id] = best_non_null_entry.text
         all_nbest_json[example.qas_id] = nbest_json
     if write_prediction:
-        with open(output_prediction_file, "w",encoding='utf-8') as writer:
-            writer.write(json.dumps(all_predictions, indent=4,ensure_ascii=False) + "\n")
+        if output_prediction_file:
+            logger.info(f"Writing predictions to: {output_prediction_file}")
+            with open(output_prediction_file, "w") as writer:
+                writer.write(json.dumps(all_predictions, indent=4) + "\n")
 
-    #with open(output_nbest_file, "w") as writer:
-    #    writer.write(json.dumps(all_nbest_json, indent=4) + "\n")
+        if output_nbest_file:
+            logger.info(f"Writing nbest to: {output_nbest_file}")
+            with open(output_nbest_file, "w") as writer:
+                writer.write(json.dumps(all_nbest_json, indent=4) + "\n")
 
-    #with open(output_null_log_odds_file,"w") as writer:
-    #    writer.write(json.dumps(scores_diff_json, indent=4) + "\n")
+        if output_null_log_odds_file and version_2_with_negative:
+            logger.info(f"Writing null_log_odds to: {output_null_log_odds_file}")
+            with open(output_null_log_odds_file, "w") as writer:
+                writer.write(json.dumps(scores_diff_json, indent=4) + "\n")
 
-    return all_predictions, scores_diff_json
+    return all_predictions
 
+
+def _compute_softmax(scores):
+    """Compute softmax probability over raw logits."""
+    if not scores:
+        return []
+
+    max_score = None
+    for score in scores:
+        if max_score is None or score > max_score:
+            max_score = score
+
+    exp_scores = []
+    total_sum = 0.0
+    for score in scores:
+        x = math.exp(score - max_score)
+        exp_scores.append(x)
+        total_sum += x
+
+    probs = []
+    for score in exp_scores:
+        probs.append(score / total_sum)
+    return probs
 
 def log_softmax1d(scores):
     if not scores:
@@ -437,25 +485,76 @@ def compute_f1(a_gold, a_pred):
     return f1
 
 
-def evaluate(dataset, preds):
+def get_raw_scores(examples, preds):
+    """
+    Computes the exact and f1 scores from the examples and the model predictions
+    """
     exact_scores = {}
     f1_scores = {}
-    for article in dataset:
-        for p in article["paragraphs"]:
-            for qa in p["qas"]:
-                qid = qa["id"]
-                gold_answers = [t['text'] for t in qa["answers"] if normalize_answer(t['text'])]
-                if not gold_answers:
-                    # For unanswerable questions, only correct answer is empty string
-                    gold_answers = [""]
-                if qid not in preds:
-                    print("Missing prediction for %s" % qid)
-                    continue
-                a_pred = preds[qid]
-                # Take max over all gold answers
-                exact_scores[qid] = max(compute_exact(a, a_pred) for a in gold_answers)
-                f1_scores[qid] = max(compute_f1(a, a_pred) for a in gold_answers)
+
+    for example in examples:
+        qas_id = example.qas_id
+        gold_answers = [answer["text"] for answer in example.answers if normalize_answer(answer["text"])]
+
+        if not gold_answers:
+            # For unanswerable questions, only correct answer is empty string
+            gold_answers = [""]
+
+        if qas_id not in preds:
+            print("Missing prediction for %s" % qas_id)
+            continue
+
+        prediction = preds[qas_id]
+        exact_scores[qas_id] = max(compute_exact(a, prediction) for a in gold_answers)
+        f1_scores[qas_id] = max(compute_f1(a, prediction) for a in gold_answers)
+
     return exact_scores, f1_scores
+
+
+def find_all_best_thresh_v2(main_eval, preds, exact_raw, f1_raw, na_probs, qid_to_has_ans):
+    best_exact, exact_thresh, has_ans_exact = find_best_thresh_v2(preds, exact_raw, na_probs, qid_to_has_ans)
+    best_f1, f1_thresh, has_ans_f1 = find_best_thresh_v2(preds, f1_raw, na_probs, qid_to_has_ans)
+    main_eval["best_exact"] = best_exact
+    main_eval["best_exact_thresh"] = exact_thresh
+    main_eval["best_f1"] = best_f1
+    main_eval["best_f1_thresh"] = f1_thresh
+    main_eval["has_ans_exact"] = has_ans_exact
+    main_eval["has_ans_f1"] = has_ans_f1
+
+
+def find_best_thresh_v2(preds, scores, na_probs, qid_to_has_ans):
+    num_no_ans = sum(1 for k in qid_to_has_ans if not qid_to_has_ans[k])
+    cur_score = num_no_ans
+    best_score = cur_score
+    best_thresh = 0.0
+    qid_list = sorted(na_probs, key=lambda k: na_probs[k])
+    for i, qid in enumerate(qid_list):
+        if qid not in scores:
+            continue
+        if qid_to_has_ans[qid]:
+            diff = scores[qid]
+        else:
+            if preds[qid]:
+                diff = -1
+            else:
+                diff = 0
+        cur_score += diff
+        if cur_score > best_score:
+            best_score = cur_score
+            best_thresh = na_probs[qid]
+
+    has_ans_score, has_ans_cnt = 0, 0
+    for qid in qid_list:
+        if not qid_to_has_ans[qid]:
+            continue
+        has_ans_cnt += 1
+
+        if qid not in scores:
+            continue
+        has_ans_score += scores[qid]
+
+    return 100.0 * best_score / len(scores), best_thresh, 1.0 * has_ans_score / has_ans_cnt
+
 
 
 def make_qid_to_has_ans(dataset):
@@ -509,21 +608,22 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Load data features from cache or dataset file
-    cached_features_file = os.path.join(args.data_dir, "cached_{}_{}_{}".format(mode,
+    cached_features_file = os.path.join(args.data_dir, "cached_{}_{}_{}_{}".format(mode,
+        '2.0' if args.version_2_with_negative else '1.1',
         list(filter(None, args.model_name_or_path.split("/"))).pop(),
         str(args.max_seq_length)))
-    examples = read_examples_from_file(args.data_dir, mode, args.version)
+    examples = read_examples_from_file(args.data_dir, mode, args.version_2_with_negative)
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
-        dataset = convert_features_to_dataset(features, is_training = True if mode == 'train' else False)
+        dataset = convert_features_to_dataset(features, is_training=(mode == 'train'))
         ## This place need to be more flexible
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
         features, dataset = convert_examples_to_features(examples, tokenizer, args.max_seq_length,
                                                               args.doc_stride,
                                                               args.max_query_length,
-                                                              is_training = True if mode == 'train' else False,
+                                                              is_training=(mode == 'train'),
                                                               threads = args.thread
                                                               )
         if args.local_rank in [-1, 0]:

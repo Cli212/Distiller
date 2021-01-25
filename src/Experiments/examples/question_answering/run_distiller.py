@@ -3,11 +3,12 @@ import glob
 import logging
 import os
 import random
+import json
 import numpy as np
 import torch
 from textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller
 from matches import matches
-from utils import write_evaluation, load_and_cache_examples
+from utils import squad_evaluate, load_and_cache_examples
 from evaluate import evaluate
 from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
@@ -77,7 +78,7 @@ def train(args, train_dataset, model_T, model, tokenizer, predict_callback):
                     torch.distributed.get_world_size() if args.local_rank != -1 else 1))
     logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
     logger.info("  Total optimization steps = %d", t_total)
-    if args.do_train and args.do_distill:
+    if args.do_train:
         intermediate_matches = None
         if isinstance(args.matches, (list, tuple)):
             intermediate_matches = []
@@ -145,6 +146,7 @@ def main(args):
 
     args.model_type = args.model_type.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
+    config_class_s, model_class_s, tokenizer_class_s = MODEL_CLASSES[args.model_type_student if args.model_type_student else args.model_type]
     config = config_class.from_pretrained(args.bert_config_file_T if args.bert_config_file_T else args.model_name_or_path,
                                           cache_dir=args.cache_dir if args.cache_dir else None)
     config.output_hidden_states = True
@@ -159,19 +161,19 @@ def main(args):
                                           cache_dir=args.cache_dir if args.cache_dir else None)
 
     model_name_or_path = args.model_name_or_path_student if args.model_name_or_path_student else args.model_name_or_path
-    config = config_class.from_pretrained(args.bert_config_file_S if args.bert_config_file_S else model_name_or_path,
+    config_s = config_class_s.from_pretrained(args.bert_config_file_S if args.bert_config_file_S else model_name_or_path,
                                           cache_dir=args.cache_dir if args.cache_dir else None)
-    config.output_hidden_states = True
-    config.output_attentions = True
+    config_s.output_hidden_states = True
+    config_s.output_attentions = True
     # config.num_hidden_layers=args.num_hidden_layers
     try:
-        model = model_class.from_pretrained(model_name_or_path,
+        model = model_class_s.from_pretrained(model_name_or_path,
                                         from_tf=bool(".ckpt" in args.model_name_or_path),
-                                        config=config,
+                                        config=config_s,
                                         cache_dir=args.cache_dir if args.cache_dir else None)
     except:
         logger.info("Fail to load pre-trained parameters, the model will be randomly initialized")
-        model = model_class(config)
+        model = model_class_s(config_s)
 
 
     if args.local_rank == 0:
@@ -187,7 +189,14 @@ def main(args):
             tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path,
                                                         do_lower_case=args.do_lower_case)
             examples, features, results = evaluate(args, model, tokenizer)
-            write_evaluation(args, tokenizer, examples, features, results, prefix=str(step) + " step",write_prediction=False)
+            evaluation = squad_evaluate(args, tokenizer, examples, features, results,prefix=f"{step}",write_prediction=False)
+            logger.info("***** Eval results *****")
+            logger.info(json.dumps(evaluation, indent=2) + '\n')
+
+            output_eval_file = os.path.join(args.output_dir, f"{step}_eval_results.txt")
+            logger.info(f"Write evaluation result to {output_eval_file}...")
+            with open(output_eval_file, "a") as writer:
+                writer.write(f"Output: {json.dumps(evaluation, indent=2)}\n")
         model.train()
     # Training
     if args.do_train :
@@ -209,7 +218,7 @@ def main(args):
         model_to_save.save_pretrained(args.output_dir)
         tokenizer.save_pretrained(args.output_dir)
         torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
-        model = model_class.from_pretrained(args.output_dir)  # , force_download=True)
+        model = model_class_s.from_pretrained(args.output_dir)  # , force_download=True)
 
         # SquadDataset is not compatible with Fast tokenizers which have a smarter overflow handeling
         # So we use use_fast=False here for now until Fast-tokenizer-compatible-examples are out
@@ -220,27 +229,36 @@ def main(args):
     # Evaluation
     results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
-        # tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
-        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case, use_fast=False)
-        checkpoints = [args.output_dir]
+        if args.do_train:
+            logger.info("Loading checkpoints saved during training for evaluation")
+            checkpoints = [args.output_dir]
+            if args.eval_all_checkpoints:
+                checkpoints = list(
+                    os.path.dirname(c)
+                    for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
+                )
+
+        else:
+            logger.info("Loading checkpoint %s for evaluation", args.model_name_or_path)
+            checkpoints = [args.model_name_or_path]
+
         if args.eval_all_checkpoints:
             checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True)))
             logging.getLogger("pytorch_transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
             global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
-            model = model_class.from_pretrained(checkpoint)
+            model = model_class_s.from_pretrained(checkpoint)
             model.to(args.device)
             examples, features, results = evaluate(args, model, tokenizer, prefix=global_step)
-            write_evaluation(args, tokenizer, examples, features, results, prefix=str(global_step) + " step")
-            # if global_step:
-            #     result = {"{}_{}".format(global_step, k): v for k, v in result.items()}
-            # results.update(result)
-        # output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
-        # with open(output_eval_file, "w") as writer:
-        #     for key in sorted(results.keys()):
-        #         writer.write("{} = {}\n".format(key, str(results[key])))
+            evaluation = squad_evaluate(args, tokenizer, examples, features, results)
+            logger.info("***** Eval results *****")
+            logger.info(json.dumps(evaluation, indent=2) + '\n')
 
+            output_eval_file = os.path.join(args.output_dir, "final_eval_results.txt")
+            logger.info(f"Write evaluation result to {output_eval_file}...")
+            with open(output_eval_file, "a") as writer:
+                writer.write(f"Output: {json.dumps(evaluation, indent=2)}\n")
     return
 
 if __name__ == '__main__':

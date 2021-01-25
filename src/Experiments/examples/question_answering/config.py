@@ -24,6 +24,8 @@ def parse(opt=None):
                         help="The input data dir. Should contain the training files for the CoNLL-2003 NER task.")
     parser.add_argument("--model_type", default=None, type=str, required=True,
                         help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
+    parser.add_argument("--model_type_student", default=None, type=str, required=False,
+                        help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
                         help="Path to pre-trained model or shortcut name")
     parser.add_argument("--model_name_or_path_student", default=None, type=str,
@@ -32,7 +34,8 @@ def parse(opt=None):
                         help="The output directory where the model predictions and checkpoints will be written.")
     parser.add_argument("--evaluate_during_training", action="store_true")
     ## Other parameters
-    parser.add_argument("--version", default="1.1", type=str, help="squad data version")
+    parser.add_argument("--version_2_with_negative", action="store_true",
+                        help="If true, the SQuAD examples contain some that do not have an answer.")
     # parser.add_argument("--train_file", default=None, type=str, help="SQuAD json for training. E.g., train-v2.0.json")
     # parser.add_argument("--predict_file", default=None, type=str,
     #                     help="SQuAD json for predictions. E.g., dev-v2.0.json or test-v2.0.json")
@@ -52,7 +55,6 @@ def parse(opt=None):
                         help="The maximum number of tokens for the question. Questions longer than this will "
                              "be truncated to this length.")
     parser.add_argument("--do_train", default=False, action='store_true', help="Whether to run training.")
-    parser.add_argument("do_distill", default=False, action="store_true", help="Whether to do distillation")
     parser.add_argument('--do_eval', default=False, action='store_true', help="Whether to run eval on the dev set.")
     parser.add_argument("--learning_rate", default=3e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--num_hidden_layers", default=12, type=int)
@@ -125,7 +127,8 @@ def parse(opt=None):
     parser.add_argument('--s_opt1',type=float,default=1.0, help="release_start / step1 / ratio")
     parser.add_argument('--s_opt2',type=float,default=0.0, help="release_level / step2")
     parser.add_argument('--s_opt3',type=float,default=1.0, help="not used / decay rate")
-
+    parser.add_argument('--null_score_diff_threshold',type=float, default=0.0,
+                        help="If null_score - best_non_null is greater than the threshold predict null.")
     parser.add_argument('--tag',type=str,default='RB')
     parser.add_argument('--no_inputs_mask',action='store_true')
     parser.add_argument("--adam_epsilon", default=1e-8, type=float,

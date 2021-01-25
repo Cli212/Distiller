@@ -124,6 +124,9 @@ class GeneralDistiller(BasicDistiller):
             layer_T = inter_match.layer_T
             layer_S = inter_match.layer_S
             feature = inter_match.feature
+            if feature == "attention":
+                layer_T -= 1
+                layer_S -= 1
             loss_type = inter_match.loss
             match_weight = inter_match.weight
             match_loss = MATCH_LOSS_MAP[loss_type]

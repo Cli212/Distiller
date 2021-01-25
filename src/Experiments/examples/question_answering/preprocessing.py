@@ -25,7 +25,8 @@ class Example(object):
                  paragraph,
                  answer_text=None,
                  start_position=None,
-                 is_impossible=None):
+                 is_impossible=None,
+                 answers=None):
         """
             Construct a Extractive QA(squad style) example
             Args:
@@ -42,6 +43,7 @@ class Example(object):
         self.answer_text = answer_text
         self.start_position = start_position
         self.is_impossible = is_impossible
+        self.answers = answers
 
         doc_tokens = []
         char_to_word_offset = []
@@ -170,11 +172,13 @@ class InputFeatures(object):
         self.encoding = encoding
 
 
-def read_examples_from_file(data_dir, mode, version='1.1'):
+def read_examples_from_file(data_dir, mode, version_2_with_negative):
     """Read a SQuAD json file into a list of SquadExample."""
     assert mode in ['train', 'dev']
-    assert version in ['1.1', '2.0']
-    input_file = os.path.join(data_dir, f"{mode}-v{version}.json")
+    if version_2_with_negative:
+        input_file = os.path.join(data_dir, f"{mode}-v2.0.json")
+    else:
+        input_file = os.path.join(data_dir, f"{mode}-v1.1.json")
     with open(input_file, "r", encoding='utf-8') as reader:
         input_data = json.load(reader)["data"]
 
@@ -189,7 +193,7 @@ def read_examples_from_file(data_dir, mode, version='1.1'):
                 is_impossible = qa.get("is_impossible", False)
                 start_position = None
                 answer_text = None
-                # answers = []
+                answers = []
 
                 if not is_impossible:
                     if mode == "train":
@@ -226,7 +230,8 @@ def read_examples_from_file(data_dir, mode, version='1.1'):
                     paragraph=paragraph_text,
                     answer_text=answer_text,
                     start_position=start_position,
-                    is_impossible=is_impossible)
+                    is_impossible=is_impossible,
+                    answers=answers)
                 examples.append(example)
     return examples
 

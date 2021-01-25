@@ -1,16 +1,16 @@
 #set hyperparameters
-BERT_DIR=TinyBERT_6L_768D
+BERT_DIR=TinyBERT_4L_312D
 OUTPUT_ROOT_DIR=tinybert-base-uncased
 DATA_ROOT_DIR=../../datasets/squad
 
-accu=4
-ep=10
-lr=3
-batch_size=20
+accu=1
+ep=30
+lr=1
+batch_size=32
 length=512
 torch_seed=9580
 
-NAME=squad_base_cased_lr${lr}e${ep}_6L_teacher
+NAME=squad_base_cased_lr${lr}e${ep}_4L_student
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
 gpu_nums=4
 
@@ -23,13 +23,14 @@ python -m torch.distributed.launch --nproc_per_node=${gpu_nums} examples/questio
     --output_dir $OUTPUT_DIR \
     --max_seq_length ${length} \
     --do_train \
+    --do_eval \
     --doc_stride 128 \
     --per_gpu_train_batch_size ${batch_size} \
     --seed ${torch_seed} \
     --num_train_epochs ${ep} \
-    --learning_rate ${lr}e-5 \
+    --learning_rate ${lr}e-4 \
     --do_lower_case \
-    --thread 40 \
+    --thread 50 \
     --s_opt1 30 \
     --gradient_accumulation_steps ${accu} \
     --overwrite_output_dir \
