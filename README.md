@@ -10,7 +10,7 @@ Code for experiements can be put in directory /src.
 
 ## Experiments
 
-You can do KD experiments now using our code [here](./src/Experiments/). We only support experiments on QA tasks now but I am very confident that we will support NER tasks soon.
+You can do KD experiments now using our code [here](src/Distiller/). We only support experiments on QA tasks now but I am very confident that we will support NER tasks soon.
 
 ## Dataset
 
