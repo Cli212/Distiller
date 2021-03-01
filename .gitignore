@@ -3,4 +3,6 @@
 .env/
 datasets/*
 models/*
+configs/*
 *.ipynb
+

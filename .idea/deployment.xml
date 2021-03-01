@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="g4-2 key" remoteFilesAllowedToDisappearOnAutoupload="false">
+  <component name="PublishConfigData" autoUpload="Always" remoteFilesAllowedToDisappearOnAutoupload="false">
     <serverData>
       <paths name="g4-12">
         <serverdata>
@@ -12,7 +12,7 @@
       <paths name="g4-12-exp">
         <serverdata>
           <mappings>
-            <mapping deploy="/tmp/pycharm_project_351" local="$PROJECT_DIR$" />
+            <mapping deploy="/home/ubuntu/code/Distillation_QA_benchmark" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>

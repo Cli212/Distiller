@@ -35,7 +35,11 @@ class BasicDistiller(AbstractDistiller):
                 torch.distributed.barrier()
         if callback is not None:
             logger.info("Running callback function...")
-            callback(model=self.model_S, step=global_step)
+            result = callback(model=self.model_S, step=global_step)
+            if result:
+                em, f1 = result
+                self.tb_writer.add_scalar(f"scalar/Exact_Match", em, global_step)
+                self.tb_writer.add_scalar(f"scalar/F1", f1, global_step)
             self.model_S.train()
 
 
@@ -333,12 +337,12 @@ class BasicDistiller(AbstractDistiller):
 
     def train_on_batch(self, batch, args):
         if self.d_config.is_caching_logits is False:
-            (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, args)
+            (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, args, self.local_rank)
             results_T = post_adaptor(self.adaptor_T(teacher_batch,results_T))
             results_S = post_adaptor(self.adaptor_S(student_batch,results_S))
         else:
             batch, cached_logits = batch
-            _, (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, args, no_teacher_forward=True)
+            _, (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, args, self.local_rank, no_teacher_forward=True)
 
             results_S = post_adaptor(self.adaptor_S(student_batch,results_S))
             results_T = {'logits':[logits.to(self.t_config.device) for logits in cached_logits]}

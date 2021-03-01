@@ -239,19 +239,29 @@ def move_to_device(batch, device):
 def mixup_embeds(model, batch, mix_batch, mixup_value, local_rank):
     input_ids = batch.get("input_ids")
     mix_ids = mix_batch.get("input_ids")
-    batch["mixup_start_positions"] = mix_batch.get("start_positions")
-    batch["mixup_end_positions"] = mix_batch.get("end_positions")
+    new_mix_batch = mix_batch.copy()
+    new_batch = batch.copy()
+    new_batch["mixup_start_positions"] = new_batch['start_positions']
+    new_batch["mixup_end_positions"] = new_batch['end_positions']
+    new_mix_batch["mixup_start_positions"] = new_mix_batch.get("start_positions")
+    new_mix_batch["mixup_end_positions"] = new_mix_batch.get("end_positions")
+    new_mix_batch["start_positions"] = new_batch['start_positions']
+    new_mix_batch["end_positions"] = new_batch["end_positions"]
     if local_rank != -1:
         embeddings = model.module.module.base_model.embeddings.word_embeddings
     else:
         embeddings = model.module.base_model.embeddings.word_embeddings
-    batch["inputs_embeds"] = mixup_value*embeddings(input_ids) + (1-mixup_value)*embeddings(mix_ids)
-    batch["mixup_value"] = mixup_value
-    return batch.copy()
+    input_embeddings = embeddings(input_ids)
+    new_batch["inputs_embeds"] = input_embeddings
+    new_mix_batch["inputs_embeds"] = mixup_value*input_embeddings + (1-mixup_value)*embeddings(mix_ids)
+    for key in new_batch.keys():
+        new_batch[key] = torch.cat((new_batch[key],new_mix_batch[key]),0)
+    new_batch["mixup_value"] = mixup_value
+    return new_batch
 
-def get_outputs_from_batch(batch, device, model_T, model_S, args, no_teacher_forward=False):
+
+def get_outputs_from_batch(batch, device, model_T, model_S, args, local_rank=-1, no_teacher_forward=False):
     mixup = args.get("mixup")
-    local_rank = args.pop("local_rank")
     if mixup:
         batch, mixup_batch = batch
         args.pop("mixup")
@@ -295,11 +305,11 @@ def get_outputs_from_batch(batch, device, model_T, model_S, args, no_teacher_for
                     with torch.no_grad():
                         teacher_batch = mixup_embeds(model_T, batch, mixup_batch, mixup_value,local_rank)
                         teacher_batch.pop("input_ids")
-                        # teacher_batch = move_to_device(teacher_batch, device)
+                        teacher_batch = move_to_device(teacher_batch, device)
                         results_T = auto_forward(model_T,teacher_batch,args)
                 student_batch = mixup_embeds(model_S, batch, mixup_batch, mixup_value,local_rank)
                 student_batch.pop("input_ids")
-                # student_batch = move_to_device(student_batch, device)
+                student_batch = move_to_device(student_batch, device)
                 results_S = model_S(**student_batch, **args)
                 # teacher_batch = student_batch = batch
         else:
