@@ -6,7 +6,8 @@ import string
 import os
 
 from nlpaug.augmenter.word import WordAugmenter
-import nlpaug.model.lang_models as nml
+# import nlpaug.model.lang_models as nml
+import src.Distiller.nlpaug.model.lang_models as nml
 from nlpaug.util import Action, Doc
 
 CONTEXT_WORD_EMBS_MODELS = {}
@@ -35,8 +36,11 @@ def init_context_word_embs_model(model_path, model_type, device, force_reload=Fa
     elif model_type == 'bert':
         model = nml.Bert(model_path, device=device, temperature=temperature, top_k=top_k, top_p=top_p, silence=silence)
     elif model_type == 'xlnet':
-        model = nml.XlNet(model_path, device=device, temperature=temperature, top_k=top_k, top_p=top_p, optimize=optimize,
-            silence=silence)
+        model = nml.XlNet(model_path, device=device, temperature=temperature, top_k=top_k, top_p=top_p,
+                          optimize=optimize, silence=silence)
+    elif model_type == 'bart':
+        model = nml.Bart_MLM(model_path, device=device, temperature=temperature, top_k=top_k, top_p=top_p,
+                         silence=silence)
     else:
         raise ValueError('Model name value is unexpected. Only support BERT, DistilBERT, RoBERTa and XLNet model.')
 
@@ -122,10 +126,12 @@ class ContextualWordEmbsAug(WordAugmenter):
             return 'roberta'
         elif 'bert' in self.model_path.lower():
             return 'bert'
+        elif 'bart' in self.model_path_lower():
+            return 'bart'
         return ''
 
     def is_stop_words(self, token):
-        if self.model_type in ['bert', 'distilbert']:
+        if self.model_type in ['bert', 'distilbert','bart']:
             return super().is_stop_words(token)
         elif self.model_type in ['xlnet', 'roberta']:
             return self.stopwords is not None and token.replace(self.model.SUBWORD_PREFIX, '').lower() in self.stopwords
@@ -138,7 +144,7 @@ class ContextualWordEmbsAug(WordAugmenter):
             token = tokens[token_idx]
             
             # Do not augment subword
-            if self.model_type in ['bert', 'distilbert'] \
+            if self.model_type in ['bert', 'distilbert','bart'] \
                 and token.startswith(self.model.SUBWORD_PREFIX):
                 continue
             # Do not augment tokens if len is less than aug_min
@@ -236,7 +242,7 @@ class ContextualWordEmbsAug(WordAugmenter):
 
                 aug_input_poses.append(j)
                 # some tokenizers handle special charas (e.g. don't can merge after decode)
-                if self.model_type in ['bert', 'distilbert']:
+                if self.model_type in ['bert', 'distilbert','bart']:
                     ids = self.model.tokenizer.convert_tokens_to_ids(head_doc.get_augmented_tokens())
                     masked_text = self.model.tokenizer.decode(ids).strip()
                 elif self.model_type in ['xlnet', 'roberta']:
@@ -372,7 +378,7 @@ class ContextualWordEmbsAug(WordAugmenter):
                     subword_token = head_doc.get_token(k).orig_token.token
                     if subword_token in string.punctuation:
                         break
-                    if self.model_type in ['bert', 'distilbert'] and self.model.SUBWORD_PREFIX in subword_token:
+                    if self.model_type in ['bert', 'distilbert','bart'] and self.model.SUBWORD_PREFIX in subword_token:
                         to_remove_idxes.append(k)
                     elif self.model_type in ['xlnet', 'roberta'] and self.model.SUBWORD_PREFIX not in subword_token:
                         to_remove_idxes.append(k)
@@ -384,7 +390,7 @@ class ContextualWordEmbsAug(WordAugmenter):
 
                 aug_input_poses.append(j)
                 # some tokenizers handle special charas (e.g. don't can merge after decode)
-                if self.model_type in ['bert', 'distilbert']:
+                if self.model_type in ['bert', 'distilbert','bart']:
                     ids = self.model.tokenizer.convert_tokens_to_ids(head_doc.get_augmented_tokens())
                     masked_text = self.model.tokenizer.decode(ids).strip()
                 elif self.model_type in ['xlnet', 'roberta']:

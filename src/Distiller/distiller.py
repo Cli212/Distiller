@@ -7,6 +7,8 @@ from autoaug import AutoAugmenter
 from transformers import AutoConfig, AutoTokenizer
 from transformers import AutoModelForSequenceClassification, AutoModelForTokenClassification, AutoModelForQuestionAnswering
 
+
+
 logger = logging.getLogger(__name__)
 
 task_dict = {'question_answering': AutoModelForQuestionAnswering,
@@ -20,6 +22,9 @@ def set_seed(args):
     torch.manual_seed(args.seed)
     if args.n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
+
+
+def train(args)
 
 
 def main(args):
@@ -76,6 +81,7 @@ def main(args):
 
     ## Training
     if args.train:
+
 
 
 if __name__ == '__main__':

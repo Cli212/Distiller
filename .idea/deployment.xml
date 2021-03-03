@@ -30,6 +30,13 @@
           </mappings>
         </serverdata>
       </paths>
+      <paths name="ubuntu@34.219.250.232:22 key">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/ubuntu/code/Distillation_QA_benchmark/src/Distiller" local="$PROJECT_DIR$/src/Distiller" />
+          </mappings>
+        </serverdata>
+      </paths>
     </serverData>
     <option name="myAutoUpload" value="ALWAYS" />
   </component>

@@ -14,7 +14,7 @@ import nlpaug.util.text.tokenizer as text_tokenizer
 
 class Bart(LanguageModels):
     # https://arxiv.org/pdf/1910.13461.pdf
-    def __init__(self, model_path='facebook/bart-large-cnn', min_length=10, max_length=20, num_beam=3, no_repeat_ngram_size=3, 
+    def __init__(self, model_path='facebook/bart-large', min_length=10, max_length=20, num_beam=3, no_repeat_ngram_size=3,
         device='cuda', silence=True):
         super().__init__(device, temperature=None, top_k=None, top_p=None, silence=True)
         try:

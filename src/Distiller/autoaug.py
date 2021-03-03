@@ -1,8 +1,9 @@
 import nlpaug.augmenter.char as nac
 import nlpaug.augmenter.word as naw
-import nlpaug.augmenter.sentence as nas
-import nlpaug.flow as nafc
-
+import nlpaug.augmenter.audio as naa
+import nlpaug.augmenter.spectrogram as nas
+import nlpaug.flow as naf
+from nlpaug.util.audio.loader import AudioLoader
 from nlpaug.util import Action
 
 class AutoAugmenter:

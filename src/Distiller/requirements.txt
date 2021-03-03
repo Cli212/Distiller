@@ -1,4 +1,4 @@
 scipy >= 1.0.0
-numpy>=1.16.2
+numpy>=1.17
 requests>=2.22.0
 seaborn
