@@ -11,3 +11,7 @@ class AutoAugmenter:
         self.aug = aug
 
     def from_config(self, config_path):
+
+    def aug(self, dataset):
+
+from datasets import load_dataset

@@ -4,7 +4,7 @@ import math
 import numpy as np
 import six
 from scipy.special import logsumexp
-from preprocessing import convert_examples_to_features, read_examples_from_file, convert_features_to_dataset
+from squad_preprocess import convert_examples_to_features, read_examples_from_file, convert_features_to_dataset
 import torch
 import re
 import os

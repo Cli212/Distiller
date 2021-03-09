@@ -24,7 +24,8 @@ def set_seed(args):
         torch.cuda.manual_seed_all(args.seed)
 
 
-def train(args)
+def train(args, t_model, s_model, t_tokenizer, s_tokenizer, predict_callback):
+
 
 
 def main(args):
@@ -67,13 +68,13 @@ def main(args):
     if args.augmenter_config_path:
         augmenter = AutoAugmenter.from_config(args.augmenter_config_path)
     model_class = task_dict.get(args.task_type)
-    t_model = model_class.from_pretrained('T_model_name_or_path', config=t_config)
+    t_model = model_class.from_pretrained(args.T_model_name_or_path, config=t_config)
     ## If the student borrow layers from teachers, it must borrow complete layers. Their hidden size and attention size
     # must be the same
     if args.random_student:
         s_model = model_class.from_config(s_config)
     else:
-        s_model = model_class.from_pretrained('S_model_name_or_path', config=s_config)
+        s_model = model_class.from_pretrained(args.S_model_name_or_path, config=s_config)
     if args.local_rank == 0:
         torch.distributed.barrier()
 
@@ -81,7 +82,7 @@ def main(args):
 
     ## Training
     if args.train:
-
+        train_dataset = load
 
 
 if __name__ == '__main__':

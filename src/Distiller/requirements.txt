@@ -1,4 +1,11 @@
 scipy >= 1.0.0
 numpy>=1.17
 requests>=2.22.0
-seaborn
+pyarrow
+fsspec
+huggingface_hub==0.0.2
+dill
+pandas
+tqdm>=4.27
+xxhash
+multiprocess

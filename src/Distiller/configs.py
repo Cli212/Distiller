@@ -10,6 +10,8 @@ def parse():
                                     ['question_answering', 'token_classification', 'sequence_classification'])
     parser.add_argument("--T_model_name_or_path", type=str, required=True, help="teacher model name or path")
     parser.add_argument("--S_model_name_or_path", type=str, required=True, help="student model name or path")
+    parser.add_argument("--data_dir", type=str, required=True)
+    parser.add_argument("--data_type", default="squad2", choices=["squad", "glue", "natural_questions", "multi_woz"])
 
     ## optional arguments
     parser.add_argument("--S_model_name_or_path", type=str, default=None, help="student model name or path")
