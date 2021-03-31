@@ -1,3 +1,4 @@
+import os
 import torch
 import logging
 import random
@@ -6,15 +7,29 @@ from configs import parse
 from autoaug import AutoAugmenter
 from transformers import AutoConfig, AutoTokenizer
 from transformers import AutoModelForSequenceClassification, AutoModelForTokenClassification, AutoModelForQuestionAnswering
-
-
+from textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller
+from utils import squad_evaluate, load_and_cache_examples
+# from evaluate import evaluate
+from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data.distributed import DistributedSampler
+from transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
+from squad_preprocess import read_examples_from_file
 
 logger = logging.getLogger(__name__)
 
-task_dict = {'question_answering': AutoModelForQuestionAnswering,
+task_dict = {'squad2': AutoModelForQuestionAnswering,
+             'squad': AutoModelForQuestionAnswering,
              'token_classification': AutoModelForSequenceClassification,
              'sequence_classification': AutoModelForTokenClassification}
 
+
+def BertForQAAdaptor(batch, model_outputs, no_mask=False, no_logits=False):
+    dict_obj = {'hidden':  model_outputs.hidden_states, 'attention': model_outputs.attentions,"loss":model_outputs.loss}
+    if no_mask is False:
+        dict_obj['inputs_mask'] = batch['attention_mask']
+    if no_logits is False:
+        dict_obj['logits'] = (model_outputs.start_logits,model_outputs.end_logits)
+    return dict_obj
 
 def set_seed(args):
     random.seed(args.seed)
@@ -23,9 +38,121 @@ def set_seed(args):
     if args.n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
 
+def cal_layer_mapping(args, t_config, s_config):
+    matches = []
+    t_num_layers = t_config.num_hidden_layers
+    s_num_layers = s_config.num_hidden_layers
+    k = t_num_layers/s_num_layers
+    for feature in args.intermediate_features:
+        if args.intermediate_strategy == "skip":
+            if feature == "hidden":
+                for i in range(s_num_layers+1):
+                    matches.append({'Layer_T': i*k,'Layer_S':i, 'feature':feature, 'loss':'MI', 'weight':1})
+            elif feature == "attention":
+                for i in range(s_num_layers):
+                    matches.append({'Layer_T': (i+1)*k-1, 'Layer_S': i, 'feature':feature, 'loss':'MI', 'weight':1})
+            else:
+                continue
+        elif args.intermediate_strategy == "last":
+            if feature == "hidden":
+                for i in range(s_num_layers+1):
+                    matches.append({'layer_T': t_num_layers-s_num_layers+i, 'Layer_S': i, 'feature':feature, 'loss':'MI', 'weight':1})
+            elif feature == "attention":
+                for i in range(s_num_layers):
+                    matches.append({"layer_T": t_num_layers-s_num_layers+i,"layer_S":i, 'feature':feature, 'loss':'MI', 'weight':1})
+            else:
+                continue
+        elif args.intermediate_strategy == "EMD":
+            pass
+            ## TO DO
+        else:
+            break
 
-def train(args, t_model, s_model, t_tokenizer, s_tokenizer, predict_callback):
+def train(args, train_dataset, t_model, s_model, tokenizer, augmenter, matches=None, predict_callback=None):
+    """ Train the model """
+    args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
+    train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    mix_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    def collate_fn(self, batch):
+        return batch
+    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
+    mix_dataloader = DataLoader(train_dataset, sampler=mix_sampler,
+                                batch_size=args.train_batch_size) if args.mixup else None
+    if args.max_steps > 0:
+        t_total = args.max_steps
+        args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
+    else:
+        t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
+    # Prepare optimizer and schedule (linear warmup and decay)
+    no_decay = ["bias", "LayerNorm.weight"]
+    optimizer_grouped_parameters = [
+        {"params": [p for n, p in s_model.named_parameters() if not any(nd in n for nd in no_decay)],
+         "weight_decay": args.weight_decay},
+        {"params": [p for n, p in s_model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0}
+    ]
+    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    scheduler_class = get_linear_schedule_with_warmup
+    args.warmup_steps = int(t_total * args.warmup_proportion)
+    scheduler_args = {'num_warmup_steps': int(args.warmup_steps * t_total), 'num_training_steps': t_total}
+    if args.fp16:
+        try:
+            from apex import amp
+        except ImportError:
+            raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
+        model, optimizer = amp.initialize(s_model, optimizer, opt_level=args.fp16_opt_level)
+
+    # multi-gpu training (should be after apex fp16 initialization)
+    if args.n_gpu > 1 and args.local_rank == -1:
+        t_model = torch.nn.DataParallel(t_model)
+        s_model = torch.nn.DataParallel(s_model)
+
+    # Distributed training (should be after apex fp16 initialization)
+    if args.local_rank != -1:
+        s_model = torch.nn.parallel.DistributedDataParallel(s_model, device_ids=[args.local_rank],
+                                                          output_device=args.local_rank,
+                                                          find_unused_parameters=True)
+        t_model = torch.nn.parallel.DistributedDataParallel(t_model, device_ids=[args.local_rank],
+                                                            output_device=args.local_rank,
+                                                            find_unused_parameters=True)
+
+    # Train!
+    logger.info("***** Running training *****")
+    logger.info("  Num examples = %d", len(train_dataset))
+    logger.info("  Num Epochs = %d", args.num_train_epochs)
+    logger.info("  Instantaneous batch size per GPU = %d", args.per_gpu_train_batch_size)
+    logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d",
+                args.train_batch_size * args.gradient_accumulation_steps * (
+                    torch.distributed.get_world_size() if args.local_rank != -1 else 1))
+    logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
+    logger.info("  Total optimization steps = %d", t_total)
+    if args.do_train:
+        intermediate_matches = None
+        if args.intermediate_strategy == "skip":
+            intermediate_matches = []
+            for match in args.matches:
+                intermediate_matches += matches[match]
+        logger.info(f"{intermediate_matches}")
+        distill_config = DistillationConfig(
+            temperature=args.temperature,
+            intermediate_matches=intermediate_matches,
+            kd_loss_weight=args.kd_loss_weight,
+            kd_loss_type=args.kd_loss_type)
+        train_config = TrainingConfig(gradient_accumulation_steps=args.gradient_accumulation_steps, device="cuda",
+                                      log_dir=os.path.join(args.output_dir, "log"), output_dir=args.output_dir)
+        adaptor_T = BertForQAAdaptor
+        adaptor_S = BertForQAAdaptor
+        distiller = GeneralDistiller(train_config, distill_config, t_model, s_model, adaptor_T, adaptor_S, )
+
+        with distiller:
+            distiller.train(optimizer, scheduler=None, dataloader=train_dataloader,
+                            num_epochs=args.num_train_epochs, callback=predict_callback, mixup_value=args.mixup_value,
+                            mix_dataloader=mix_dataloader)
+            # distiller.train(optimizer,train_dataloader,args.num_train_epochs,
+            #                 scheduler_class=scheduler_class, scheduler_args=scheduler_args,
+            #                 max_grad_norm=1.0, callback=predict_callback, mixup_value=args.mixup_value,
+            #                 mix_dataloader=mix_dataloader, local_rank=args.local_rank)
+        return
 
 
 def main(args):
@@ -58,15 +185,15 @@ def main(args):
     t_config.output_attentions = True
     s_config.output_hidden_states = True
     s_config.output_attentions = True
-    t_tokenizer = AutoTokenizer.from_pretrained(args.T_model_name_or_path, do_lower_case=args.do_lower_case,
+    tokenizer = AutoTokenizer.from_pretrained(args.T_model_name_or_path, do_lower_case=args.do_lower_case,
                                                 use_fast=False,
                                                 config=t_config)
-    s_tokenizer = AutoTokenizer.from_pretrained(args.S_model_name_or_path, do_lower_case=args.do_lower_case,
-                                                use_fast=False,
-                                                config=s_config)
+    # s_tokenizer = AutoTokenizer.from_pretrained(args.S_model_name_or_path, do_lower_case=args.do_lower_case,
+    #                                             use_fast=False,
+    #                                             config=s_config)
     ## Initialize augmenter
     if args.augmenter_config_path:
-        augmenter = AutoAugmenter.from_config(args.augmenter_config_path)
+        augmenter = AutoAugmenter.from_config(args.augmenter_config_path,"cpu" if args.n_gpu==0 else "gpu")
     model_class = task_dict.get(args.task_type)
     t_model = model_class.from_pretrained(args.T_model_name_or_path, config=t_config)
     ## If the student borrow layers from teachers, it must borrow complete layers. Their hidden size and attention size
@@ -82,7 +209,12 @@ def main(args):
 
     ## Training
     if args.train:
-        train_dataset = load
+        # examples = read_examples_from_file(args.data_dir, mode="train", task_type=args.task_type)
+        matches = cal_layer_mapping(args, t_config, s_config)
+        train_dataset = load_and_cache_examples(args, tokenizer, mode="train")
+        # if args.S_model_name_or_path != args.T_model_name_or_path:
+        #     s_train_dataset = load_and_cache_examples(args, s_tokenizer, mode="train", model_name_or_path=args.S_model_name_or_path, examples=examples)
+        train(args, train_dataset, t_model, s_model, tokenizer, augmenter, matches)
 
 
 if __name__ == '__main__':

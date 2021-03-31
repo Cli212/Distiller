@@ -28,8 +28,8 @@ class RandomWordAug(WordAugmenter):
     >>> aug = naw.RandomWordAug()
     """
 
-    def __init__(self, action=Action.DELETE, name='RandomWord_Aug', aug_min=1, aug_max=10, aug_p=0.3, stopwords=None,
-                 target_words=None, tokenizer=None, reverse_tokenizer=None, stopwords_regex=None, 
+    def __init__(self, action=Action.SWAP, name='RandomWord_Aug', aug_min=1, aug_max=10, aug_p=0.3, stopwords=None,
+                 target_words=None, tokenizer=None, reverse_tokenizer=None, stopwords_regex=None,
                  verbose=0):
         super().__init__(
             action=action, name=name, aug_p=aug_p, aug_min=aug_min, aug_max=aug_max, stopwords=stopwords,

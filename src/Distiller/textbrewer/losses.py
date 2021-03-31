@@ -269,4 +269,6 @@ def mmd_loss(state_S, state_T, mask=None):
         loss = (F.mse_loss(gram_S, gram_T, reduction='none') * mask.unsqueeze(-1) * mask.unsqueeze(1)).sum() / valid_count
     return loss
 
-
+def MI_loss(state_S, state_T):
+    # TO DO
+    pass

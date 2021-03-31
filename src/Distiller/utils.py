@@ -4,7 +4,7 @@ import math
 import numpy as np
 import six
 from scipy.special import logsumexp
-from preprocessing import convert_examples_to_features, read_examples_from_file, convert_features_to_dataset
+from squad_preprocess import convert_examples_to_features, read_examples_from_file, convert_features_to_dataset
 import torch
 import re
 import os
@@ -78,44 +78,6 @@ def squad_evaluate(args, tokenizer, eval_examples, eval_features, all_results, p
     if no_answer_probs:
         find_all_best_thresh_v2(evaluation, all_predictions, exact, f1, no_answer_probs, qas_id_to_has_answer)
     return evaluation
-
-# def write_evaluation(args, tokenizer, eval_examples, eval_features, all_results, prefix="", write_prediction=True):
-#
-#     output_prediction_file = os.path.join(args.output_dir, f"{prefix}_predictions.json")
-#     output_nbest_file = os.path.join(args.output_dir, f"nbest_predictions_{prefix}.json")
-#     if args.version_2_with_negative:
-#         output_null_log_odds_file = os.path.join(args.output_dir, "null_odds_{}.json".format(prefix))
-#     else:
-#         output_null_log_odds_file = None
-#     all_predictions = write_predictions_google(tokenizer, eval_examples, eval_features, all_results,
-#                                  args.n_best_size, args.max_answer_length,
-#                                  args.do_lower_case, output_prediction_file,
-#                                  output_nbest_file, output_null_log_odds_file,args.version_2_with_negative,
-#                                  args.null_score_diff_threshold,write_prediction=write_prediction)
-#     if args.do_eval:
-#         eval_data = json.load(open(os.path.join(args.data_dir, f"dev-v{args.version}.json"), 'r', encoding='utf-8'))['data']
-#         qid_to_has_ans = make_qid_to_has_ans(eval_data)
-#         na_probs = {k: 0.0 for k in all_predictions}
-#         has_ans_qids = [k for k, v in qid_to_has_ans.items() if v]
-#         no_ans_qids = [k for k, v in qid_to_has_ans.items() if not v]
-#         EM_raw, F1_raw = evaluate(eval_data, all_predictions)  # ,scores_diff_json, na_prob_thresh=0)
-#         # exact_thresh = apply_no_ans_threshold(EM_raw, na_probs, qid_to_has_ans, 0.0)
-#
-#         out_eval = make_eval_dict(EM_raw, F1_raw)
-#         if has_ans_qids:
-#             has_ans_eval = make_eval_dict(EM_raw, F1_raw, qid_list=has_ans_qids)
-#             merge_eval(out_eval, has_ans_eval, "HasAns")
-#         if no_ans_qids:
-#             no_ans_eval = make_eval_dict(EM_raw, F1_raw, qid_list=no_ans_qids)
-#             merge_eval(out_eval, no_ans_eval, "NoAns")
-#         # AVG = (EM + F1) * 0.5
-#         logger.info("***** Eval results *****")
-#         logger.info(json.dumps(out_eval, indent=2) + '\n')
-#
-#         output_eval_file = os.path.join(args.output_dir, f"{prefix}_eval_results.txt")
-#         logger.info(f"Write evaluation result to {output_eval_file}...")
-#         with open(output_eval_file, "a") as writer:
-#             writer.write(f"Output: {json.dumps(out_eval, indent=2)}\n")
 
 def write_predictions_google(tokenizer, all_examples, all_features, all_results, n_best_size,
                       max_answer_length, do_lower_case, output_prediction_file,
@@ -608,11 +570,10 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Load data features from cache or dataset file
-    cached_features_file = os.path.join(args.data_dir, "cached_{}_{}_{}_{}".format(mode,
-        '2.0' if args.version_2_with_negative else '1.1',
-        list(filter(None, args.model_name_or_path.split("/"))).pop(),
+    cached_features_file = os.path.join(args.data_dir, "cached_{}_{}_{}_{}".format(mode, args.task_type,
+        list(filter(None, args.T_model_name_or_path.split("/"))).pop(),
         str(args.max_seq_length)))
-    examples = read_examples_from_file(args.data_dir, mode, args.version_2_with_negative)
+    examples = read_examples_from_file(args.data_dir, mode, args.task_type)
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
