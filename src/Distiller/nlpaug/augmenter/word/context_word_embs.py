@@ -4,12 +4,11 @@
 
 import string
 import os
-
+from torch.cuda.amp import autocast
 from nlpaug.augmenter.word import WordAugmenter
 # import nlpaug.model.lang_models as nml
-import src.Distiller.nlpaug.model.lang_models as nml
+import nlpaug.model.lang_models as nml
 from nlpaug.util import Action, Doc
-
 CONTEXT_WORD_EMBS_MODELS = {}
 
 
@@ -102,7 +101,6 @@ class ContextualWordEmbsAug(WordAugmenter):
         self.top_k = top_k
         self.top_p = top_p
         self.silence = silence
-
         self.model = self.get_model(
             model_path=model_path, model_type=self.model_type, device=device, force_reload=force_reload, temperature=temperature, 
             top_k=top_k, top_p=top_p, optimize=optimize, silence=silence)
@@ -252,8 +250,8 @@ class ContextualWordEmbsAug(WordAugmenter):
 
             if not len(masked_texts):
                 continue
-
-            outputs = self.model.predict(masked_texts, target_words=None, n=2)
+            with autocast():
+                outputs = self.model.predict(masked_texts, target_words=None, n=2)
 
             # Update doc
             for aug_input_pos, output, masked_text in zip(aug_input_poses, outputs, masked_texts):
@@ -399,8 +397,8 @@ class ContextualWordEmbsAug(WordAugmenter):
 
             if not len(masked_texts):
                 continue
-
-            outputs = self.model.predict(masked_texts, target_words=original_tokens, n=2)
+            with autocast():
+                outputs = self.model.predict(masked_texts, target_words=original_tokens, n=2)
 
             # Update doc
             for original_token, aug_input_pos, output, masked_text in zip(original_tokens, aug_input_poses, outputs, masked_texts):

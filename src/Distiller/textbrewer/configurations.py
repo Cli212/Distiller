@@ -77,7 +77,8 @@ class TrainingConfig(Config):
                  fp16 = False,
                  fp16_opt_level = 'O1',
                  data_parallel = False,
-                 local_rank = -1
+                 local_rank = -1,
+                 mixup=False
                  ):
         super(TrainingConfig, self).__init__()
 
@@ -93,6 +94,7 @@ class TrainingConfig(Config):
         self.data_parallel = data_parallel
 
         self.local_rank = local_rank
+        self.mixup = mixup
         if self.local_rank == -1 or torch.distributed.get_rank() == 0:
             if not os.path.exists(self.output_dir):
                 os.makedirs(self.output_dir)

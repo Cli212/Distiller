@@ -6,7 +6,6 @@ try:
 except ImportError:
     # No installation required if not using this function
     pass
-
 from nlpaug.model.lang_models import LanguageModels
 from nlpaug.util.selection.filtering import *
 
@@ -86,8 +85,9 @@ class Bart_MLM(LanguageModels):
 
         # Prediction
         results = []
-        with torch.no_grad():
-            outputs = self.model(input_ids=token_inputs, attention_mask=mask_inputs)
+        with torch.cuda.amp.autocast():
+            with torch.no_grad():
+                outputs = self.model(input_ids=token_inputs, attention_mask=mask_inputs)
 
         # Selection
         for output, target_pos, target_token in zip(outputs[0], target_poses, target_words):

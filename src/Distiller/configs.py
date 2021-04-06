@@ -11,13 +11,16 @@ def parse():
     parser.add_argument("--T_model_name_or_path", type=str, required=True, help="teacher model name or path")
     parser.add_argument("--data_dir", type=str, required=True)
     parser.add_argument("--task_type", default="squad2", choices=["squad", "squad2", "glue", "natural_questions", "multi_woz"])
-
+    parser.add_argument("--output_dir", default=None, type=str, required=True,
+                        help="The output directory where the model predictions and checkpoints will be written.")
     ## optional arguments
     parser.add_argument("--S_model_name_or_path", type=str, default=None, help="student model name or path")
     parser.add_argument("--T_config_file", type=str, help="config file path of teacher model")
     parser.add_argument("--S_config_file", type=str, help="config file path of student model")
     parser.add_argument("--train", action="store_true")
     parser.add_argument("--eval", action="store_true")
+    parser.add_argument("--learning_rate", default=3e-5, type=float, help="The initial learning rate for Adam.")
+    parser.add_argument("--temperature", default=1, type=float, required=False)
     parser.add_argument("--per_gpu_train_batch_size", default=8, type=int,
                         help="Batch size per GPU/CPU for training.")
     parser.add_argument("--per_gpu_eval_batch_size", default=12, type=int,
@@ -45,6 +48,8 @@ def parse():
     parser.add_argument("--intermediate_strategy", default=None, choices=[None, "skip","last","EMD"])
     parser.add_argument("--intermediate_features", nargs="+", default=[], choices=["hidden","attention"])
     parser.add_argument("--mixup", action="store_true")
+    parser.add_argument("--kd_loss_weight", default=1.0, type=float, help="weight of kd loss")
+    parser.add_argument("--kd_loss_type", default="ce", choices=["ce", "mse"])
     parser.add_argument("--weight_decay", default=0.1, type=float,
                         help="Weight decay if we apply some.")
     parser.add_argument("--repeated_aug", default=False, action="store_true")
@@ -60,6 +65,7 @@ def parse():
                         default=False,
                         action='store_true',
                         help="Whether not to use CUDA when available")
+    parser.add_argument("--num_workers", default=0, type=int)
     parser.add_argument("--fp16", action="store_true")
     parser.add_argument("--thread", default=8, type=int)
     parser.add_argument("--overwrite_cache", default=False, action="store_true")

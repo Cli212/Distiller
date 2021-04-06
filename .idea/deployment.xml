@@ -19,7 +19,7 @@
       <paths name="g4-2 key">
         <serverdata>
           <mappings>
-            <mapping deploy="/home/ubuntu/code/Distillation_QA_benchmark" local="$PROJECT_DIR$" />
+            <mapping deploy="/code/Distillation_QA_benchmark" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>

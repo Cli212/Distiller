@@ -178,8 +178,9 @@ class BasicDistiller(AbstractDistiller):
                 logger.info("Training finished")
                 return
 
-    def train_with_num_epochs(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, **args):
 
+    def train_with_num_epochs(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, **args):
+        scaler = amp.GradScaler()
         train_steps_per_epoch = len(dataloader)//self.t_config.gradient_accumulation_steps
         total_global_steps = train_steps_per_epoch * num_epochs
         print_every = train_steps_per_epoch // self.print_freq
@@ -194,10 +195,10 @@ class BasicDistiller(AbstractDistiller):
 
         if self.d_config.is_caching_logits is True:
             logger.info(f"Caching batches and teacher's logits...")
-            for step, batch in tqdm(enumerate(dataloader),disable=tqdm_disable):
+            for step, batch in tqdm(enumerate(dataloader), disable=tqdm_disable):
                 self.cache_logits(batch, args, batch_postprocessor)
 
-        for current_epoch in tqdm(range(int(num_epochs)),disable=tqdm_disable):
+        for current_epoch in tqdm(range(int(num_epochs)), disable=tqdm_disable):
             if self.local_rank != -1 and hasattr(dataloader,'sampler'):
                 dataloader.sampler.set_epoch(current_epoch)  #In distributed mode, calling the set_epoch method is needed to make shuffling work;
             logger.info(f"Epoch {current_epoch+1}")
@@ -209,17 +210,22 @@ class BasicDistiller(AbstractDistiller):
             for step, batch in tqdm(enumerate(dataloader),disable=tqdm_disable):
                 if self.d_config.is_caching_logits is False and batch_postprocessor is not None:
                         batch = batch_postprocessor(batch)
-                total_loss, losses_dict = self.train_on_batch(batch,args)
+                if self.t_config.fp16:
+                    with amp.autocast():
+                        total_loss, losses_dict = self.train_on_batch(batch,args)
+                else:
+                    total_loss, losses_dict = self.train_on_batch(batch, args)
 
                 self.write_loss(total_loss, writer_step, losses_dict)
                 writer_step += 1
 
                 total_loss /= self.t_config.gradient_accumulation_steps
-                if self.t_config.fp16:
-                    with amp.scale_loss(total_loss,optimizer) as scaled_loss:
-                        scaled_loss.backward()
-                else:
-                    total_loss.backward()
+                # if self.t_config.fp16:
+                #     with amp.scale_loss(total_loss,optimizer) as scaled_loss:
+                #         scaled_loss.backward()
+                # else:
+                #     total_loss.backward()
+                scaler.scale(total_loss).backward()
 
                 if (step+1)%self.t_config.gradient_accumulation_steps == 0:
                     if max_grad_norm > 0:
@@ -227,7 +233,9 @@ class BasicDistiller(AbstractDistiller):
                             torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), max_grad_norm)
                         else:
                             torch.nn.utils.clip_grad_norm_(self.model_S.parameters(), max_grad_norm) 
-                    optimizer.step()
+                    # optimizer.step()
+                    scaler.step(optimizer)
+                    scaler.update()
                     if scheduler is not None:
                         scheduler.step()
                     optimizer.zero_grad()
@@ -287,12 +295,12 @@ class BasicDistiller(AbstractDistiller):
 
     def train_on_batch(self, batch, args):
         if self.d_config.is_caching_logits is False:
-            (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, args)
+            (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, self.local_rank,args,self.t_config.mixup)
             results_T = post_adaptor(self.adaptor_T(teacher_batch,results_T))
             results_S = post_adaptor(self.adaptor_S(student_batch,results_S))
         else:
             batch, cached_logits = batch
-            _, (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, args, no_teacher_forward=True)
+            _, (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, self.local_rank, args, self.t_config.mixup, no_teacher_forward=True)
 
             results_S = post_adaptor(self.adaptor_S(student_batch,results_S))
             results_T = {'logits':[logits.to(self.t_config.device) for logits in cached_logits]}

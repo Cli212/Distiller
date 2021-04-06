@@ -6,10 +6,13 @@ import six
 from scipy.special import logsumexp
 from squad_preprocess import convert_examples_to_features, read_examples_from_file, convert_features_to_dataset
 import torch
+from tqdm import tqdm
 import re
 import os
 import json
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader, ConcatDataset
+from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data.distributed import DistributedSampler
 import string
 
 
@@ -37,6 +40,96 @@ class MyDataset(Dataset):
                 "end_positions":end_positions}
     def __len__(self):
         return len(self.all_input_ids)
+
+class DataProvider:
+    def __init__(self, dataset, examples,args, tokenizer=None, augmenter=None, collate_fn=None):
+        self.examples = examples
+        self.dataset = dataset
+        self.augmenter = augmenter
+        self.args = args
+        self.tokenizer = tokenizer
+        self.collate_fn = collate_fn
+        self.batch_size = args.train_batch_size * 2 if augmenter else args.train_batch_size
+        self.epoch = 0
+        self.dataloader = None
+    def build(self):
+        def example_iter():
+            i = 0
+            while i<len(self.examples):
+                if (i+32)>=len(self.examples):
+                    yield [j.context_text for j in self.examples[i:]],i
+                else:
+                    yield [j.context_text for j in self.examples[i:i+32]], i
+                i+=32
+        if self.augmenter:
+            new_examples = self.examples.copy()
+            pbar = tqdm(total=int(len(self.examples) / 32) + 1, desc="Data augmentation")
+            for iter_sample in example_iter():
+                text, i = iter_sample
+                for ii, dd in enumerate(self.augmenter.augment(text)):
+                    new_examples[i + ii].context_text = dd
+                pbar.update()
+            features, dataset = convert_examples_to_features(new_examples, self.tokenizer, self.args.max_seq_length,
+                                                             self.args.doc_stride,
+                                                             self.args.max_query_length,
+                                                             is_training=True,
+                                                             threads=self.args.thread
+                                                             )
+            all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+            all_attention_masks = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
+            all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
+            all_start_positions = torch.tensor([f.start_position for f in features], dtype=torch.long)
+            all_end_positions = torch.tensor([f.end_position for f in features], dtype=torch.long)
+            dataset = MyDataset(all_input_ids, all_attention_masks, all_token_type_ids, all_start_positions,
+                                all_end_positions)
+            new_dataset = ConcatDataset([self.dataset, dataset])
+        train_sampler = RandomSampler(new_dataset) if self.args.local_rank == -1 else DistributedSampler(new_dataset)
+        self.dataloader = DataLoader(new_dataset, sampler=train_sampler, batch_size=self.batch_size, collate_fn=self.collate_fn, num_workers=self.args.num_workers)
+    def __len__(self):
+        ## To Do
+        return int(len(self.examples)/self.batch_size)
+    def __iter__(self):
+        self.build()
+        return self.dataloader.__iter__()
+class CustomDataLoader(DataLoader):
+    def __init__(self, dataset, examples, batch_size, sampler, args, tokenizer=None, collate_fn=None,augmenter=None):
+        self.dataset = dataset
+        self.examples = examples
+        self.batch_size = batch_size
+        self.sampler = sampler
+        self.collate_fn = collate_fn
+        self.args = args
+        self.augmenter = augmenter
+        self.tokenizer = tokenizer
+        super(CustomDataLoader, self).__init__(dataset, batch_size,sampler=sampler,collate_fn=collate_fn)
+
+    def augment(self):
+        def example_iter():
+            i = 0
+            while i<len(self.examples):
+                if (i+32)>=len(self.examples):
+                    yield [j.context_text for j in self.examples[i:]],i
+                else:
+                    yield [j.context_text for j in self.examples[i:i+32]], i
+                i+=32
+        if self.augmenter:
+            new_examples = self.examples.copy()
+            pbar = tqdm(total=int(len(self.examples)/32)+1)
+            for iter_sample in example_iter():
+                text, i= iter_sample
+                for ii,dd in enumerate(self.augmenter.augment(text)):
+                    new_examples[i+ii].context_text = dd
+                pbar.update()
+            features, dataset = convert_examples_to_features(new_examples, self.tokenizer, self.args.max_seq_length,
+                                                             self.args.doc_stride,
+                                                             self.args.max_query_length,
+                                                             is_training=True,
+                                                             threads=self.args.thread
+                                                             )
+            self.dataset = ConcatDataset([self.dataset, dataset])
+            self.sampler = type(self.sampler)(self.dataset)
+        else:
+            pass
 
 
 def squad_evaluate(args, tokenizer, eval_examples, eval_features, all_results, prefix="", write_prediction=True, no_answer_probs=None, no_answer_probability_threshold=1.0):

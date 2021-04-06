@@ -1,17 +1,6 @@
-[
-  {
-    "augmenter": "context",
-    "model_path": "../../models/bart-base",
-    "model_type": "bart",
-    "top_k": 20,
-    "aug_min": 3,
-    "aug_max": 10,
-    "device": "cpu"
-},
-  {
+{
     "augmenter": "random",
     "action": "swap",
     "aug_min": 3,
     "aug_max": 10
 }
-]

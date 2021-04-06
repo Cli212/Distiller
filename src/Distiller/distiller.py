@@ -3,18 +3,20 @@ import torch
 import logging
 import random
 import numpy as np
+from tqdm import tqdm
 from configs import parse
 from autoaug import AutoAugmenter
 from transformers import AutoConfig, AutoTokenizer
+from squad_preprocess import convert_examples_to_features
 from transformers import AutoModelForSequenceClassification, AutoModelForTokenClassification, AutoModelForQuestionAnswering
 from textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller
-from utils import squad_evaluate, load_and_cache_examples
+from utils import squad_evaluate, load_and_cache_examples, CustomDataLoader, DataProvider, MyDataset
 # from evaluate import evaluate
 from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
 from squad_preprocess import read_examples_from_file
-
+from multiprocessing import Process, shared_memory
 logger = logging.getLogger(__name__)
 
 task_dict = {'squad2': AutoModelForQuestionAnswering,
@@ -47,19 +49,19 @@ def cal_layer_mapping(args, t_config, s_config):
         if args.intermediate_strategy == "skip":
             if feature == "hidden":
                 for i in range(s_num_layers+1):
-                    matches.append({'Layer_T': i*k,'Layer_S':i, 'feature':feature, 'loss':'MI', 'weight':1})
+                    matches.append({'layer_T': i*k,'layer_S':i, 'feature':feature, 'loss':'hidden_ce', 'weight':1})
             elif feature == "attention":
                 for i in range(s_num_layers):
-                    matches.append({'Layer_T': (i+1)*k-1, 'Layer_S': i, 'feature':feature, 'loss':'MI', 'weight':1})
+                    matches.append({'layer_T': (i+1)*k-1, 'layer_S': i, 'feature':feature, 'loss':'attention_ce', 'weight':1})
             else:
                 continue
         elif args.intermediate_strategy == "last":
             if feature == "hidden":
                 for i in range(s_num_layers+1):
-                    matches.append({'layer_T': t_num_layers-s_num_layers+i, 'Layer_S': i, 'feature':feature, 'loss':'MI', 'weight':1})
+                    matches.append({'layer_T': t_num_layers-s_num_layers+i, 'layer_S': i, 'feature':feature, 'loss':'hidden_ce', 'weight':1})
             elif feature == "attention":
                 for i in range(s_num_layers):
-                    matches.append({"layer_T": t_num_layers-s_num_layers+i,"layer_S":i, 'feature':feature, 'loss':'MI', 'weight':1})
+                    matches.append({"layer_T": t_num_layers-s_num_layers+i,"layer_S":i, 'feature':feature, 'loss':'attention_ce', 'weight':1})
             else:
                 continue
         elif args.intermediate_strategy == "EMD":
@@ -67,23 +69,33 @@ def cal_layer_mapping(args, t_config, s_config):
             ## TO DO
         else:
             break
+    return matches
 
-def train(args, train_dataset, t_model, s_model, tokenizer, augmenter, matches=None, predict_callback=None):
+
+# class CustomDataLoader(DataLoader):
+
+
+def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=None, matches=None, predict_callback=None):
     """ Train the model """
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
-    train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
-    mix_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
-    def collate_fn(self, batch):
+    # train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    # mix_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    def collate_fn(batch):
+        new_batch = batch.copy()
+        input_ids = [i['input_ids'] for i in new_batch]
+        text_list = augmenter.augment([tokenizer.decode(input_id) for input_id in input_ids])
         return batch
-    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
-    mix_dataloader = DataLoader(train_dataset, sampler=mix_sampler,
-                                batch_size=args.train_batch_size) if args.mixup else None
+    # train_dataloader = CustomDataLoader(train_dataset, examples, args=args, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn, tokenizer=tokenizer, augmenter=augmenter)
+    # train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
+    train_dataloader = DataProvider(train_dataset, examples, args, tokenizer, augmenter)
+    # mix_dataloader = DataLoader(train_dataset, sampler=mix_sampler,
+    #                             batch_size=args.train_batch_size) if args.mixup else None
     if args.max_steps > 0:
         t_total = args.max_steps
         args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
     else:
-        t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
-
+        t_total = len(examples) // args.gradient_accumulation_steps * args.num_train_epochs
+        # t_total =
     # Prepare optimizer and schedule (linear warmup and decay)
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
@@ -95,12 +107,12 @@ def train(args, train_dataset, t_model, s_model, tokenizer, augmenter, matches=N
     scheduler_class = get_linear_schedule_with_warmup
     args.warmup_steps = int(t_total * args.warmup_proportion)
     scheduler_args = {'num_warmup_steps': int(args.warmup_steps * t_total), 'num_training_steps': t_total}
-    if args.fp16:
-        try:
-            from apex import amp
-        except ImportError:
-            raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
-        model, optimizer = amp.initialize(s_model, optimizer, opt_level=args.fp16_opt_level)
+    # if args.fp16:
+    #     try:
+    #         from apex import amp
+    #     except ImportError:
+    #         raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
+    #     s_model, optimizer = amp.initialize(s_model, optimizer, opt_level=args.fp16_opt_level)
 
     # multi-gpu training (should be after apex fp16 initialization)
     if args.n_gpu > 1 and args.local_rank == -1:
@@ -126,12 +138,12 @@ def train(args, train_dataset, t_model, s_model, tokenizer, augmenter, matches=N
                     torch.distributed.get_world_size() if args.local_rank != -1 else 1))
     logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
     logger.info("  Total optimization steps = %d", t_total)
-    if args.do_train:
-        intermediate_matches = None
-        if args.intermediate_strategy == "skip":
-            intermediate_matches = []
-            for match in args.matches:
-                intermediate_matches += matches[match]
+    if args.train:
+        intermediate_matches = matches
+        # if args.intermediate_strategy == "skip":
+        #     intermediate_matches = []
+        #     for match in matches:
+        #         intermediate_matches += matches[match]
         logger.info(f"{intermediate_matches}")
         distill_config = DistillationConfig(
             temperature=args.temperature,
@@ -139,21 +151,54 @@ def train(args, train_dataset, t_model, s_model, tokenizer, augmenter, matches=N
             kd_loss_weight=args.kd_loss_weight,
             kd_loss_type=args.kd_loss_type)
         train_config = TrainingConfig(gradient_accumulation_steps=args.gradient_accumulation_steps, device="cuda",
-                                      log_dir=os.path.join(args.output_dir, "log"), output_dir=args.output_dir)
+                                      log_dir=os.path.join(args.output_dir, "log"), output_dir=args.output_dir,
+                                      fp16=args.fp16, mixup=args.mixup)
         adaptor_T = BertForQAAdaptor
         adaptor_S = BertForQAAdaptor
         distiller = GeneralDistiller(train_config, distill_config, t_model, s_model, adaptor_T, adaptor_S, )
 
         with distiller:
             distiller.train(optimizer, scheduler=None, dataloader=train_dataloader,
-                            num_epochs=args.num_train_epochs, callback=predict_callback, mixup_value=args.mixup_value,
-                            mix_dataloader=mix_dataloader)
+                            num_epochs=args.num_train_epochs, callback=predict_callback)
             # distiller.train(optimizer,train_dataloader,args.num_train_epochs,
             #                 scheduler_class=scheduler_class, scheduler_args=scheduler_args,
             #                 max_grad_norm=1.0, callback=predict_callback, mixup_value=args.mixup_value,
             #                 mix_dataloader=mix_dataloader, local_rank=args.local_rank)
         return
 
+
+def data_aug_process(augmenter, examples, tokenizer, args):
+
+    while True:
+        def example_iter():
+            i = 0
+            while i < len(examples):
+                if (i + 32) >= len(examples):
+                    yield [j.context_text for j in examples[i:]], i
+                else:
+                    yield [j.context_text for j in examples[i:i + 32]], i
+                i += 32
+
+        new_examples = examples.copy()
+        pbar = tqdm(total=int(len(examples) / 32) + 1, desc="Data augmentation")
+        for iter_sample in example_iter():
+            text, i = iter_sample
+            for ii, dd in enumerate(augmenter.augment(text)):
+                new_examples[i + ii].context_text = dd
+            pbar.update()
+        features, dataset = convert_examples_to_features(new_examples, tokenizer, args.max_seq_length,
+                                                         args.doc_stride,
+                                                         args.max_query_length,
+                                                         is_training=True,
+                                                         threads=args.thread
+                                                         )
+        all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+        all_attention_masks = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
+        all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
+        all_start_positions = torch.tensor([f.start_position for f in features], dtype=torch.long)
+        all_end_positions = torch.tensor([f.end_position for f in features], dtype=torch.long)
+        dataset = MyDataset(all_input_ids, all_attention_masks, all_token_type_ids, all_start_positions,
+                            all_end_positions)
 
 def main(args):
     # Setup CUDA, GPU & distributed training
@@ -192,6 +237,7 @@ def main(args):
     #                                             use_fast=False,
     #                                             config=s_config)
     ## Initialize augmenter
+    augmenter = None
     if args.augmenter_config_path:
         augmenter = AutoAugmenter.from_config(args.augmenter_config_path,"cpu" if args.n_gpu==0 else "gpu")
     model_class = task_dict.get(args.task_type)
@@ -206,15 +252,18 @@ def main(args):
         torch.distributed.barrier()
 
     logger.info("Training/evaluation parameters %s", args)
-
+    s_model.to(args.device)
+    t_model.to(args.device)
     ## Training
     if args.train:
         # examples = read_examples_from_file(args.data_dir, mode="train", task_type=args.task_type)
         matches = cal_layer_mapping(args, t_config, s_config)
-        train_dataset = load_and_cache_examples(args, tokenizer, mode="train")
+        train_dataset, features, examples = load_and_cache_examples(args, tokenizer, mode="train", return_examples=True)
+        p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
+        p.start()
         # if args.S_model_name_or_path != args.T_model_name_or_path:
         #     s_train_dataset = load_and_cache_examples(args, s_tokenizer, mode="train", model_name_or_path=args.S_model_name_or_path, examples=examples)
-        train(args, train_dataset, t_model, s_model, tokenizer, augmenter, matches)
+        train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter, matches)
 
 
 if __name__ == '__main__':

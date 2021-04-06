@@ -328,6 +328,7 @@ def convert_features_to_dataset(features, is_training):
     all_cls_index = torch.tensor([f.cls_index for f in features], dtype=torch.long)
     all_p_mask = torch.tensor([f.p_mask for f in features], dtype=torch.float)
     all_is_impossible = torch.tensor([f.is_impossible for f in features], dtype=torch.float)
+
     if not is_training:
         all_feature_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
         dataset = TensorDataset(

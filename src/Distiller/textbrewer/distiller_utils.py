@@ -18,6 +18,7 @@ from .compatibility import mask_dtype, is_apex_available
 has_apex = is_apex_available()
 if has_apex:
     from apex import amp
+from torch.cuda import amp
 
 
 logger = logging.getLogger("Distillation")
@@ -235,11 +236,46 @@ def move_to_device(batch, device):
     else:
         return batch
 
-def get_outputs_from_batch(batch, device, model_T, model_S, args, no_teacher_forward=False):
+def mixup_assist(batch, model, random_index, lmbd, local_rank):
+    mix_ids = batch['input_ids'][random_index]
+    new_batch = batch.copy()
+    new_mixup_batch = batch.copy()
+    new_batch["mixup_start_positions"] = new_batch['start_positions']
+    new_batch["mixup_end_positions"] = new_batch['end_positions']
+    new_mixup_batch["mixup_start_positions"] = new_mixup_batch.get("start_positions")
+    new_mixup_batch["mixup_end_positions"] = new_mixup_batch.get("end_positions")
+    new_mixup_batch["start_positions"] = new_batch['start_positions']
+    new_mixup_batch["end_positions"] = new_batch["end_positions"]
+    if local_rank != -1:
+        embeddings = model.module.module.base_model.embeddings.word_embeddings
+    else:
+        embeddings = model.base_model.embeddings.word_embeddings
+    input_embeddings = embeddings(batch['input_ids'])
+    new_batch["inputs_embeds"] = input_embeddings
+    new_mixup_batch["inputs_embeds"] = lmbd * input_embeddings + (1 - lmbd) * embeddings(mix_ids)
+    for key in new_batch.keys():
+        new_batch[key] = torch.cat((new_batch[key], new_mixup_batch[key]), 0)
+    new_batch["mixup_value"] = lmbd
+    new_batch.pop("input_ids")
+    del new_mixup_batch
+    return new_batch
+
+
+def mixup_helper(teacher_batch, student_batch, model_T, model_S, local_rank):
+    lmbd = torch.distributions.Beta(0.4, 0.4).sample()
+    random_index = list(range(teacher_batch['input_ids'].shape[0]))
+    random.shuffle(random_index)
+    return mixup_assist(teacher_batch, model_T, random_index, lmbd, local_rank), mixup_assist(student_batch, model_S, random_index, lmbd, local_rank)
+
+
+def get_outputs_from_batch(batch, device, model_T, model_S, local_rank, args, mixup=False, no_teacher_forward=False):
+    batch = move_to_device(batch, device)
     if type(batch) is dict:
         if 'teacher' in batch and 'student' in batch:
             teacher_batch = batch['teacher']
             student_batch = batch['student']
+            if mixup:
+                teacher_batch, student_batch = mixup_helper(teacher_batch, student_batch, model_T, model_S, local_rank)
             teacher_batch = move_to_device(teacher_batch, device)
             #teacher outputs
             if no_teacher_forward is True:
@@ -257,23 +293,44 @@ def get_outputs_from_batch(batch, device, model_T, model_S, args, no_teacher_for
             else:
                 results_S = model_S(*student_batch, **args)
         else:
-            batch = move_to_device(batch,device)
+            if mixup:
+                teacher_batch, student_batch = mixup_helper(batch, batch, model_T, model_S, local_rank)
+            else:
+                teacher_batch = batch
+                student_batch = batch
+            teacher_batch = move_to_device(teacher_batch, device)
+            student_batch = move_to_device(student_batch, device)
             if no_teacher_forward is True:
                 results_T = None
             else:
                 with torch.no_grad():
-                    results_T = auto_forward(model_T,batch,args)
-            results_S = model_S(**batch, **args)
-            teacher_batch = student_batch = batch
+                    results_T = auto_forward(model_T,teacher_batch,args)
+            if type(student_batch) is dict:
+                results_S = model_S(**student_batch, **args)
+            else:
+                results_S = model_S(*student_batch, **args)
+            if not mixup:
+                teacher_batch = student_batch = batch
     else:
-        batch = move_to_device(batch,device)
+        # batch = move_to_device(batch,device)
+        if mixup:
+            teacher_batch, student_batch = mixup_helper(batch, batch, model_T, model_S, local_rank)
+        else:
+            teacher_batch = batch
+            student_batch = batch
+        teacher_batch = move_to_device(teacher_batch, device)
+        student_batch = move_to_device(student_batch, device)
         if no_teacher_forward is True:
             results_T = None
         else:
             with torch.no_grad():
-                results_T = auto_forward(model_T,batch,args)
-        results_S = model_S(*batch, **args)
-        teacher_batch = student_batch = batch
+                results_T = auto_forward(model_T,teacher_batch,args)
+        if type(student_batch) is dict:
+            results_S = model_S(**student_batch, **args)
+        else:
+            results_S = model_S(*student_batch, **args)
+        if not mixup:
+            teacher_batch = student_batch = batch
     
     return (teacher_batch,results_T), (student_batch,results_S)
 
