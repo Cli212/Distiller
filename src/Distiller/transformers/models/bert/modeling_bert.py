@@ -1751,6 +1751,9 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
+        mixup_start_positions=None,
+        mixup_end_positions=None,
+        mixup_value=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1787,6 +1790,21 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         end_logits = end_logits.squeeze(-1)
 
         total_loss = None
+        # if start_positions is not None and end_positions is not None:
+        #     # If we are on multi-GPU, split add a dimension
+        #     if len(start_positions.size()) > 1:
+        #         start_positions = start_positions.squeeze(-1)
+        #     if len(end_positions.size()) > 1:
+        #         end_positions = end_positions.squeeze(-1)
+        #     # sometimes the start/end positions are outside our model inputs, we ignore these terms
+        #     ignored_index = start_logits.size(1)
+        #     start_positions.clamp_(0, ignored_index)
+        #     end_positions.clamp_(0, ignored_index)
+        #
+        #     loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+        #     start_loss = loss_fct(start_logits, start_positions)
+        #     end_loss = loss_fct(end_logits, end_positions)
+        #     total_loss = (start_loss + end_loss) / 2
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
             if len(start_positions.size()) > 1:
@@ -1797,8 +1815,24 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             ignored_index = start_logits.size(1)
             start_positions.clamp_(0, ignored_index)
             end_positions.clamp_(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+            if mixup_start_positions is not None and end_positions is not None:
+                # If we are on multi-GPU, split add a dimension
+                if len(mixup_start_positions.size()) > 1:
+                    mixup_start_positions = mixup_start_positions.squeeze(-1)
+                if len(mixup_end_positions.size()) > 1:
+                    mixup_end_positions = mixup_end_positions.squeeze(-1)
+                mixup_start_positions.clamp_(0, ignored_index)
+                mixup_end_positions.clamp_(0, ignored_index)
+                start_positions = nn.functional.one_hot(start_positions,
+                                                        num_classes=self.config.max_position_embeddings)
+                end_positions = nn.functional.one_hot(end_positions, num_classes=self.config.max_position_embeddings)
+                mixup_start_positions = nn.functional.one_hot(mixup_start_positions, num_classes=self.config.max_position_embeddings)
+                mixup_end_positions = nn.functional.one_hot(mixup_end_positions, num_classes=self.config.max_position_embeddings)
+                start_positions = mixup_value*start_positions + (1-mixup_value)*mixup_start_positions
+                end_positions = mixup_value * end_positions + (1 - mixup_value) * mixup_end_positions
+                loss_fct = cross_entropy
+            else:
+                loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
@@ -1814,3 +1848,6 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+def cross_entropy(input, target):
+    logsoftmax = nn.LogSoftmax(dim=-1)
+    return torch.mean(torch.sum(- target * logsoftmax(input), 1))

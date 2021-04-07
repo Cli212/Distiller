@@ -37,7 +37,7 @@ def parse():
     parser.add_argument("--layer_mapping_strategy", default='skip', choices=["skip", "first", "last"])
     parser.add_argument("--random_student", action="store_true", help="If true, the student model will initiate "
                                                                       "randomly")
-    parser.add_argument("--max_seq_length", default=416, type=int,
+    parser.add_argument("--max_seq_length", default=512, type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. Sequences "
                              "longer than this will be truncated, and sequences shorter than this will be padded.")
     parser.add_argument("--doc_stride", default=128, type=int,
@@ -53,7 +53,6 @@ def parse():
     parser.add_argument("--weight_decay", default=0.1, type=float,
                         help="Weight decay if we apply some.")
     parser.add_argument("--repeated_aug", default=False, action="store_true")
-    parser.add_argument("--augmenter", choices=["contextual", "random", "back_translation"])
     parser.add_argument("--do_lower_case", default=False, action="store_true")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float,
                         help="Epsilon for Adam optimizer.")

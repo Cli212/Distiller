@@ -3,6 +3,7 @@ import collections
 import math
 import numpy as np
 import six
+from logging import handlers
 from scipy.special import logsumexp
 from squad_preprocess import convert_examples_to_features, read_examples_from_file, convert_features_to_dataset
 import torch
@@ -10,13 +11,43 @@ from tqdm import tqdm
 import re
 import os
 import json
+from multiprocessing import Pool, cpu_count
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 import string
 
 
-logger = logging.getLogger(__name__)
+class Logger(object):
+    level_relations = {
+        'debug':logging.DEBUG,
+        'info':logging.INFO,
+        'warning':logging.WARNING,
+        'error':logging.ERROR,
+        'crit':logging.CRITICAL
+    }#日志级别关系映射
+
+    def __init__(self,filename,level='info',when='D',backCount=3,fmt='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s'):
+        self.logger = logging.getLogger(filename)
+        format_str = logging.Formatter(fmt)#设置日志格式
+        self.logger.setLevel(self.level_relations.get(level))#设置日志级别
+        sh = logging.StreamHandler()#往屏幕上输出
+        sh.setFormatter(format_str) #设置屏幕上显示的格式
+        th = handlers.TimedRotatingFileHandler(filename=filename,when=when,backupCount=backCount,encoding='utf-8')#往文件里写入#指定间隔时间自动生成文件的处理器
+        #实例化TimedRotatingFileHandler
+        #interval是时间间隔，backupCount是备份文件的个数，如果超过这个个数，就会自动删除，when是间隔的时间单位，单位有以下几种：
+        # S 秒
+        # M 分
+        # H 小时、
+        # D 天、
+        # W 每星期（interval==0时代表星期一）
+        # midnight 每天凌晨
+        th.setFormatter(format_str)#设置文件里写入的格式
+        self.logger.addHandler(sh) #把对象加到logger里
+        self.logger.addHandler(th)
+
+
+logger = Logger("all.log",level="debug").logger
 
 
 class MyDataset(Dataset):
@@ -24,25 +55,47 @@ class MyDataset(Dataset):
         super(MyDataset, self).__init__()
         self.all_input_ids = all_input_ids
         self.all_attention_masks = all_attention_masks
-        self.all_token_type_ids =all_token_type_ids
+        self.all_token_type_ids = all_token_type_ids
         self.all_start_positions = all_start_positions
         self.all_end_positions = all_end_positions
+
     def __getitem__(self, index):
         input_ids = self.all_input_ids[index]
         attention_masks = self.all_attention_masks[index]
         token_type_ids = self.all_token_type_ids[index]
         start_positions = self.all_start_positions[index]
         end_positions = self.all_end_positions[index]
-        return {'input_ids':input_ids,
-                'attention_mask':attention_masks,
-                'token_type_ids':token_type_ids,
-                'start_positions':start_positions,
-                "end_positions":end_positions}
+        return {'input_ids': input_ids,
+                'attention_mask': attention_masks,
+                'token_type_ids': token_type_ids,
+                'start_positions': start_positions,
+                "end_positions": end_positions}
+
     def __len__(self):
         return len(self.all_input_ids)
 
+
+
+def example_iter(examples):
+    i = 0
+    while i < len(examples):
+        if (i + 32) >= len(examples):
+            # yield [j.context_text for j in examples[i:]],i
+            yield examples[i:]
+        else:
+            # yield [j.context_text for j in examples[i:i+32]], i
+            yield examples[i:i + 32]
+        i += 32
+
+def augment_data(iter_sample, augmenter):
+    result = iter_sample.copy()
+    for ii, dd in enumerate(augmenter.augment([i.context_text for i in iter_sample])):
+        result[ii].context_text = dd
+    return result
+
+
 class DataProvider:
-    def __init__(self, dataset, examples,args, tokenizer=None, augmenter=None, collate_fn=None):
+    def __init__(self, dataset, examples, args, tokenizer=None, augmenter=None, collate_fn=None):
         self.examples = examples
         self.dataset = dataset
         self.augmenter = augmenter
@@ -52,23 +105,40 @@ class DataProvider:
         self.batch_size = args.train_batch_size * 2 if augmenter else args.train_batch_size
         self.epoch = 0
         self.dataloader = None
+
     def build(self):
-        def example_iter():
-            i = 0
-            while i<len(self.examples):
-                if (i+32)>=len(self.examples):
-                    yield [j.context_text for j in self.examples[i:]],i
-                else:
-                    yield [j.context_text for j in self.examples[i:i+32]], i
-                i+=32
+        if self.args.local_rank not in [-1, 0]:
+            torch.distributed.barrier()
+
         if self.augmenter:
-            new_examples = self.examples.copy()
-            pbar = tqdm(total=int(len(self.examples) / 32) + 1, desc="Data augmentation")
-            for iter_sample in example_iter():
-                text, i = iter_sample
-                for ii, dd in enumerate(self.augmenter.augment(text)):
-                    new_examples[i + ii].context_text = dd
-                pbar.update()
+            # new_examples = self.examples.copy()
+            # pbar = tqdm(total=int(len(self.examples) / 32) + 1, desc="Data augmentation")
+            # for iter_sample in example_iter():
+            #     text, i = iter_sample
+            #     for ii, dd in enumerate(self.augmenter.augment(text)):
+            #         new_examples[i + ii].context_text = dd
+            #     pbar.update()
+            threads = min(self.args.thread, cpu_count())
+            from functools import partial
+            with Pool(threads) as p:
+                # global examples
+                # examples = self.examples
+                annotate_ = partial(
+                    augment_data,
+                    augmenter=self.augmenter
+                )
+                aug_examples = list(
+                    tqdm(
+                        p.imap(annotate_, example_iter(self.examples), chunksize=32),
+                        total=int(len(self.examples) / 32) + 1,
+                        desc="Data augmentation",
+                        disable=False,
+                    )
+                )
+            new_examples = []
+            for i in aug_examples:
+                new_examples.extend(i)
+            del aug_examples
             features, dataset = convert_examples_to_features(new_examples, self.tokenizer, self.args.max_seq_length,
                                                              self.args.doc_stride,
                                                              self.args.max_query_length,
@@ -84,15 +154,22 @@ class DataProvider:
                                 all_end_positions)
             new_dataset = ConcatDataset([self.dataset, dataset])
         train_sampler = RandomSampler(new_dataset) if self.args.local_rank == -1 else DistributedSampler(new_dataset)
-        self.dataloader = DataLoader(new_dataset, sampler=train_sampler, batch_size=self.batch_size, collate_fn=self.collate_fn, num_workers=self.args.num_workers)
+        self.dataloader = DataLoader(new_dataset, sampler=train_sampler, batch_size=self.batch_size,
+                                     collate_fn=self.collate_fn, num_workers=self.args.num_workers)
+        if self.args.local_rank == 0:
+            torch.distributed.barrier()
+
     def __len__(self):
         ## To Do
-        return int(len(self.examples)/self.batch_size)
+        return int(len(self.examples) / self.batch_size)
+
     def __iter__(self):
         self.build()
         return self.dataloader.__iter__()
+
+
 class CustomDataLoader(DataLoader):
-    def __init__(self, dataset, examples, batch_size, sampler, args, tokenizer=None, collate_fn=None,augmenter=None):
+    def __init__(self, dataset, examples, batch_size, sampler, args, tokenizer=None, collate_fn=None, augmenter=None):
         self.dataset = dataset
         self.examples = examples
         self.batch_size = batch_size
@@ -101,24 +178,25 @@ class CustomDataLoader(DataLoader):
         self.args = args
         self.augmenter = augmenter
         self.tokenizer = tokenizer
-        super(CustomDataLoader, self).__init__(dataset, batch_size,sampler=sampler,collate_fn=collate_fn)
+        super(CustomDataLoader, self).__init__(dataset, batch_size, sampler=sampler, collate_fn=collate_fn)
 
     def augment(self):
         def example_iter():
             i = 0
-            while i<len(self.examples):
-                if (i+32)>=len(self.examples):
-                    yield [j.context_text for j in self.examples[i:]],i
+            while i < len(self.examples):
+                if (i + 32) >= len(self.examples):
+                    yield [j.context_text for j in self.examples[i:]], i
                 else:
-                    yield [j.context_text for j in self.examples[i:i+32]], i
-                i+=32
+                    yield [j.context_text for j in self.examples[i:i + 32]], i
+                i += 32
+
         if self.augmenter:
             new_examples = self.examples.copy()
-            pbar = tqdm(total=int(len(self.examples)/32)+1)
+            pbar = tqdm(total=int(len(self.examples) / 32) + 1)
             for iter_sample in example_iter():
-                text, i= iter_sample
-                for ii,dd in enumerate(self.augmenter.augment(text)):
-                    new_examples[i+ii].context_text = dd
+                text, i = iter_sample
+                for ii, dd in enumerate(self.augmenter.augment(text)):
+                    new_examples[i + ii].context_text = dd
                 pbar.update()
             features, dataset = convert_examples_to_features(new_examples, self.tokenizer, self.args.max_seq_length,
                                                              self.args.doc_stride,
@@ -132,7 +210,8 @@ class CustomDataLoader(DataLoader):
             pass
 
 
-def squad_evaluate(args, tokenizer, eval_examples, eval_features, all_results, prefix="", write_prediction=True, no_answer_probs=None, no_answer_probability_threshold=1.0):
+def squad_evaluate(args, tokenizer, eval_examples, eval_features, all_results, prefix="", write_prediction=True,
+                   no_answer_probs=None, no_answer_probability_threshold=1.0):
     output_prediction_file = os.path.join(args.output_dir, f"{prefix}_predictions.json")
     output_nbest_file = os.path.join(args.output_dir, f"nbest_predictions_{prefix}.json")
     if args.version_2_with_negative:
@@ -140,10 +219,11 @@ def squad_evaluate(args, tokenizer, eval_examples, eval_features, all_results, p
     else:
         output_null_log_odds_file = None
     all_predictions = write_predictions_google(tokenizer, eval_examples, eval_features, all_results,
-                                 args.n_best_size, args.max_answer_length,
-                                 args.do_lower_case, output_prediction_file,
-                                 output_nbest_file, output_null_log_odds_file,args.version_2_with_negative,
-                                 args.null_score_diff_threshold,write_prediction=write_prediction)
+                                               args.n_best_size, args.max_answer_length,
+                                               args.do_lower_case, output_prediction_file,
+                                               output_nbest_file, output_null_log_odds_file,
+                                               args.version_2_with_negative,
+                                               args.null_score_diff_threshold, write_prediction=write_prediction)
     qas_id_to_has_answer = {example.qas_id: bool(example.answers) for example in eval_examples}
     has_answer_qids = [qas_id for qas_id, has_answer in qas_id_to_has_answer.items() if has_answer]
     no_answer_qids = [qas_id for qas_id, has_answer in qas_id_to_has_answer.items() if not has_answer]
@@ -172,10 +252,11 @@ def squad_evaluate(args, tokenizer, eval_examples, eval_features, all_results, p
         find_all_best_thresh_v2(evaluation, all_predictions, exact, f1, no_answer_probs, qas_id_to_has_answer)
     return evaluation
 
+
 def write_predictions_google(tokenizer, all_examples, all_features, all_results, n_best_size,
-                      max_answer_length, do_lower_case, output_prediction_file,
-                      output_nbest_file, output_null_log_odds_file,version_2_with_negative,
-                      null_score_diff_threshold,write_prediction):
+                             max_answer_length, do_lower_case, output_prediction_file,
+                             output_nbest_file, output_null_log_odds_file, version_2_with_negative,
+                             null_score_diff_threshold, write_prediction):
     """Write final predictions to the json file and log-odds of null if needed."""
 
     example_index_to_features = collections.defaultdict(list)
@@ -385,20 +466,24 @@ def _compute_softmax(scores):
         probs.append(score / total_sum)
     return probs
 
+
 def log_softmax1d(scores):
     if not scores:
         return []
     x = np.array(scores)
     z = logsumexp(x)
-    return x-z
+    return x - z
+
 
 def log_sigmoid(score):
-    return math.log(1/(1+math.exp(-score)))
+    return math.log(1 / (1 + math.exp(-score)))
+
 
 def _get_best_indexes(logits, n_best_size, offset=0):
     """Get the n-best logits from a list."""
     sorted_indices = np.argsort(logits)[::-1] + offset
     return list(sorted_indices[:n_best_size])
+
 
 def get_final_text(pred_text, orig_text, tokenizer, verbose_logging=False):
     """Project the tokenized prediction back to the original text."""
@@ -461,7 +546,7 @@ def get_final_text(pred_text, orig_text, tokenizer, verbose_logging=False):
     if len(orig_ns_text) != len(tok_ns_text):
         if verbose_logging:
             logger.info("Length not equal after stripping spaces: '%s' vs '%s'",
-                            orig_ns_text, tok_ns_text)
+                        orig_ns_text, tok_ns_text)
         return orig_text
 
     # We then project the characters in `pred_text` back to `orig_text` using
@@ -521,8 +606,10 @@ def normalize_answer(s):
 
     return white_space_fix(remove_articles(remove_punc(lower(s))))
 
+
 def compute_exact(a_gold, a_pred):
     return int(normalize_answer(a_gold) == normalize_answer(a_pred))
+
 
 def compute_f1(a_gold, a_pred):
     gold_toks = get_tokens(a_gold)
@@ -611,7 +698,6 @@ def find_best_thresh_v2(preds, scores, na_probs, qid_to_has_ans):
     return 100.0 * best_score / len(scores), best_thresh, 1.0 * has_ans_score / has_ans_cnt
 
 
-
 def make_qid_to_has_ans(dataset):
     qid_to_has_ans = {}
     for article in dataset:
@@ -658,14 +744,16 @@ def merge_eval(main_eval, new_eval, prefix):
         main_eval["%s_%s" % (prefix, k)] = new_eval[k]
 
 
-def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
+def load_and_cache_examples(args, tokenizer, mode, return_examples=False):
     if args.local_rank not in [-1, 0] and mode != "dev":
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Load data features from cache or dataset file
     cached_features_file = os.path.join(args.data_dir, "cached_{}_{}_{}_{}".format(mode, args.task_type,
-        list(filter(None, args.T_model_name_or_path.split("/"))).pop(),
-        str(args.max_seq_length)))
+                                                                                   list(filter(None,
+                                                                                               args.T_model_name_or_path.split(
+                                                                                                   "/"))).pop(),
+                                                                                   str(args.max_seq_length)))
     examples = read_examples_from_file(args.data_dir, mode, args.task_type)
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
@@ -675,11 +763,11 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
         features, dataset = convert_examples_to_features(examples, tokenizer, args.max_seq_length,
-                                                              args.doc_stride,
-                                                              args.max_query_length,
-                                                              is_training=(mode == 'train'),
-                                                              threads = args.thread
-                                                              )
+                                                         args.doc_stride,
+                                                         args.max_query_length,
+                                                         is_training=(mode == 'train'),
+                                                         threads=args.thread
+                                                         )
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
@@ -693,7 +781,8 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
         all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
         all_start_positions = torch.tensor([f.start_position for f in features], dtype=torch.long)
         all_end_positions = torch.tensor([f.end_position for f in features], dtype=torch.long)
-        dataset = MyDataset(all_input_ids,all_attention_masks,all_token_type_ids,all_start_positions,all_end_positions)
+        dataset = MyDataset(all_input_ids, all_attention_masks, all_token_type_ids, all_start_positions,
+                            all_end_positions)
     # Convert to Tensors and build dataset
     if return_examples:
         return dataset, features, examples
@@ -701,7 +790,10 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples = False):
 
 
 def cal_params(vocab_size=30522, token_type=2, max_seqlen=512, num_layer=12, hidden_size=768, intermediate_size=3072):
-    embedding_params = (vocab_size+max_seqlen+token_type+2) * hidden_size
-    layer_params = 4 * hidden_size * (hidden_size+1) + 2*hidden_size + (intermediate_size+1)*hidden_size+ intermediate_size*(hidden_size+1)+2*hidden_size
-    pooler_params = (hidden_size+1)*hidden_size
-    return embedding_params+num_layer*layer_params+pooler_params
+    embedding_params = (vocab_size + max_seqlen + token_type + 2) * hidden_size
+    layer_params = 4 * hidden_size * (hidden_size + 1) + 2 * hidden_size + (
+                intermediate_size + 1) * hidden_size + intermediate_size * (hidden_size + 1) + 2 * hidden_size
+    pooler_params = (hidden_size + 1) * hidden_size
+    return embedding_params + num_layer * layer_params + pooler_params
+
+

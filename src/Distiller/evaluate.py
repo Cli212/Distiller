@@ -1,14 +1,14 @@
 from tqdm import tqdm
 import os
 import torch
-from preprocessing import SquadResult
+from squad_preprocess import SquadResult
 from torch.utils.data import DataLoader, SequentialSampler
 import argparse
 from utils import load_and_cache_examples
 import logging
 
 logger = logging.getLogger(__name__ )
-def evaluate(args, model, tokenizer, prefix=""):
+def evaluate_squad(args, model, tokenizer, prefix=""):
     dataset, features, examples = load_and_cache_examples(args, tokenizer, mode="dev", return_examples=True)
 
     if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
