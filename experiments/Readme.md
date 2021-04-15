@@ -47,5 +47,5 @@ python ../src/Distiller/distiller.py -- \
     --kd_loss_type ce
 ```
 
-For the meaning of hype parameters, see [configs.py](../src/Distiller/configs.py)
+For the meaning of hyperparameters, see [configs.py](../src/Distiller/configs.py)
 
