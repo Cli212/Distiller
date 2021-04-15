@@ -1481,6 +1481,8 @@ class BertForSequenceClassification(BertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        mixup_labels=None,
+        mixup_value=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1517,8 +1519,16 @@ class BertForSequenceClassification(BertPreTrainedModel):
                 loss_fct = MSELoss()
                 loss = loss_fct(logits.view(-1), labels.view(-1))
             else:
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                if mixup_labels is not None:
+                    labels = nn.functional.one_hot(labels,
+                                                            num_classes=self.config.max_position_embeddings)
+                    mixup_labels = nn.functional.one_hot(mixup_labels,
+                                                                  num_classes=self.config.max_position_embeddings)
+                    labels = mixup_value * labels + (1 - mixup_value) * mixup_labels
+                    loss = cross_entropy(logits, labels)
+                else:
+                    loss_fct = CrossEntropyLoss()
+                    loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[2:]

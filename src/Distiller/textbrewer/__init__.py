@@ -5,7 +5,7 @@ from .distillers import BasicDistiller
 from .distillers import GeneralDistiller
 from .distillers import MultiTaskDistiller
 from .distillers import MultiTeacherDistiller
-
+from .distillers import EMDDistiller
 
 from .configurations import TrainingConfig, DistillationConfig
 
@@ -20,5 +20,6 @@ Distillers = {
     'General': GeneralDistiller,
     'MultiTeacher': MultiTeacherDistiller,
     'MultiTask': MultiTaskDistiller,
-    'Train': BasicTrainer
+    'Train': BasicTrainer,
+    'EMD': EMDDistiller
 }

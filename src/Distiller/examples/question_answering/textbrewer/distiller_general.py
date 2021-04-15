@@ -71,7 +71,7 @@ class GeneralDistiller( ):
 
     def train_on_batch(self, batch, args):
 
-        (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, args, self.local_rank)
+        (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, args, self.local_rank,self.t_config.task_type)
 
         results_T = post_adaptor(self.adaptor_T(teacher_batch,results_T))
         results_S = post_adaptor(self.adaptor_S(student_batch,results_S))

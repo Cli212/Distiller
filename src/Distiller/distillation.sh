@@ -24,7 +24,7 @@ gpu_nums=4
 
 mkdir -p $OUTPUT_DIR
 
-python -m torch.distributed.launch --nproc_per_node=${gpu_nums} examples/question_answering/run_distiller.py \
+python -m torch.distributed.launch --nproc_per_node=${gpu_nums} distiller.py \
     --task_type squad2 \
     --data_dir $DATA_ROOT_DIR \
     --T_model_name_or_path $BERT_DIR \
@@ -42,7 +42,6 @@ python -m torch.distributed.launch --nproc_per_node=${gpu_nums} examples/questio
     --thread 64 \
     --gradient_accumulation_steps ${accu} \
     --temperature ${temperature} \
-    --save_steps 1000 \
     --kd_loss_weight 1.0 \
     --kd_loss_type ce \
     --intermediate_features hidden \

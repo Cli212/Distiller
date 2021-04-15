@@ -11,6 +11,8 @@ xxhash
 multiprocess
 packaging
 regex!=2019.12.17
-tokenizers<0.11,>=0.10.1
+tokenizers==0.9.4
 tensorboard
 sacremoses
+pyemd
+sklearn

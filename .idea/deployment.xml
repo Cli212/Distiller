@@ -30,6 +30,14 @@
           </mappings>
         </serverdata>
       </paths>
+      <paths name="p3.8">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/ubuntu/code/Distillation_QA_benchmark" local="$PROJECT_DIR$" web="/" />
+            <mapping local="" />
+          </mappings>
+        </serverdata>
+      </paths>
       <paths name="ubuntu@34.219.250.232:22 key">
         <serverdata>
           <mappings>

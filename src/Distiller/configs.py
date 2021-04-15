@@ -9,11 +9,12 @@ def parse():
     # parser.add_argument("--task_type", default="question_answering", choices=
     #                                 ['question_answering', 'token_classification', 'sequence_classification'])
     parser.add_argument("--T_model_name_or_path", type=str, required=True, help="teacher model name or path")
-    parser.add_argument("--data_dir", type=str, required=True)
-    parser.add_argument("--task_type", default="squad2", choices=["squad", "squad2", "glue", "natural_questions", "multi_woz"])
+    parser.add_argument("--task_type", default="squad2", choices=["squad", "squad2", "glue", "natural_questions", "multi_woz"],required=True)
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model predictions and checkpoints will be written.")
     ## optional arguments
+    parser.add_argument("--task_name", type=str, default="cola", choices=["cola", "sst-2", "mrpc", "stsb", "qqp", "mnli", "qnli", "rte", "wnli"], help="Only used when task type is glue")
+    parser.add_argument("--data_dir", type=str, required=False)
     parser.add_argument("--S_model_name_or_path", type=str, default=None, help="student model name or path")
     parser.add_argument("--T_config_file", type=str, help="config file path of teacher model")
     parser.add_argument("--S_config_file", type=str, help="config file path of student model")
@@ -23,7 +24,7 @@ def parse():
     parser.add_argument("--temperature", default=1, type=float, required=False)
     parser.add_argument("--per_gpu_train_batch_size", default=8, type=int,
                         help="Batch size per GPU/CPU for training.")
-    parser.add_argument("--per_gpu_eval_batch_size", default=12, type=int,
+    parser.add_argument("--per_gpu_eval_batch_size", default=24, type=int,
                         help="Batch size per GPU/CPU for evaluation.")
     parser.add_argument("--max_steps", default=-1, type=int,
                         help="If > 0: set total number of training steps to perform. Override num_train_epochs.")
@@ -37,6 +38,8 @@ def parse():
     parser.add_argument("--layer_mapping_strategy", default='skip', choices=["skip", "first", "last"])
     parser.add_argument("--random_student", action="store_true", help="If true, the student model will initiate "
                                                                       "randomly")
+    parser.add_argument("--eval_all_checkpoints", action="store_true",
+                        help="Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number")
     parser.add_argument("--max_seq_length", default=512, type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. Sequences "
                              "longer than this will be truncated, and sequences shorter than this will be padded.")
@@ -45,8 +48,16 @@ def parse():
     parser.add_argument("--max_query_length", default=64, type=int,
                         help="The maximum number of tokens for the question. Questions longer than this will "
                              "be truncated to this length.")
+    parser.add_argument("--n_best_size", default=5, type=int,
+                        help="The total number of n-best predictions to generate in the nbest_predictions.json "
+                             "output file.")
+    parser.add_argument('--null_score_diff_threshold', type=float, default=0.0,
+                        help="If null_score - best_non_null is greater than the threshold predict null.")
+    parser.add_argument("--max_answer_length", default=30, type=int,
+                        help="The maximum length of an answer that can be generated. This is needed because the start "
+                             "and end predictions are not conditioned on one another.")
     parser.add_argument("--intermediate_strategy", default=None, choices=[None, "skip","last","EMD"])
-    parser.add_argument("--intermediate_features", nargs="+", default=[], choices=["hidden","attention"])
+    parser.add_argument("--intermediate_features", nargs="+", default=[], choices=["hidden","attention"], help="Not work when intermediate strategy is EMD")
     parser.add_argument("--mixup", action="store_true")
     parser.add_argument("--kd_loss_weight", default=1.0, type=float, help="weight of kd loss")
     parser.add_argument("--kd_loss_type", default="ce", choices=["ce", "mse"])

@@ -78,7 +78,8 @@ class TrainingConfig(Config):
                  fp16_opt_level = 'O1',
                  data_parallel = False,
                  local_rank = -1,
-                 mixup=False
+                 mixup=False,
+                 task_type="squad2"
                  ):
         super(TrainingConfig, self).__init__()
 
@@ -95,6 +96,7 @@ class TrainingConfig(Config):
 
         self.local_rank = local_rank
         self.mixup = mixup
+        self.task_type = task_type
         if self.local_rank == -1 or torch.distributed.get_rank() == 0:
             if not os.path.exists(self.output_dir):
                 os.makedirs(self.output_dir)
@@ -220,12 +222,16 @@ class DistillationConfig(Config):
                       kd_loss_weight=1,
                       kd_loss_weight_scheduler = 'none',
                       probability_shift = False,
+                      emd = False,
+                      emd_args = None,
                       intermediate_matches:Optional[List[Dict]]=None,
                       is_caching_logits = False):
         super(DistillationConfig, self).__init__()
 
         self.temperature = temperature
         self.temperature_scheduler = None
+        self.emd = emd
+        self.emd_args = emd_args
         if temperature_scheduler is not 'none':
             assert temperature_scheduler in TEMPERATURE_SCHEDULER, \
                     "Invalid temperature_scheduler"

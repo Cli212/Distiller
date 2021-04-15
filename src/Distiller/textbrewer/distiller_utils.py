@@ -14,14 +14,15 @@ from .presets import *
 from .configurations import TrainingConfig, DistillationConfig
 import random
 from .compatibility import mask_dtype, is_apex_available
-
+from utils import Logger
 has_apex = is_apex_available()
 if has_apex:
     from apex import amp
 from torch.cuda import amp
 
 
-logger = logging.getLogger("Distillation")
+# logger = logging.getLogger("Distillation")
+logger = Logger("all.log",level="debug").logger
 #logger.setLevel(logging.INFO)
 
 #handler_stream = logging.StreamHandler()
@@ -236,16 +237,22 @@ def move_to_device(batch, device):
     else:
         return batch
 
-def mixup_assist(batch, model, random_index, lmbd, local_rank):
+def mixup_assist(batch, model, random_index, lmbd, local_rank, task_type, device):
     mix_ids = batch['input_ids'][random_index]
+    mixup_labels = torch.take(batch['labels'], torch.tensor(random_index).to(device))
     new_batch = batch.copy()
     new_mixup_batch = batch.copy()
-    new_batch["mixup_start_positions"] = new_batch['start_positions']
-    new_batch["mixup_end_positions"] = new_batch['end_positions']
-    new_mixup_batch["mixup_start_positions"] = new_mixup_batch.get("start_positions")
-    new_mixup_batch["mixup_end_positions"] = new_mixup_batch.get("end_positions")
-    new_mixup_batch["start_positions"] = new_batch['start_positions']
-    new_mixup_batch["end_positions"] = new_batch["end_positions"]
+    if task_type in ["squad", "squad2"]:
+        new_batch["mixup_start_positions"] = new_batch['start_positions']
+        new_batch["mixup_end_positions"] = new_batch['end_positions']
+        new_mixup_batch["mixup_start_positions"] = new_mixup_batch.get("start_positions")
+        new_mixup_batch["mixup_end_positions"] = new_mixup_batch.get("end_positions")
+        new_mixup_batch["start_positions"] = new_batch['start_positions']
+        new_mixup_batch["end_positions"] = new_batch["end_positions"]
+    elif task_type in ["glue"]:
+        new_batch["mixup_labels"] = new_batch['labels']
+        new_mixup_batch["labels"] = new_batch['labels']
+        new_mixup_batch["mixup_labels"] = mixup_labels
     if local_rank != -1:
         embeddings = model.module.module.base_model.embeddings.word_embeddings
     else:
@@ -261,21 +268,21 @@ def mixup_assist(batch, model, random_index, lmbd, local_rank):
     return new_batch
 
 
-def mixup_helper(teacher_batch, student_batch, model_T, model_S, local_rank):
+def mixup_helper(teacher_batch, student_batch, model_T, model_S, local_rank, task_type, device):
     lmbd = torch.distributions.Beta(0.4, 0.4).sample()
     random_index = list(range(teacher_batch['input_ids'].shape[0]))
     random.shuffle(random_index)
-    return mixup_assist(teacher_batch, model_T, random_index, lmbd, local_rank), mixup_assist(student_batch, model_S, random_index, lmbd, local_rank)
+    return mixup_assist(teacher_batch, model_T, random_index, lmbd, local_rank, task_type,device), mixup_assist(student_batch, model_S, random_index, lmbd, local_rank, task_type,device)
 
 
-def get_outputs_from_batch(batch, device, model_T, model_S, local_rank, args, mixup=False, no_teacher_forward=False):
+def get_outputs_from_batch(batch, device, model_T, model_S, local_rank, args, mixup=False, task_type="squad2", no_teacher_forward=False):
     batch = move_to_device(batch, device)
     if type(batch) is dict:
         if 'teacher' in batch and 'student' in batch:
             teacher_batch = batch['teacher']
             student_batch = batch['student']
             if mixup:
-                teacher_batch, student_batch = mixup_helper(teacher_batch, student_batch, model_T, model_S, local_rank)
+                teacher_batch, student_batch = mixup_helper(teacher_batch, student_batch, model_T, model_S, local_rank, task_type,device)
             teacher_batch = move_to_device(teacher_batch, device)
             #teacher outputs
             if no_teacher_forward is True:
@@ -294,7 +301,7 @@ def get_outputs_from_batch(batch, device, model_T, model_S, local_rank, args, mi
                 results_S = model_S(*student_batch, **args)
         else:
             if mixup:
-                teacher_batch, student_batch = mixup_helper(batch, batch, model_T, model_S, local_rank)
+                teacher_batch, student_batch = mixup_helper(batch, batch, model_T, model_S, local_rank, task_type,device)
             else:
                 teacher_batch = batch
                 student_batch = batch
@@ -314,7 +321,7 @@ def get_outputs_from_batch(batch, device, model_T, model_S, local_rank, args, mi
     else:
         # batch = move_to_device(batch,device)
         if mixup:
-            teacher_batch, student_batch = mixup_helper(batch, batch, model_T, model_S, local_rank)
+            teacher_batch, student_batch = mixup_helper(batch, batch, model_T, model_S, local_rank, task_type,device)
         else:
             teacher_batch = batch
             student_batch = batch

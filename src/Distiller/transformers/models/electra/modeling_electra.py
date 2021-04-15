@@ -919,6 +919,8 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        mixup_labels=None,
+        mixup_value=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -949,12 +951,24 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
         loss = None
         if labels is not None:
             if self.num_labels == 1:
+                if mixup_labels is not None:
+                    labels = mixup_value * labels + (1 - mixup_value) * mixup_labels
                 #  We are doing regression
                 loss_fct = MSELoss()
                 loss = loss_fct(logits.view(-1), labels.view(-1))
             else:
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                if mixup_labels is not None:
+                    labels = nn.functional.one_hot(labels,
+                                                            num_classes=self.num_labels)
+                    mixup_labels = nn.functional.one_hot(mixup_labels,
+                                                                  num_classes=self.num_labels)
+                    labels = mixup_value * labels + (1 - mixup_value) * mixup_labels
+                    loss = cross_entropy(logits, labels)
+                else:
+                    loss_fct = CrossEntropyLoss()
+                    loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                # loss_fct = CrossEntropyLoss()
+                # loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + discriminator_hidden_states[1:]
@@ -1268,6 +1282,9 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
+        mixup_start_positions=None,
+        mixup_end_positions=None,
+        mixup_value=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1303,6 +1320,21 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
         end_logits = end_logits.squeeze(-1)
 
         total_loss = None
+        # if start_positions is not None and end_positions is not None:
+        #     # If we are on multi-GPU, split add a dimension
+        #     if len(start_positions.size()) > 1:
+        #         start_positions = start_positions.squeeze(-1)
+        #     if len(end_positions.size()) > 1:
+        #         end_positions = end_positions.squeeze(-1)
+        #     # sometimes the start/end positions are outside our model inputs, we ignore these terms
+        #     ignored_index = start_logits.size(1)
+        #     start_positions.clamp_(0, ignored_index)
+        #     end_positions.clamp_(0, ignored_index)
+        #
+        #     loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+        #     start_loss = loss_fct(start_logits, start_positions)
+        #     end_loss = loss_fct(end_logits, end_positions)
+        #     total_loss = (start_loss + end_loss) / 2
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
             if len(start_positions.size()) > 1:
@@ -1313,12 +1345,27 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
             ignored_index = start_logits.size(1)
             start_positions.clamp_(0, ignored_index)
             end_positions.clamp_(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+            if mixup_start_positions is not None and end_positions is not None:
+                # If we are on multi-GPU, split add a dimension
+                if len(mixup_start_positions.size()) > 1:
+                    mixup_start_positions = mixup_start_positions.squeeze(-1)
+                if len(mixup_end_positions.size()) > 1:
+                    mixup_end_positions = mixup_end_positions.squeeze(-1)
+                mixup_start_positions.clamp_(0, ignored_index)
+                mixup_end_positions.clamp_(0, ignored_index)
+                start_positions = nn.functional.one_hot(start_positions,
+                                                        num_classes=self.config.max_position_embeddings)
+                end_positions = nn.functional.one_hot(end_positions, num_classes=self.config.max_position_embeddings)
+                mixup_start_positions = nn.functional.one_hot(mixup_start_positions, num_classes=self.config.max_position_embeddings)
+                mixup_end_positions = nn.functional.one_hot(mixup_end_positions, num_classes=self.config.max_position_embeddings)
+                start_positions = mixup_value*start_positions + (1-mixup_value)*mixup_start_positions
+                end_positions = mixup_value * end_positions + (1 - mixup_value) * mixup_end_positions
+                loss_fct = cross_entropy
+            else:
+                loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
         if not return_dict:
             output = (
                 start_logits,
@@ -1424,3 +1471,6 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
             hidden_states=discriminator_hidden_states.hidden_states,
             attentions=discriminator_hidden_states.attentions,
         )
+def cross_entropy(input, target):
+    logsoftmax = nn.LogSoftmax(dim=-1)
+    return torch.mean(torch.sum(- target * logsoftmax(input), 1))

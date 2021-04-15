@@ -8,33 +8,27 @@ import numpy as np
 from tqdm import tqdm
 from configs import parse
 from autoaug import AutoAugmenter
-from evaluate import evaluate_squad
+from utils import Logger
+from datasets import load_dataset, load_metric
 from transformers import AutoConfig, AutoTokenizer
-from squad_preprocess import convert_examples_to_features
 from transformers import AutoModelForSequenceClassification, AutoModelForTokenClassification, AutoModelForQuestionAnswering
-from textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller
-from utils import squad_evaluate, load_and_cache_examples, CustomDataLoader, DataProvider, MyDataset, Logger
+from textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller, EMDDistiller
 # from evaluate import evaluate
 from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
-from squad_preprocess import read_examples_from_file
-from multiprocessing import Process, shared_memory
-logger = Logger("all.log",level="debug").logger
 
+try:
+    from multiprocessing import Process, shared_memory
+except Exception as e:
+    print(e)
+    from multiprocessing import Process
+# logger = logging.getLogger(__name__)
 task_dict = {'squad2': AutoModelForQuestionAnswering,
              'squad': AutoModelForQuestionAnswering,
-             'token_classification': AutoModelForSequenceClassification,
+             'glue': AutoModelForSequenceClassification,
              'sequence_classification': AutoModelForTokenClassification}
 
-
-def BertForQAAdaptor(batch, model_outputs, no_mask=False, no_logits=False):
-    dict_obj = {'hidden':  model_outputs.hidden_states, 'attention': model_outputs.attentions,"loss":model_outputs.loss}
-    if no_mask is False:
-        dict_obj['inputs_mask'] = batch['attention_mask']
-    if no_logits is False:
-        dict_obj['logits'] = (model_outputs.start_logits,model_outputs.end_logits)
-    return dict_obj
 
 def set_seed(args):
     random.seed(args.seed)
@@ -48,49 +42,48 @@ def cal_layer_mapping(args, t_config, s_config):
     t_num_layers = t_config.num_hidden_layers
     s_num_layers = s_config.num_hidden_layers
     k = t_num_layers/s_num_layers
-    for feature in args.intermediate_features:
-        if args.intermediate_strategy == "skip":
-            if feature == "hidden":
-                for i in range(s_num_layers+1):
-                    matches.append({'layer_T': int(i*k),'layer_S':i, 'feature':feature, 'loss':'hidden_mse', 'weight':1})
-            elif feature == "attention":
-                for i in range(s_num_layers):
-                    matches.append({'layer_T': int((i+1)*k-1), 'layer_S': i, 'feature':feature, 'loss':'attention_ce', 'weight':1})
+    if args.intermediate_strategy and args.intermediate_strategy.lower() == "emd":
+        matches = {'layer_num_S':s_config.num_hidden_layers+1, 'layer_num_T':t_config.num_hidden_layers+1,  #number of hidden_states + embedding_layer
+                                          'feature':'hidden','loss':'hidden_mse',
+                                          'weight':1.0,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size else []}
+    else:
+        for feature in args.intermediate_features:
+            if args.intermediate_strategy == "skip":
+                if feature == "hidden":
+                    for i in range(s_num_layers+1):
+                        matches.append({'layer_T': int(i*k),'layer_S':i, 'feature':feature, 'loss':'hidden_mse', 'weight':1,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size else []})
+                elif feature == "attention":
+                    for i in range(s_num_layers):
+                        matches.append({'layer_T': int((i+1)*k-1), 'layer_S': i, 'feature':feature, 'loss':'attention_ce', 'weight':1})
+                else:
+                    continue
+            elif args.intermediate_strategy == "last":
+                if feature == "hidden":
+                    for i in range(s_num_layers+1):
+                        matches.append({'layer_T': int(t_num_layers-s_num_layers+i), 'layer_S': i, 'feature':feature, 'loss':'hidden_mse', 'weight':1,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size else []})
+                elif feature == "attention":
+                    for i in range(s_num_layers):
+                        matches.append({"layer_T": int(t_num_layers-s_num_layers+i),"layer_S":i, 'feature':feature, 'loss':'attention_ce', 'weight':1})
+                else:
+                    continue
             else:
-                continue
-        elif args.intermediate_strategy == "last":
-            if feature == "hidden":
-                for i in range(s_num_layers+1):
-                    matches.append({'layer_T': int(t_num_layers-s_num_layers+i), 'layer_S': i, 'feature':feature, 'loss':'hidden_mse', 'weight':1})
-            elif feature == "attention":
-                for i in range(s_num_layers):
-                    matches.append({"layer_T": int(t_num_layers-s_num_layers+i),"layer_S":i, 'feature':feature, 'loss':'attention_ce', 'weight':1})
-            else:
-                continue
-        elif args.intermediate_strategy == "EMD":
-            pass
-            ## TO DO
-        else:
-            break
+                raise NotImplementedError
     return matches
 
 
 # class CustomDataLoader(DataLoader):
 
 
-def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=None, matches=None, predict_callback=None):
+def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=None, matches=None, predict_callback=None, s_tokenizer=None, s_dataset=None):
     """ Train the model """
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     # train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
     # mix_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
-    def collate_fn(batch):
-        new_batch = batch.copy()
-        input_ids = [i['input_ids'] for i in new_batch]
-        text_list = augmenter.augment([tokenizer.decode(input_id) for input_id in input_ids])
-        return batch
     # train_dataloader = CustomDataLoader(train_dataset, examples, args=args, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn, tokenizer=tokenizer, augmenter=augmenter)
     # train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
-    train_dataloader = DataProvider(train_dataset, examples, args, tokenizer, augmenter)
+    # def collate_fn(batch):
+    #     return [({i:k[0] for i,k in piece.items()}) for piece in batch], [({i:k[0] for i,k in piece.items()}) for piece in batch]
+    train_dataloader = DataProvider(train_dataset, examples, args, tokenizer, augmenter,s_tokenizer,s_dataset)
     # mix_dataloader = DataLoader(train_dataset, sampler=mix_sampler,
     #                             batch_size=args.train_batch_size) if args.mixup else None
     if args.max_steps > 0:
@@ -131,39 +124,57 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                                                             output_device=args.local_rank,
                                                             find_unused_parameters=True)
     actual_batch_size = args.per_gpu_train_batch_size
+    num_train_steps = len(train_dataloader) // args.gradient_accumulation_steps * actual_batch_size
     if augmenter:
         actual_batch_size *= 2
     if args.mixup:
         actual_batch_size *=2
+
     # Train!
     logger.info("***** Running training *****")
     logger.info("  Num examples = %d", len(train_dataset))
     logger.info("  Num Epochs = %d", args.num_train_epochs)
     logger.info("  Instantaneous batch size per GPU = %d", actual_batch_size)
     logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d",
-                actual_batch_size * args.gradient_accumulation_steps * (
+                args.per_gpu_train_batch_size * args.gradient_accumulation_steps * (
                     torch.distributed.get_world_size() if args.local_rank != -1 else 1))
+    logger.info("  Actual train batch size (w. mixup & data augmentation) = %d", actual_batch_size)
     logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
     logger.info("  Total optimization steps = %d", t_total)
     if args.train:
-        intermediate_matches = matches
-        # if args.intermediate_strategy == "skip":
-        #     intermediate_matches = []
-        #     for match in matches:
-        #         intermediate_matches += matches[match]
-        logger.info(f"{intermediate_matches}")
-        distill_config = DistillationConfig(
-            temperature=args.temperature,
-            intermediate_matches=intermediate_matches,
-            kd_loss_weight=args.kd_loss_weight,
-            kd_loss_type=args.kd_loss_type)
-        train_config = TrainingConfig(gradient_accumulation_steps=args.gradient_accumulation_steps, device="cuda",
+        if args.intermediate_strategy and args.intermediate_strategy.lower() == "emd":
+            distill_config = DistillationConfig(
+                temperature=args.temperature,
+                kd_loss_weight=args.kd_loss_weight,
+                kd_loss_type=args.kd_loss_type)
+        else:
+            # intermediate_matches = matches
+            # if args.intermediate_strategy == "skip":
+            #     intermediate_matches = []
+            #     for match in matches:
+            #         intermediate_matches += matches[match]
+            logger.info(f"{matches}")
+            distill_config = DistillationConfig(
+                temperature=args.temperature,
+                intermediate_matches=matches,
+                kd_loss_weight=args.kd_loss_weight,
+                kd_loss_type=args.kd_loss_type)
+        train_config = TrainingConfig(gradient_accumulation_steps=args.gradient_accumulation_steps, device=args.device,
                                       log_dir=os.path.join(args.output_dir, "log"), output_dir=args.output_dir,
-                                      fp16=args.fp16, mixup=args.mixup)
-        adaptor_T = BertForQAAdaptor
-        adaptor_S = BertForQAAdaptor
-        distiller = GeneralDistiller(train_config, distill_config, t_model, s_model, adaptor_T, adaptor_S, )
-
+                                      fp16=args.fp16, mixup=args.mixup, local_rank=args.local_rank, task_type=args.task_type)
+        adaptor_T = adaptor_func
+        adaptor_S = adaptor_func
+        if args.intermediate_strategy == "EMD":
+            distiller = EMDDistiller(train_config=train_config,
+                                     distill_config=distill_config,
+                                     model_T=t_model, model_S=s_model,
+                                     adaptor_T=adaptor_T,
+                                     adaptor_S=adaptor_S,
+                                     emd=matches)
+        else:
+            distiller = GeneralDistiller(train_config, distill_config, t_model, s_model, adaptor_T, adaptor_S, )
+        # scheduler_args = {'num_warmup_steps': int(args.warmup_proportion * num_train_steps),
+        #                   'num_training_steps': num_train_steps}
         with distiller:
             distiller.train(optimizer, scheduler=None, dataloader=train_dataloader,
                             num_epochs=args.num_train_epochs, callback=predict_callback)
@@ -233,16 +244,17 @@ def main(args):
 
     t_config = AutoConfig.from_pretrained(args.T_config_file if args.T_config_file else args.T_model_name_or_path)
     s_config = AutoConfig.from_pretrained(args.S_config_file if args.S_config_file else args.S_model_name_or_path)
+    args.model_type = s_config.model_type
     t_config.output_hidden_states = True
     t_config.output_attentions = True
     s_config.output_hidden_states = True
     s_config.output_attentions = True
-    tokenizer = AutoTokenizer.from_pretrained(args.T_model_name_or_path, do_lower_case=args.do_lower_case,
+    t_tokenizer = AutoTokenizer.from_pretrained(args.T_model_name_or_path,
                                                 use_fast=False,
                                                 config=t_config)
-    # s_tokenizer = AutoTokenizer.from_pretrained(args.S_model_name_or_path, do_lower_case=args.do_lower_case,
-    #                                             use_fast=False,
-    #                                             config=s_config)
+    s_tokenizer = AutoTokenizer.from_pretrained(args.S_model_name_or_path,
+                                                use_fast=False,
+                                                config=s_config) if args.S_model_name_or_path != args.T_model_name_or_path else None
     ## Initialize augmenter
     augmenter = None
     if args.augmenter_config_path:
@@ -262,33 +274,39 @@ def main(args):
     s_model.to(args.device)
     t_model.to(args.device)
     def predict_callback(model, step):
-        if args.do_eval and args.local_rank in [-1, 0]:
-            examples, features, results = evaluate_squad(args, model, tokenizer)
-            evaluation = squad_evaluate(args, tokenizer, examples, features, results, prefix=f"{step}",
-                                        write_prediction=False)
+        if args.eval and args.local_rank in [-1, 0]:
+            evaluation_result = evaluate_func(args, model, s_tokenizer if s_tokenizer else t_tokenizer, prefix=step)
             logger.info("***** Eval results *****")
-            logger.info(json.dumps(evaluation, indent=2) + '\n')
+            logger.info(json.dumps(evaluation_result, indent=2) + '\n')
 
             output_eval_file = os.path.join(args.output_dir, f"{step}_eval_results.txt")
             logger.info(f"Write evaluation result to {output_eval_file}...")
             with open(output_eval_file, "a") as writer:
-                writer.write(f"Output: {json.dumps(evaluation, indent=2)}\n")
-            return evaluation['exact'], evaluation['f1']
+                writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
+            # if "exact" in evaluation_result.keys():
+            #     return evaluation_result['exact'], evaluation_result['f1']
+            # else:
+            #     return evaluation_result
+            model.train()
+            return list(evaluation_result.values())[0]
         else:
             return None
     ## Training
     if args.train:
         # examples = read_examples_from_file(args.data_dir, mode="train", task_type=args.task_type)
         matches = cal_layer_mapping(args, t_config, s_config)
-        train_dataset, features, examples = load_and_cache_examples(args, tokenizer, mode="train", return_examples=True)
+        train_dataset, s_dataset, features, s_features, examples = load_and_cache_examples(args, t_tokenizer, mode="train",
+                                                                return_examples=True, s_tokenizer=s_tokenizer)
+        train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback,
+              s_tokenizer, s_dataset)
         # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
         # p.start()
         # if args.S_model_name_or_path != args.T_model_name_or_path:
         #     s_train_dataset = load_and_cache_examples(args, s_tokenizer, mode="train", model_name_or_path=args.S_model_name_or_path, examples=examples)
-        train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter, matches, predict_callback)
+        # train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback,s_tokenizer, s_dataset)
 
 # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
-    if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
+    if args.train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         # Create output directory if needed
         if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(args.output_dir)
@@ -298,9 +316,12 @@ def main(args):
         # They can then be reloaded using `from_pretrained()`
         model_to_save = s_model.module if hasattr(s_model, "module") else s_model  # Take care of distributed/parallel training
         model_to_save.save_pretrained(args.output_dir)
-        tokenizer.save_pretrained(args.output_dir)
+        if s_tokenizer:
+            s_tokenizer.save_pretrained(args.output_dir)
+        else:
+            t_tokenizer.save_pretrained(args.output_dir)
         torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
-        model = AutoModelForQuestionAnswering.from_pretrained(args.output_dir)  # , force_download=True)
+        model = model_class.from_pretrained(args.output_dir)  # , force_download=True)
 
         # SquadDataset is not compatible with Fast tokenizers which have a smarter overflow handeling
         # So we use use_fast=False here for now until Fast-tokenizer-compatible-examples are out
@@ -310,8 +331,8 @@ def main(args):
 
     # Evaluation
     results = {}
-    if args.do_eval and args.local_rank in [-1, 0]:
-        if args.do_train:
+    if args.eval and args.local_rank in [-1, 0]:
+        if args.train:
             logger.info("Loading checkpoints saved during training for evaluation")
             checkpoints = [args.output_dir]
             if args.eval_all_checkpoints:
@@ -321,8 +342,8 @@ def main(args):
                 )
 
         else:
-            logger.info("Loading checkpoint %s for evaluation", args.model_name_or_path)
-            checkpoints = [args.model_name_or_path]
+            logger.info("Loading checkpoint %s for evaluation", args.S_model_name_or_path)
+            checkpoints = [args.S_model_name_or_path]
 
         if args.eval_all_checkpoints:
             checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True)))
@@ -330,21 +351,30 @@ def main(args):
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
             global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
-            model = AutoModelForQuestionAnswering.from_pretrained(checkpoint)
+            model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
-            examples, features, results = evaluate_squad(args, model, tokenizer, prefix=global_step)
-            evaluation = squad_evaluate(args, tokenizer, examples, features, results)
+            evaluation_result = evaluate_func(args, model, s_tokenizer if s_tokenizer else t_tokenizer, prefix=global_step,write_prediction=True)
             logger.info("***** Eval results *****")
-            logger.info(json.dumps(evaluation, indent=2) + '\n')
+            logger.info(json.dumps(evaluation_result, indent=2) + '\n')
 
             output_eval_file = os.path.join(args.output_dir, "final_eval_results.txt")
             logger.info(f"Write evaluation result to {output_eval_file}...")
             with open(output_eval_file, "a") as writer:
-                writer.write(f"Output: {json.dumps(evaluation, indent=2)}\n")
+                writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
     return
 
 if __name__ == '__main__':
     args = parse()
     if args.S_model_name_or_path is None:
         args.S_model_name_or_path = args.T_model_name_or_path
+    if args.task_type in ["squad","squad2"]:
+        args.task_name = args.task_type
+        from evaluate import evaluate_squad as evaluate_func
+        from squad_preprocess import convert_examples_to_features, load_and_cache_examples, DataProvider, MyDataset
+        from adapters import BertForQAAdaptor as adaptor_func
+    elif args.task_type == "glue":
+        from evaluate import evaluate_glue as evaluate_func
+        from glue_preprocess import convert_examples_to_features, load_and_cache_examples, DataProvider
+        from adapters import BertForGLUEAdptor as adaptor_func
+    logger = Logger(f"{args.output_dir}/all.log", level="debug").logger
     main(args)
