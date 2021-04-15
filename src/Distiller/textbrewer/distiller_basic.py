@@ -1,5 +1,7 @@
 from .distiller_utils import *
-
+from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data.distributed import DistributedSampler
+import queue
 class BasicDistiller(AbstractDistiller):
     """
     Performs **single-teacher single-task** distillation, provides basic distillation strategies.
@@ -200,6 +202,24 @@ class BasicDistiller(AbstractDistiller):
                 self.cache_logits(batch, args, batch_postprocessor)
 
         for current_epoch in tqdm(range(int(num_epochs)), disable=tqdm_disable):
+            if self.t_config.q and current_epoch%5 == 0 and current_epoch != 0:
+                train_dataset = None
+                QUEUE_LIMIT = 60
+                count = 0
+                while count < QUEUE_LIMIT:
+                    try:
+                        count += 1
+                        train_dataset = self.t_config.q.get(timeout=120)
+                        logger.info("Update augmented data")
+                        break
+                    except queue.Empty:
+                        logger.info("Waiting for data augmentation process to return data")
+                if train_dataset:
+                    train_sampler = RandomSampler(train_dataset) if self.t_config.local_rank == -1 \
+                        else DistributedSampler(train_dataset)
+                    dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=dataloader.batch_size)
+                else:
+                    logger.warning("Can not get the augmented data, just skip for this step")
             if self.local_rank != -1 and hasattr(dataloader,'sampler'):
                 dataloader.sampler.set_epoch(current_epoch)  #In distributed mode, calling the set_epoch method is needed to make shuffling work;
             logger.info(f"Epoch {current_epoch+1}")
@@ -208,7 +228,7 @@ class BasicDistiller(AbstractDistiller):
                 random.shuffle(self.logits_cache)
                 dataloader = self.logits_cache
             logger.info(f"Length of current epoch in forward batch: {len(dataloader)}")
-            for step, batch in tqdm(enumerate(dataloader),disable=tqdm_disable):
+            for step, batch in tqdm(enumerate(dataloader), disable=tqdm_disable):
                 if self.d_config.is_caching_logits is False and batch_postprocessor is not None:
                         batch = batch_postprocessor(batch)
                 if self.t_config.fp16:
@@ -216,9 +236,6 @@ class BasicDistiller(AbstractDistiller):
                         total_loss, losses_dict = self.train_on_batch(batch,args)
                 else:
                     total_loss, losses_dict = self.train_on_batch(batch, args)
-
-                self.write_loss(total_loss, writer_step, losses_dict)
-                writer_step += 1
 
                 total_loss /= self.t_config.gradient_accumulation_steps
                 # if self.t_config.fp16:
@@ -228,22 +245,28 @@ class BasicDistiller(AbstractDistiller):
                 #     total_loss.backward()
                 if self.t_config.fp16:
                     scaler.scale(total_loss).backward()
+                    # Unscales the gradients of optimizer's assigned params in-place
+                    scaler.unscale_(optimizer)
                 else:
                     total_loss.backward()
+                self.write_loss(total_loss, writer_step, losses_dict)
+                writer_step += 1
 
                 if (step+1)%self.t_config.gradient_accumulation_steps == 0:
                     if max_grad_norm > 0:
-                        if self.t_config.fp16:
-                            torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), max_grad_norm)
-                        else:
-                            torch.nn.utils.clip_grad_norm_(self.model_S.parameters(), max_grad_norm)
+                        # if self.t_config.fp16:
+                        #     torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), max_grad_norm)
+                        # else:
+                        #     torch.nn.utils.clip_grad_norm_(self.model_S.parameters(), max_grad_norm)
+                        # Since the gradients of optimizer's assigned params are unscaled, clips as usual:
+                        torch.nn.utils.clip_grad_norm_(self.model_S.parameters(), max_grad_norm)
 
                     if self.t_config.fp16:
                         scaler.step(optimizer)
                         scaler.update()
                     else:
                         optimizer.step()
-                    if scheduler is not None:
+                    if scheduler:
                         scheduler.step()
                     optimizer.zero_grad()
                     global_step += 1
@@ -254,8 +277,8 @@ class BasicDistiller(AbstractDistiller):
                         self.d_config.hard_label_weight = \
                             self.d_config.hard_label_weight_scheduler(global_step/total_global_steps)
 
-                    if (global_step) % print_every == 0:
-                        logger.info(f"Global step: {global_step}, epoch step:{step+1}")
+                    # if (global_step) % print_every == 0:
+                    #     logger.info(f"Global step: {global_step}, epoch step:{step+1}")
                     # if (global_step%train_steps_per_epoch in checkpoints) \
                     #         and ((current_epoch+1)%self.t_config.ckpt_epoch_frequency==0 or current_epoch+1==num_epochs):
                     #     self.save_and_callback(global_step, step, current_epoch, callback)

@@ -79,7 +79,8 @@ class TrainingConfig(Config):
                  data_parallel = False,
                  local_rank = -1,
                  mixup=False,
-                 task_type="squad2"
+                 task_type="squad2",
+                 q=None,
                  ):
         super(TrainingConfig, self).__init__()
 
@@ -93,7 +94,7 @@ class TrainingConfig(Config):
         self.fp16 = fp16
         self.fp16_opt_level = fp16_opt_level
         self.data_parallel = data_parallel
-
+        self.q = q
         self.local_rank = local_rank
         self.mixup = mixup
         self.task_type = task_type
@@ -232,14 +233,14 @@ class DistillationConfig(Config):
         self.temperature_scheduler = None
         self.emd = emd
         self.emd_args = emd_args
-        if temperature_scheduler is not 'none':
+        if temperature_scheduler != 'none':
             assert temperature_scheduler in TEMPERATURE_SCHEDULER, \
                     "Invalid temperature_scheduler"
             self.temperature_scheduler = TEMPERATURE_SCHEDULER[temperature_scheduler]
 
         self.hard_label_weight = hard_label_weight
         self.hard_label_weight_scheduler = None
-        if hard_label_weight_scheduler is not 'none':
+        if hard_label_weight_scheduler != 'none':
             assert hard_label_weight_scheduler in WEIGHT_SCHEDULER, \
                     "Invalid hard_label_weight_scheduler"
             self.hard_label_weight_scheduler = WEIGHT_SCHEDULER[hard_label_weight_scheduler]
@@ -247,7 +248,7 @@ class DistillationConfig(Config):
         self.kd_loss_type = kd_loss_type
         self.kd_loss_weight = kd_loss_weight
         self.kd_loss_weight_scheduler = None
-        if kd_loss_weight_scheduler is not 'none':
+        if kd_loss_weight_scheduler != 'none':
             assert kd_loss_weight_scheduler in WEIGHT_SCHEDULER, \
                     "Invalid kd_loss_weight_scheduler"
             self.kd_loss_weight_scheduler = WEIGHT_SCHEDULER[kd_loss_weight_scheduler]

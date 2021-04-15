@@ -48,6 +48,7 @@ def parse():
     parser.add_argument("--max_query_length", default=64, type=int,
                         help="The maximum number of tokens for the question. Questions longer than this will "
                              "be truncated to this length.")
+    parser.add_argument("--max_grad_norm", type=float, default=-1.0)
     parser.add_argument("--n_best_size", default=5, type=int,
                         help="The total number of n-best predictions to generate in the nbest_predictions.json "
                              "output file.")

@@ -33,7 +33,7 @@ def kd_ce_loss(logits_S, logits_T, temperature=1):
     beta_logits_T = logits_T / temperature
     beta_logits_S = logits_S / temperature
     p_T = F.softmax(beta_logits_T, dim=-1)
-    loss = -(p_T * F.log_softmax(beta_logits_S, dim=-1)).sum(dim=-1).mean()
+    loss = -(p_T * F.log_softmax(beta_logits_S, dim=-1)).sum(dim=-1).sum()
     return loss
 
 

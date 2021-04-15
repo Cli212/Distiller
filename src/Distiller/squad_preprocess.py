@@ -489,6 +489,7 @@ def convert_examples_to_features(
         padding_strategy="max_length",
         threads=1,
         tqdm_enabled=True,
+        task=None,
 ):
     """
     Converts a list of examples into a list of features that can be directly given as input to a model. It is

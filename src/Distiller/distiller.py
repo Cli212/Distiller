@@ -9,20 +9,20 @@ from tqdm import tqdm
 from configs import parse
 from autoaug import AutoAugmenter
 from utils import Logger
+from mp_aug import aug_process
 from datasets import load_dataset, load_metric
 from transformers import AutoConfig, AutoTokenizer
 from transformers import AutoModelForSequenceClassification, AutoModelForTokenClassification, AutoModelForQuestionAnswering
 from textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller, EMDDistiller
-# from evaluate import evaluate
+import queue
 from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
-
+from torch.multiprocessing import Queue, Process, set_start_method
 try:
-    from multiprocessing import Process, shared_memory
+    from torch.multiprocessing import shared_memory
 except Exception as e:
     print(e)
-    from multiprocessing import Process
 # logger = logging.getLogger(__name__)
 task_dict = {'squad2': AutoModelForQuestionAnswering,
              'squad': AutoModelForQuestionAnswering,
@@ -83,14 +83,34 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     # train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
     # def collate_fn(batch):
     #     return [({i:k[0] for i,k in piece.items()}) for piece in batch], [({i:k[0] for i,k in piece.items()}) for piece in batch]
-    train_dataloader = DataProvider(train_dataset, examples, args, tokenizer, augmenter,s_tokenizer,s_dataset)
+
+    if augmenter:
+        process = Process(target=aug_process, args=(q, examples, train_dataset, augmenter, args, tokenizer, s_tokenizer))
+        process.start()
+        # process.join()
+        QUEUE_LIMIT = 60
+        count = 0
+        while count<QUEUE_LIMIT:
+            try:
+                count+=1
+                train_dataset = q.get(timeout=60)
+                break
+            except queue.Empty:
+                logger.info("Waiting for data augmentation process to return data")
+        # train_dataloader = DataProvider(train_dataset, examples, args, tokenizer, augmenter,s_tokenizer,s_dataset)
+
+    # else:
+    #     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    #     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
     # mix_dataloader = DataLoader(train_dataset, sampler=mix_sampler,
     #                             batch_size=args.train_batch_size) if args.mixup else None
+    train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
     if args.max_steps > 0:
         t_total = args.max_steps
         args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
     else:
-        t_total = len(examples) // args.gradient_accumulation_steps * args.num_train_epochs
+        t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
         # t_total =
     # Prepare optimizer and schedule (linear warmup and decay)
     no_decay = ["bias", "LayerNorm.weight"]
@@ -128,7 +148,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     if augmenter:
         actual_batch_size *= 2
     if args.mixup:
-        actual_batch_size *=2
+        actual_batch_size *= 2
 
     # Train!
     logger.info("***** Running training *****")
@@ -136,7 +156,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     logger.info("  Num Epochs = %d", args.num_train_epochs)
     logger.info("  Instantaneous batch size per GPU = %d", actual_batch_size)
     logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d",
-                args.per_gpu_train_batch_size * args.gradient_accumulation_steps * (
+                actual_batch_size * args.gradient_accumulation_steps * (
                     torch.distributed.get_world_size() if args.local_rank != -1 else 1))
     logger.info("  Actual train batch size (w. mixup & data augmentation) = %d", actual_batch_size)
     logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
@@ -161,7 +181,8 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                 kd_loss_type=args.kd_loss_type)
         train_config = TrainingConfig(gradient_accumulation_steps=args.gradient_accumulation_steps, device=args.device,
                                       log_dir=os.path.join(args.output_dir, "log"), output_dir=args.output_dir,
-                                      fp16=args.fp16, mixup=args.mixup, local_rank=args.local_rank, task_type=args.task_type)
+                                      fp16=args.fp16, mixup=args.mixup, local_rank=args.local_rank,
+                                      task_type=args.task_type, q=q)
         adaptor_T = adaptor_func
         adaptor_S = adaptor_func
         if args.intermediate_strategy == "EMD":
@@ -173,50 +194,15 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                                      emd=matches)
         else:
             distiller = GeneralDistiller(train_config, distill_config, t_model, s_model, adaptor_T, adaptor_S, )
-        # scheduler_args = {'num_warmup_steps': int(args.warmup_proportion * num_train_steps),
-        #                   'num_training_steps': num_train_steps}
         with distiller:
-            distiller.train(optimizer, scheduler=None, dataloader=train_dataloader,
-                            num_epochs=args.num_train_epochs, callback=predict_callback)
+            distiller.train(optimizer, scheduler_class=scheduler_class, scheduler_args=scheduler_args, dataloader=train_dataloader,
+                            num_epochs=args.num_train_epochs, callback=predict_callback,max_grad_norm=args.max_grad_norm)
             # distiller.train(optimizer,train_dataloader,args.num_train_epochs,
             #                 scheduler_class=scheduler_class, scheduler_args=scheduler_args,
             #                 max_grad_norm=1.0, callback=predict_callback, mixup_value=args.mixup_value,
             #                 mix_dataloader=mix_dataloader, local_rank=args.local_rank)
         return
 
-
-def data_aug_process(augmenter, examples, tokenizer, args):
-
-    while True:
-        def example_iter():
-            i = 0
-            while i < len(examples):
-                if (i + 32) >= len(examples):
-                    yield [j.context_text for j in examples[i:]], i
-                else:
-                    yield [j.context_text for j in examples[i:i + 32]], i
-                i += 32
-
-        new_examples = examples.copy()
-        pbar = tqdm(total=int(len(examples) / 32) + 1, desc="Data augmentation")
-        for iter_sample in example_iter():
-            text, i = iter_sample
-            for ii, dd in enumerate(augmenter.augment(text)):
-                new_examples[i + ii].context_text = dd
-            pbar.update()
-        features, dataset = convert_examples_to_features(new_examples, tokenizer, args.max_seq_length,
-                                                         args.doc_stride,
-                                                         args.max_query_length,
-                                                         is_training=True,
-                                                         threads=args.thread
-                                                         )
-        all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-        all_attention_masks = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
-        all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
-        all_start_positions = torch.tensor([f.start_position for f in features], dtype=torch.long)
-        all_end_positions = torch.tensor([f.end_position for f in features], dtype=torch.long)
-        dataset = MyDataset(all_input_ids, all_attention_masks, all_token_type_ids, all_start_positions,
-                            all_end_positions)
 
 def main(args):
     # Setup CUDA, GPU & distributed training
@@ -297,6 +283,7 @@ def main(args):
         matches = cal_layer_mapping(args, t_config, s_config)
         train_dataset, s_dataset, features, s_features, examples = load_and_cache_examples(args, t_tokenizer, mode="train",
                                                                 return_examples=True, s_tokenizer=s_tokenizer)
+
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback,
               s_tokenizer, s_dataset)
         # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
@@ -365,6 +352,8 @@ def main(args):
 
 if __name__ == '__main__':
     args = parse()
+    set_start_method('spawn')
+    q = Queue()
     if args.S_model_name_or_path is None:
         args.S_model_name_or_path = args.T_model_name_or_path
     if args.task_type in ["squad","squad2"]:
