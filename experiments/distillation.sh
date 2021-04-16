@@ -24,7 +24,7 @@ OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
 
 gpu_nums=1
 
-export CUDA_VISIBLE_DEVICES=0
+#export CUDA_VISIBLE_DEVICES=0
 mkdir -p $OUTPUT_DIR
 
 python -m torch.distributed.launch --nproc_per_node=${gpu_nums} ../src/Distiller/distiller.py -- \

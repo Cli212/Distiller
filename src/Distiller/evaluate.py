@@ -3,7 +3,6 @@ import os
 import numpy as np
 import torch
 from squad_preprocess import SquadResult
-from datasets import load_dataset, load_metric
 from torch.utils.data import DataLoader, SequentialSampler
 from utils import write_predictions_squad, get_raw_scores, apply_no_ans_threshold, make_eval_dict, merge_eval, find_all_best_thresh_v2
 import argparse

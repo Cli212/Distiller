@@ -5,12 +5,10 @@ import torch
 import logging
 import random
 import numpy as np
-from tqdm import tqdm
 from configs import parse
 from autoaug import AutoAugmenter
 from utils import Logger
 from mp_aug import aug_process
-from datasets import load_dataset, load_metric
 from transformers import AutoConfig, AutoTokenizer
 from transformers import AutoModelForSequenceClassification, AutoModelForTokenClassification, AutoModelForQuestionAnswering
 from textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller, EMDDistiller
@@ -19,10 +17,6 @@ from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
 from torch.multiprocessing import Queue, Process, set_start_method
-try:
-    from torch.multiprocessing import shared_memory
-except Exception as e:
-    print(e)
 # logger = logging.getLogger(__name__)
 task_dict = {'squad2': AutoModelForQuestionAnswering,
              'squad': AutoModelForQuestionAnswering,
@@ -349,6 +343,7 @@ def main(args):
             with open(output_eval_file, "a") as writer:
                 writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
     return
+
 
 if __name__ == '__main__':
     args = parse()
