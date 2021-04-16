@@ -19,10 +19,6 @@ from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
 from torch.multiprocessing import Queue, Process, set_start_method
-try:
-    from torch.multiprocessing import shared_memory
-except Exception as e:
-    print(e)
 # logger = logging.getLogger(__name__)
 task_dict = {'squad2': AutoModelForQuestionAnswering,
              'squad': AutoModelForQuestionAnswering,
