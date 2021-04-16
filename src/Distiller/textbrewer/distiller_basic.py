@@ -1,5 +1,7 @@
 from .distiller_utils import *
-
+from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data.distributed import DistributedSampler
+import queue
 class BasicDistiller(AbstractDistiller):
     """
     Performs **single-teacher single-task** distillation, provides basic distillation strategies.
@@ -30,12 +32,13 @@ class BasicDistiller(AbstractDistiller):
             logger.info(f"Saving at global step {global_step}, epoch step {step + 1} epoch {epoch+1}")
             coreModel = self.model_S.module if hasattr(self.model_S, "module") else self.model_S
             state_dict = coreModel.state_dict()
-            torch.save(state_dict, os.path.join(self.t_config.output_dir, f"gs{global_step}.pkl"))
+            # torch.save(state_dict, os.path.join(self.t_config.output_dir, f"gs{global_step}.pkl"))
             if self.local_rank == 0:
                 torch.distributed.barrier()
         if callback is not None:
             logger.info("Running callback function...")
-            callback(model=self.model_S, step=global_step)
+            evaluation_result = callback(model=self.model_S, step=global_step)
+            self.tb_writer.add_scalar('scalar/metric', evaluation_result, global_step)
             self.model_S.train()
 
 
@@ -71,22 +74,22 @@ class BasicDistiller(AbstractDistiller):
             # overwrite scheduler
             scheduler = scheduler_class(**{'optimizer':optimizer},**scheduler_args)
 
-        if self.t_config.fp16:
-            if not has_apex:
-                raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
-            if isinstance(self.model_T,(list,tuple)):
-                models = [self.model_S] + list(self.model_T)
-                models, optimizer = amp.initialize(models, optimizer, opt_level=self.t_config.fp16_opt_level)
-                self.model_S = models[0]
-                self.model_T =models[1:]
-            elif isinstance(self.model_T,dict):
-                tasknames, model_Ts = zip(*self.model_T.items())
-                models = [self.model_S] + list(model_Ts)
-                models, optimizer = amp.initialize(models, optimizer, opt_level=self.t_config.fp16_opt_level)
-                self.model_S = models[0]
-                self.model_T = dict(zip(tasknames,models[1:]))
-            else:
-                (self.model_S, self.model_T), optimizer = amp.initialize([self.model_S, self.model_T], optimizer, opt_level=self.t_config.fp16_opt_level)
+        # if self.t_config.fp16:
+        #     if not has_apex:
+        #         raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
+        #     if isinstance(self.model_T,(list,tuple)):
+        #         models = [self.model_S] + list(self.model_T)
+        #         models, optimizer = amp.initialize(models, optimizer, opt_level=self.t_config.fp16_opt_level)
+        #         self.model_S = models[0]
+        #         self.model_T =models[1:]
+        #     elif isinstance(self.model_T,dict):
+        #         tasknames, model_Ts = zip(*self.model_T.items())
+        #         models = [self.model_S] + list(model_Ts)
+        #         models, optimizer = amp.initialize(models, optimizer, opt_level=self.t_config.fp16_opt_level)
+        #         self.model_S = models[0]
+        #         self.model_T = dict(zip(tasknames,models[1:]))
+        #     else:
+        #         (self.model_S, self.model_T), optimizer = amp.initialize([self.model_S, self.model_T], optimizer, opt_level=self.t_config.fp16_opt_level)
         if self.local_rank != -1:
             self.model_S = torch.nn.parallel.DistributedDataParallel(self.model_S,
                         device_ids = [self.local_rank], output_device = self.local_rank,
@@ -178,8 +181,9 @@ class BasicDistiller(AbstractDistiller):
                 logger.info("Training finished")
                 return
 
-    def train_with_num_epochs(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, **args):
 
+    def train_with_num_epochs(self, optimizer, scheduler, tqdm_disable, dataloader, max_grad_norm, num_epochs, callback, batch_postprocessor, **args):
+        scaler = amp.GradScaler()
         train_steps_per_epoch = len(dataloader)//self.t_config.gradient_accumulation_steps
         total_global_steps = train_steps_per_epoch * num_epochs
         print_every = train_steps_per_epoch // self.print_freq
@@ -194,10 +198,28 @@ class BasicDistiller(AbstractDistiller):
 
         if self.d_config.is_caching_logits is True:
             logger.info(f"Caching batches and teacher's logits...")
-            for step, batch in tqdm(enumerate(dataloader),disable=tqdm_disable):
+            for step, batch in tqdm(enumerate(dataloader), disable=tqdm_disable):
                 self.cache_logits(batch, args, batch_postprocessor)
 
-        for current_epoch in tqdm(range(int(num_epochs)),disable=tqdm_disable):
+        for current_epoch in tqdm(range(int(num_epochs)), disable=tqdm_disable):
+            if self.t_config.q and current_epoch%5 == 0 and current_epoch != 0:
+                train_dataset = None
+                QUEUE_LIMIT = 60
+                count = 0
+                while count < QUEUE_LIMIT:
+                    try:
+                        count += 1
+                        train_dataset = self.t_config.q.get(timeout=120)
+                        logger.info("Update augmented data")
+                        break
+                    except queue.Empty:
+                        logger.info("Waiting for data augmentation process to return data")
+                if train_dataset:
+                    train_sampler = RandomSampler(train_dataset) if self.t_config.local_rank == -1 \
+                        else DistributedSampler(train_dataset)
+                    dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=dataloader.batch_size)
+                else:
+                    logger.warning("Can not get the augmented data, just skip for this step")
             if self.local_rank != -1 and hasattr(dataloader,'sampler'):
                 dataloader.sampler.set_epoch(current_epoch)  #In distributed mode, calling the set_epoch method is needed to make shuffling work;
             logger.info(f"Epoch {current_epoch+1}")
@@ -206,29 +228,45 @@ class BasicDistiller(AbstractDistiller):
                 random.shuffle(self.logits_cache)
                 dataloader = self.logits_cache
             logger.info(f"Length of current epoch in forward batch: {len(dataloader)}")
-            for step, batch in tqdm(enumerate(dataloader),disable=tqdm_disable):
+            for step, batch in tqdm(enumerate(dataloader), disable=tqdm_disable):
                 if self.d_config.is_caching_logits is False and batch_postprocessor is not None:
                         batch = batch_postprocessor(batch)
-                total_loss, losses_dict = self.train_on_batch(batch,args)
+                if self.t_config.fp16:
+                    with amp.autocast():
+                        total_loss, losses_dict = self.train_on_batch(batch,args)
+                else:
+                    total_loss, losses_dict = self.train_on_batch(batch, args)
 
+                total_loss /= self.t_config.gradient_accumulation_steps
+                # if self.t_config.fp16:
+                #     with amp.scale_loss(total_loss,optimizer) as scaled_loss:
+                #         scaled_loss.backward()
+                # else:
+                #     total_loss.backward()
+                if self.t_config.fp16:
+                    scaler.scale(total_loss).backward()
+                    # Unscales the gradients of optimizer's assigned params in-place
+                    scaler.unscale_(optimizer)
+                else:
+                    total_loss.backward()
                 self.write_loss(total_loss, writer_step, losses_dict)
                 writer_step += 1
 
-                total_loss /= self.t_config.gradient_accumulation_steps
-                if self.t_config.fp16:
-                    with amp.scale_loss(total_loss,optimizer) as scaled_loss:
-                        scaled_loss.backward()
-                else:
-                    total_loss.backward()
-
                 if (step+1)%self.t_config.gradient_accumulation_steps == 0:
                     if max_grad_norm > 0:
-                        if self.t_config.fp16:
-                            torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), max_grad_norm)
-                        else:
-                            torch.nn.utils.clip_grad_norm_(self.model_S.parameters(), max_grad_norm) 
-                    optimizer.step()
-                    if scheduler is not None:
+                        # if self.t_config.fp16:
+                        #     torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), max_grad_norm)
+                        # else:
+                        #     torch.nn.utils.clip_grad_norm_(self.model_S.parameters(), max_grad_norm)
+                        # Since the gradients of optimizer's assigned params are unscaled, clips as usual:
+                        torch.nn.utils.clip_grad_norm_(self.model_S.parameters(), max_grad_norm)
+
+                    if self.t_config.fp16:
+                        scaler.step(optimizer)
+                        scaler.update()
+                    else:
+                        optimizer.step()
+                    if scheduler:
                         scheduler.step()
                     optimizer.zero_grad()
                     global_step += 1
@@ -239,12 +277,12 @@ class BasicDistiller(AbstractDistiller):
                         self.d_config.hard_label_weight = \
                             self.d_config.hard_label_weight_scheduler(global_step/total_global_steps)
 
-                    if (global_step) % print_every == 0:
-                        logger.info(f"Global step: {global_step}, epoch step:{step+1}")
-                    if (global_step%train_steps_per_epoch in checkpoints) \
-                            and ((current_epoch+1)%self.t_config.ckpt_epoch_frequency==0 or current_epoch+1==num_epochs):
-                        self.save_and_callback(global_step, step, current_epoch, callback)
-
+                    # if (global_step) % print_every == 0:
+                    #     logger.info(f"Global step: {global_step}, epoch step:{step+1}")
+                    # if (global_step%train_steps_per_epoch in checkpoints) \
+                    #         and ((current_epoch+1)%self.t_config.ckpt_epoch_frequency==0 or current_epoch+1==num_epochs):
+                    #     self.save_and_callback(global_step, step, current_epoch, callback)
+            self.save_and_callback(global_step, len(dataloader), current_epoch, callback)
             logger.info(f"Epoch {current_epoch+1} finished")
 
     def train(self, optimizer, dataloader, num_epochs=None, scheduler_class=None, scheduler_args=None, scheduler=None, max_grad_norm = -1.0, num_steps=None, callback=None, batch_postprocessor=None, **args):
@@ -285,14 +323,14 @@ class BasicDistiller(AbstractDistiller):
 
 
 
-    def train_on_batch(self, batch, args):
+    def train_on_batch(self, batch, args, s_batch=None):
         if self.d_config.is_caching_logits is False:
-            (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, args)
+            (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, self.local_rank,args,self.t_config.mixup, self.t_config.task_type)
             results_T = post_adaptor(self.adaptor_T(teacher_batch,results_T))
             results_S = post_adaptor(self.adaptor_S(student_batch,results_S))
         else:
             batch, cached_logits = batch
-            _, (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, args, no_teacher_forward=True)
+            _, (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, self.local_rank, args, self.t_config.mixup, task_type=self.t_config.task_type, no_teacher_forward=True)
 
             results_S = post_adaptor(self.adaptor_S(student_batch,results_S))
             results_T = {'logits':[logits.to(self.t_config.device) for logits in cached_logits]}

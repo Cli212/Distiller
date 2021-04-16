@@ -94,9 +94,10 @@ def train(args, train_dataset, model_T, model, tokenizer, predict_callback):
         distill_config = DistillationConfig(
             temperature=args.temperature,
             intermediate_matches=intermediate_matches,
-            kd_loss_weight=args.kd_loss_weight)
+            kd_loss_weight=args.kd_loss_weight,
+            kd_loss_type=args.kd_loss_type)
         train_config = TrainingConfig(gradient_accumulation_steps=args.gradient_accumulation_steps,device="cuda",
-                                      log_dir=args.output_dir,output_dir=args.output_dir,local_rank=args.local_rank)
+                                      log_dir=os.path.join(args.output_dir, "log"),output_dir=args.output_dir)
         adaptor_T = BertForQAAdaptor
         adaptor_S = BertForQAAdaptor
         distiller=GeneralDistiller(train_config,distill_config,model_T,model,adaptor_T,adaptor_S,)
@@ -104,7 +105,7 @@ def train(args, train_dataset, model_T, model, tokenizer, predict_callback):
         with distiller:
             distiller.train(optimizer, scheduler=None, dataloader=train_dataloader,
                             num_epochs=args.num_train_epochs, callback=predict_callback, mixup_value=args.mixup_value,
-                            mix_dataloader=mix_dataloader, local_rank=args.local_rank)
+                            mix_dataloader=mix_dataloader)
             # distiller.train(optimizer,train_dataloader,args.num_train_epochs,
             #                 scheduler_class=scheduler_class, scheduler_args=scheduler_args,
             #                 max_grad_norm=1.0, callback=predict_callback, mixup_value=args.mixup_value,
@@ -218,7 +219,9 @@ def main(args):
             logger.info(f"Write evaluation result to {output_eval_file}...")
             with open(output_eval_file, "a") as writer:
                 writer.write(f"Output: {json.dumps(evaluation, indent=2)}\n")
-        model.train()
+            return evaluation['exact'], evaluation['f1']
+        else:
+            return None
     # Training
     if args.do_train :
         train_dataset = load_and_cache_examples(args, tokenizer, mode="train")

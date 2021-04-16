@@ -38,6 +38,7 @@ def parse(opt=None):
                         help="If true, the SQuAD examples contain some that do not have an answer.")
     parser.add_argument("--random_init", action="store_true", help="If true, the student model will randomly init")
     parser.add_argument("--kd_loss_weight", default=1.0, type=float, help="weight of kd loss")
+    parser.add_argument("--kd_loss_type", default="ce", choices=["ce","mse"])
     # parser.add_argument("--train_file", default=None, type=str, help="SQuAD json for training. E.g., train-v2.0.json")
     # parser.add_argument("--predict_file", default=None, type=str,
     #                     help="SQuAD json for predictions. E.g., dev-v2.0.json or test-v2.0.json")

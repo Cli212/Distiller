@@ -1,19 +1,22 @@
 #set hyperparameters
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
-BERT_DIR=bert-base-uncased-squad-v1
+BERT_DIR=../../models/bert-base-cased-squad2
 OUTPUT_ROOT_DIR=output-bert-base-student
-DATA_ROOT_DIR=../../datasets/squad
+DATA_ROOT_DIR=../../datasets/squad_v2
 
-STUDENT_CONF_DIR=configs/bert_base_uncased_config/L3.json
-accu=2
-ep=50
+STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
+accu=1
+ep=30
 lr=10
-batch_size=24
+augmenter_config_path=augmenter_config.json
+intermediate_strategy=skip
+## if you use mixup or augmenter, then the actual batch size will be batch_size * 2
+batch_size=4
 temperature=8
 length=512
 torch_seed=9580
 
-NAME=squad_base_lr${lr}e${ep}_mixup_bert_student
+NAME=L4_squad_base_lr${lr}e${ep}_bert_student
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
 
 gpu_nums=4
@@ -21,35 +24,25 @@ gpu_nums=4
 
 mkdir -p $OUTPUT_DIR
 
-python -m torch.distributed.launch --nproc_per_node=${gpu_nums} examples/question_answering/run_distiller.py \
-    --model_type bert \
-    --model_type_student bert \
+python -m torch.distributed.launch --nproc_per_node=${gpu_nums} distiller.py \
+    --task_type squad2 \
     --data_dir $DATA_ROOT_DIR \
-    --model_name_or_path $BERT_DIR \
+    --T_model_name_or_path $BERT_DIR \
     --output_dir $OUTPUT_DIR \
     --max_seq_length ${length} \
-    --bert_config_file_S $STUDENT_CONF_DIR \
-    --do_train \
-    --do_eval \
-    --mixup \
-    --mixup_value 0.8 \
+    --S_config_file $STUDENT_CONF_DIR \
+    --train \
     --doc_stride 128 \
     --per_gpu_train_batch_size ${batch_size} \
+    --augmenter_config_path ${augmenter_config_path} \
+    --intermediate_strategy ${intermediate_strategy} \
     --seed ${torch_seed} \
     --num_train_epochs ${ep} \
     --learning_rate ${lr}e-5 \
     --thread 64 \
-    --s_opt1 30 \
     --gradient_accumulation_steps ${accu} \
     --temperature ${temperature} \
-    --overwrite_output_dir \
-    --save_steps 1000 \
-    --do_lower_case \
-    --output_encoded_layers false \
-    --output_attention_layers false \
-    --output_att_score true \
-    --output_att_sum false  \
     --kd_loss_weight 1.0 \
-    --matches L3_hidden_mse \
-              L3_hidden_smmd \
-    --tag RB \
+    --kd_loss_type ce \
+    --intermediate_features hidden \
+    --mixup

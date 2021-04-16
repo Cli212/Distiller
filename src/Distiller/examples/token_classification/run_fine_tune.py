@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Tenso
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 from transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
-from preprocessing import convert_examples_to_features, read_examples_from_file, convert_features_to_dataset, get_labels
+from squad_preprocess import convert_examples_to_features, read_examples_from_file, convert_features_to_dataset, get_labels
 
 PROCESSING_DICT = {'EQA': 'EQApreprocessing', 'NER': 'NERpreprocessing'}
 

@@ -2,7 +2,7 @@
 from .distiller_utils import *
 from .distiller_basic import BasicDistiller
 
-class GeneralDistiller(BasicDistiller):
+class GeneralDistiller( ):
     """
     Supports intermediate features matching. **Recommended for single-teacher single-task distillation**.
 
@@ -71,7 +71,7 @@ class GeneralDistiller(BasicDistiller):
 
     def train_on_batch(self, batch, args):
 
-        (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, args)
+        (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, args, self.local_rank,self.t_config.task_type)
 
         results_T = post_adaptor(self.adaptor_T(teacher_batch,results_T))
         results_S = post_adaptor(self.adaptor_S(student_batch,results_S))
@@ -84,7 +84,8 @@ class GeneralDistiller(BasicDistiller):
     def compute_loss(self,results_S,results_T):
 
         losses_dict = dict()
-
+        losses_dict["teacher_loss"] = results_T["loss"]
+        losses_dict["student_loss"] = results_S["loss"]
         total_loss = results_S["loss"] * (1-self.d_config.kd_loss_weight)
         if 'logits' in results_T and 'logits' in results_S:
             logits_list_T = results_T['logits']  # list of tensor

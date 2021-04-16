@@ -1,7 +1,7 @@
 
 from .distiller_utils import *
 from .distiller_basic import BasicDistiller
-
+from .emd import transformer_loss
 class GeneralDistiller(BasicDistiller):
     """
     Supports intermediate features matching. **Recommended for single-teacher single-task distillation**.
@@ -71,7 +71,7 @@ class GeneralDistiller(BasicDistiller):
 
     def train_on_batch(self, batch, args):
 
-        (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, args)
+        (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, self.local_rank,args,self.t_config.mixup,task_type=self.t_config.task_type)
 
         results_T = post_adaptor(self.adaptor_T(teacher_batch,results_T))
         results_S = post_adaptor(self.adaptor_S(student_batch,results_S))
@@ -85,7 +85,13 @@ class GeneralDistiller(BasicDistiller):
 
         losses_dict = dict()
 
-        total_loss  = 0
+        total_loss = 0
+        # losses_dict['unweighted_hard_label_loss'] = results_S['loss']
+        # total_loss += (1-self.d_config.kd_loss_weight)*results_S['loss']
+        if self.d_config.emd:
+            emd_loss = transformer_loss(results_S['attention'], results_T['attention'], results_S["hidden"], results_T["hidden"],device=self.t_config.device,args=self.d_config.emd_args,T=self.d_config.temperature)
+            losses_dict['emd_loss'] = emd_loss
+            total_loss += emd_loss
         if 'logits' in results_T and 'logits' in results_S:
             logits_list_T = results_T['logits']  # list of tensor
             logits_list_S = results_S['logits']  # list of tensor
@@ -166,6 +172,9 @@ class GeneralDistiller(BasicDistiller):
                 total_hl_loss += loss.mean() 
             total_loss += total_hl_loss * self.d_config.hard_label_weight
             losses_dict['unweighted_hard_label_loss'] = total_hl_loss
+        if 'loss' in results_S:
+            losses_dict['unweighted_hard_label_loss'] = results_S['loss']
+            # total_loss += results_S['loss']
         return total_loss, losses_dict
 
     def add_match(self,match: CustomMatch):

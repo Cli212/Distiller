@@ -1,26 +1,51 @@
-## Description
+# Meta-algorithm: Distiller
 
-`This is where you can do experiements for knowledge distillation.`
+Teacher network architecture
 
-From my expectations, our code can be in the similar style. That is to say, if we want to add new task or new dataset into our code, we can write as few as possible new code  by copying existing code.
+* -RoBERTa-large-
+* ELECTRA-base + ELECTRA-large
+* -T5-
 
+Student network architecture
 
+* ELECTRA-small
+* MobileBERT
+* -Other small architectures-
 
-## How to experiment
+Data augmentation
 
-Firstly, fork this project, and move to this directory.
+* Tiny-BERT-like GloVE + BERT-MLM mask reconstruction
+* BART / T5-based sequence reconstruction
+    * We mask a fraction of input words and try to reconstruct input words with a pretrained seq-to-seq model.
+* Word augmenter: Random Word
+* Mix-up KD
+* -MODALS: https://openreview.net/pdf?id=XjYgR6gbCEc-
+* Repeated augmentation: https://openaccess.thecvf.com/content_CVPR_2020/papers/Hoffer_Augment_Your_Batch_Improving_Generalization_Through_Instance_Repetition_CVPR_2020_paper.pdf
+* Back translation
 
-Install dependencies by executing:
+Distillation method
 
-```shell
-pip install -r requirements.txt
-```
+* Objective functions (li,j​(⋅,⋅),l^i​(⋅,⋅)s in the equation)
+    * Earth Mover’s Distance(EMD)
+        * https://www.researchgate.net/publication/220659330_The_Earth_Mover's_Distance_as_a_Metric_for_Image_Retrieval
+    * Random Projection + MSE
+    * Mutual Information
+        * https://arxiv.org/pdf/1904.05835.pdf
+    * Cross Entropy
+    * Cosine Distance
+    * Patient Knowledge Distillation(PKD)
+        * Section 3.2 of https://arxiv.org/pdf/1908.09355.pdf
 
-Download your preferred pretrained models and datasets(if the dataset is not squad, you should rewrite the function [read_examples_from_file](./examples/question_answering/preprocessing.py#L173))
+* Layer mapping
+    * We investigate three intermediate distillation strategies:
+        * Skip: the student learns from every k layers of the teacher
+        * Last: the student learns from the last k layers of the teacher
+        * EMD: the student learns from every layer of the teacher by a corresponding layer weight based on EMD
+    * Last-layer distillation(not perform well)
 
-After downloading all the data you need, update [finetune.sh](./finetune.sh) and [distillation.sh](distillation.sh) for setting hyperparameters.
+* Additional distillation token: https://arxiv.org/pdf/2012.12877.pdf#cite.Cubuk2019RandAugmentPA
 
-Finally, you can executing finetune.sh and distillation.sh by order and get your distilled model.
+Multi-teacher distillation
 
-
+* Distill from multiple teacher networks
 

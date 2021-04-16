@@ -2,9 +2,9 @@ L3_attention_mse=[{"layer_T":4,  "layer_S":1, "feature":"attention", "loss":"att
                   {"layer_T":8,  "layer_S":2, "feature":"attention", "loss":"attention_mse", "weight":1},
                   {"layer_T":12, "layer_S":3, "feature":"attention", "loss":"attention_mse", "weight":1}]
 
-L3_attention_ce=[{"layer_T":4,  "layer_S":1, "feature":"attention", "loss":"attention_ce", "weight":1},
-                 {"layer_T":8,  "layer_S":2, "feature":"attention", "loss":"attention_ce", "weight":1},
-                 {"layer_T":12, "layer_S":3, "feature":"attention", "loss":"attention_ce", "weight":1}]
+L3_attention_ce=[{"layer_T":0,  "layer_S":0, "feature":"attention", "loss":"attention_ce", "weight":1},
+                 {"layer_T":5,  "layer_S":1, "feature":"attention", "loss":"attention_ce", "weight":1},
+                 {"layer_T":11, "layer_S":2, "feature":"attention", "loss":"attention_ce", "weight":1}]
 
 L3_hybrid=[{"layer_T":[0,0],  "layer_S":[0,0], "feature":"hidden", "loss":"mmd", "weight":1},
                 {"layer_T":[1,1],  "layer_S":[1,1], "feature":"hidden", "loss":"mmd", "weight":1},
@@ -26,6 +26,7 @@ L3_attention_mse_sum=[{"layer_T":4,  "layer_S":1, "feature":"attention", "loss":
 L3_attention_ce_mean=[{"layer_T":4,  "layer_S":1, "feature":"attention", "loss":"attention_ce_mean", "weight":1},
                       {"layer_T":8,  "layer_S":2, "feature":"attention", "loss":"attention_ce_mean", "weight":1},
                       {"layer_T":12, "layer_S":3, "feature":"attention", "loss":"attention_ce_mean", "weight":1}]
+
 
 L3_hidden_smmd=[{"layer_T":[0,0],  "layer_S":[0,0], "feature":"hidden", "loss":"mmd", "weight":1},
                 {"layer_T":[4,4],  "layer_S":[1,1], "feature":"hidden", "loss":"mmd", "weight":1},
@@ -133,6 +134,8 @@ L6_attention_ce_mean=[{"layer_T":2,  "layer_S":1, "feature":"attention", "loss":
                       {"layer_T": 10, "layer_S": 5, "feature": "attention", "loss": "attention_ce_mean", "weight": 1},
                       {"layer_T": 12, "layer_S": 6, "feature": "attention", "loss": "attention_ce_mean", "weight": 1}
                       ]
+
+
 
 
 matches={'L3_attention_mse':L3_attention_mse,'L3_attention_mse_sum':L3_attention_mse_sum,

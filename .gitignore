@@ -1,6 +1,9 @@
-.idea
-.ipynb_checkpoints
+.idea/
+.ipynb_checkpoints/
 .env/
 datasets/*
 models/*
+configs/*
 *.ipynb
+.DS_Store
+
