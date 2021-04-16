@@ -6,4 +6,7 @@ models/*
 configs/*
 *.ipynb
 .DS_Store
+<<<<<<< HEAD
 
+=======
+>>>>>>> b52ea18b3e3a0405bb6965f263e872027d2c6c41
