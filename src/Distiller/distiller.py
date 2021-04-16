@@ -77,13 +77,14 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     # train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
     # def collate_fn(batch):
     #     return [({i:k[0] for i,k in piece.items()}) for piece in batch], [({i:k[0] for i,k in piece.items()}) for piece in batch]
-
+    q = None
     if augmenter:
         process = Process(target=aug_process, args=(q, examples, train_dataset, augmenter, args, tokenizer, s_tokenizer))
         process.start()
         # process.join()
         QUEUE_LIMIT = 60
         count = 0
+        q = Queue()
         while count<QUEUE_LIMIT:
             try:
                 count+=1
@@ -348,7 +349,6 @@ def main(args):
 if __name__ == '__main__':
     args = parse()
     set_start_method('spawn')
-    q = Queue()
     if args.S_model_name_or_path is None:
         args.S_model_name_or_path = args.T_model_name_or_path
     if args.task_type in ["squad","squad2"]:
