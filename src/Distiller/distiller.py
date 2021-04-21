@@ -39,13 +39,13 @@ def cal_layer_mapping(args, t_config, s_config):
     if args.intermediate_strategy and args.intermediate_strategy.lower() == "emd":
         matches = {'layer_num_S':s_config.num_hidden_layers+1, 'layer_num_T':t_config.num_hidden_layers+1,  #number of hidden_states + embedding_layer
                                           'feature':'hidden','loss':'hidden_mse',
-                                          'weight':1.0,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size else []}
+                                          'weight':1.0,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size else None}
     else:
         for feature in args.intermediate_features:
             if args.intermediate_strategy == "skip":
                 if feature == "hidden":
                     for i in range(s_num_layers+1):
-                        matches.append({'layer_T': int(i*k),'layer_S':i, 'feature':feature, 'loss':'hidden_mse', 'weight':1,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size else []})
+                        matches.append({'layer_T': int(i*k),'layer_S':i, 'feature':feature, 'loss':'hidden_mse', 'weight':1,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size else None})
                 elif feature == "attention":
                     for i in range(s_num_layers):
                         matches.append({'layer_T': int((i+1)*k-1), 'layer_S': i, 'feature':feature, 'loss':'attention_ce', 'weight':1})
@@ -54,7 +54,7 @@ def cal_layer_mapping(args, t_config, s_config):
             elif args.intermediate_strategy == "last":
                 if feature == "hidden":
                     for i in range(s_num_layers+1):
-                        matches.append({'layer_T': int(t_num_layers-s_num_layers+i), 'layer_S': i, 'feature':feature, 'loss':'hidden_mse', 'weight':1,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size else []})
+                        matches.append({'layer_T': int(t_num_layers-s_num_layers+i), 'layer_S': i, 'feature':feature, 'loss':'hidden_mse', 'weight':1,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size else None})
                 elif feature == "attention":
                     for i in range(s_num_layers):
                         matches.append({"layer_T": int(t_num_layers-s_num_layers+i),"layer_S":i, 'feature':feature, 'loss':'attention_ce', 'weight':1})
@@ -68,7 +68,7 @@ def cal_layer_mapping(args, t_config, s_config):
 # class CustomDataLoader(DataLoader):
 
 
-def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=None, matches=None, predict_callback=None, s_tokenizer=None, s_dataset=None):
+def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=None, matches=None, predict_callback=None, q=None):
     """ Train the model """
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     # train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
@@ -77,14 +77,9 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     # train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
     # def collate_fn(batch):
     #     return [({i:k[0] for i,k in piece.items()}) for piece in batch], [({i:k[0] for i,k in piece.items()}) for piece in batch]
-    q = None
     if augmenter:
-        process = Process(target=aug_process, args=(q, examples, train_dataset, augmenter, args, tokenizer, s_tokenizer))
-        process.start()
-        # process.join()
         QUEUE_LIMIT = 60
         count = 0
-        q = Queue()
         while count<QUEUE_LIMIT:
             try:
                 count+=1
@@ -196,7 +191,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
             #                 scheduler_class=scheduler_class, scheduler_args=scheduler_args,
             #                 max_grad_norm=1.0, callback=predict_callback, mixup_value=args.mixup_value,
             #                 mix_dataloader=mix_dataloader, local_rank=args.local_rank)
-        return
+    return
 
 
 def main(args):
@@ -226,6 +221,7 @@ def main(args):
     t_config = AutoConfig.from_pretrained(args.T_config_file if args.T_config_file else args.T_model_name_or_path)
     s_config = AutoConfig.from_pretrained(args.S_config_file if args.S_config_file else args.S_model_name_or_path)
     args.model_type = s_config.model_type
+    s_config.num_labels = t_config.num_labels
     t_config.output_hidden_states = True
     t_config.output_attentions = True
     s_config.output_hidden_states = True
@@ -237,9 +233,7 @@ def main(args):
                                                 use_fast=False,
                                                 config=s_config) if args.S_model_name_or_path != args.T_model_name_or_path else None
     ## Initialize augmenter
-    augmenter = None
-    if args.augmenter_config_path:
-        augmenter = AutoAugmenter.from_config(args.augmenter_config_path,"cpu" if args.n_gpu==0 else "gpu")
+
     model_class = task_dict.get(args.task_type)
     t_model = model_class.from_pretrained(args.T_model_name_or_path, config=t_config)
     ## If the student borrow layers from teachers, it must borrow complete layers. Their hidden size and attention size
@@ -278,9 +272,17 @@ def main(args):
         matches = cal_layer_mapping(args, t_config, s_config)
         train_dataset, s_dataset, features, s_features, examples = load_and_cache_examples(args, t_tokenizer, mode="train",
                                                                 return_examples=True, s_tokenizer=s_tokenizer)
-
-        train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback,
-              s_tokenizer, s_dataset)
+        augmenter = None
+        q = None
+        if args.augmenter_config_path:
+            augmenter = AutoAugmenter.from_config(args.augmenter_config_path, "cpu" if args.n_gpu == 0 else "gpu")
+            # global q
+            q = Queue()
+            process = Process(target=aug_process,
+                              args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
+            process.start()
+            # process.join()
+        train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q)
         # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
         # p.start()
         # if args.S_model_name_or_path != args.T_model_name_or_path:

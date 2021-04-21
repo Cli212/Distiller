@@ -32,7 +32,7 @@ def augment_data(iter_sample, augmenter, task_type):
 
 def aug_process(queue:Queue, examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None):
     while True:
-        if queue.qsize()<3:
+        if queue.empty():
             if args.task_type == "glue":
                 from glue_preprocess import convert_features_to_dataset, convert_examples_to_features
             elif args.task_type in ["squad", "squad2"]:

@@ -237,6 +237,10 @@ class BasicDistiller(AbstractDistiller):
                 else:
                     total_loss, losses_dict = self.train_on_batch(batch, args)
 
+
+                self.write_loss(total_loss, writer_step, losses_dict)
+                writer_step += 1
+
                 total_loss /= self.t_config.gradient_accumulation_steps
                 # if self.t_config.fp16:
                 #     with amp.scale_loss(total_loss,optimizer) as scaled_loss:
@@ -249,8 +253,6 @@ class BasicDistiller(AbstractDistiller):
                     scaler.unscale_(optimizer)
                 else:
                     total_loss.backward()
-                self.write_loss(total_loss, writer_step, losses_dict)
-                writer_step += 1
 
                 if (step+1)%self.t_config.gradient_accumulation_steps == 0:
                     if max_grad_norm > 0:
