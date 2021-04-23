@@ -18,13 +18,16 @@ MULTI_SEP_TOKENS_TOKENIZERS_SET = {"roberta", "camembert", "bart", "mpnet"}
 
 
 class MyDataset(Dataset):
-    def __init__(self, all_input_ids, all_attention_masks, all_token_type_ids, all_start_positions, all_end_positions):
+    def __init__(self, all_input_ids, all_attention_masks, all_token_type_ids, all_start_positions, all_end_positions, s_all_input_ids=None, s_all_attention_masks=None, s_all_token_type_ids=None):
         super(MyDataset, self).__init__()
         self.all_input_ids = all_input_ids
         self.all_attention_masks = all_attention_masks
         self.all_token_type_ids = all_token_type_ids
         self.all_start_positions = all_start_positions
         self.all_end_positions = all_end_positions
+        self.s_all_input_ids = s_all_input_ids
+        self.s_all_attention_masks = s_all_attention_masks
+        self.s_all_token_type_ids = s_all_token_type_ids
 
     def __getitem__(self, index):
         input_ids = self.all_input_ids[index]
@@ -32,11 +35,28 @@ class MyDataset(Dataset):
         token_type_ids = self.all_token_type_ids[index]
         start_positions = self.all_start_positions[index]
         end_positions = self.all_end_positions[index]
-        return {'input_ids': input_ids,
-                'attention_mask': attention_masks,
-                'token_type_ids': token_type_ids,
-                'start_positions': start_positions,
-                "end_positions": end_positions}
+        if self.s_all_input_ids is None:
+            return {'input_ids': input_ids,
+                    'attention_mask': attention_masks,
+                    'token_type_ids': token_type_ids,
+                    'start_positions': start_positions,
+                    "end_positions": end_positions}
+        else:
+            s_input_ids = self.s_all_input_ids[index]
+            s_attention_masks = self.s_all_attention_masks[index]
+            s_token_type_ids = self.s_all_token_type_ids[index]
+            return {
+                "teacher": {'input_ids': input_ids,
+                    'attention_mask': attention_masks,
+                    'token_type_ids': token_type_ids,
+                    'start_positions': start_positions,
+                    "end_positions": end_positions},
+                "student": {'input_ids': s_input_ids,
+                    'attention_mask': s_attention_masks,
+                    'token_type_ids': s_token_type_ids,
+                    'start_positions': start_positions,
+                    "end_positions": end_positions}
+            }
 
     def __len__(self):
         return len(self.all_input_ids)
@@ -347,19 +367,19 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples=False, s_toke
                                                                                    str(args.max_seq_length)))
     if s_tokenizer:
         s_cached_features_file = os.path.join(args.data_dir, "cached_{}_{}_{}_{}".format(mode, args.task_type,
-                                                                                       list(filter(None,
+                                                                                         list(filter(None,
                                                                                                    s_tokenizer.name_or_path.split(
                                                                                                        "/"))).pop(),
-                                                                                       str(args.max_seq_length)))
+                                                                                         str(args.max_seq_length)))
     examples = read_examples_from_file(args.data_dir, mode, args.task_type)
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
-        dataset = convert_features_to_dataset(features, is_training=(mode == 'train'))
+        # dataset = convert_features_to_dataset(features, is_training=(mode == 'train'))
         ## This place need to be more flexible
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
-        features, dataset = convert_examples_to_features(examples, tokenizer, args.max_seq_length,
+        features = convert_examples_to_features(examples, tokenizer, args.max_seq_length,
                                                          args.doc_stride,
                                                          args.max_query_length,
                                                          is_training=(mode == 'train'),
@@ -372,10 +392,10 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples=False, s_toke
         if os.path.exists(s_cached_features_file) and not args.overwrite_cache:
             logger.info("Loading student features from cached file %s", cached_features_file)
             s_features = torch.load(s_cached_features_file)
-            s_dataset = convert_features_to_dataset(s_features, is_training=(mode == 'train'))
+            # s_dataset = convert_features_to_dataset(s_features, is_training=(mode == 'train'))
         else:
             logger.info("Creating student features from dataset file at %s", args.data_dir)
-            s_features, s_dataset = convert_examples_to_features(examples, s_tokenizer, args.max_seq_length,
+            s_features = convert_examples_to_features(examples, s_tokenizer, args.max_seq_length,
                                                              args.doc_stride,
                                                              args.max_query_length,
                                                              is_training=(mode == 'train'),
@@ -384,26 +404,27 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples=False, s_toke
             if args.local_rank in [-1, 0]:
                 logger.info("Saving student features into cached file %s", s_cached_features_file)
                 torch.save(s_features, s_cached_features_file)
+    dataset = convert_features_to_dataset(features, s_features, is_training=(mode == 'train'))
 
     if args.local_rank == 0 and mode != "dev":
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
-    if mode == "train":
-        all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-        all_attention_masks = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
-        all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
-        all_start_positions = torch.tensor([f.start_position for f in features], dtype=torch.long)
-        all_end_positions = torch.tensor([f.end_position for f in features], dtype=torch.long)
-        dataset = MyDataset(all_input_ids, all_attention_masks, all_token_type_ids, all_start_positions,
-                            all_end_positions)
-        if s_tokenizer:
-            all_input_ids = torch.tensor([f.input_ids for f in s_features], dtype=torch.long)
-            all_attention_masks = torch.tensor([f.attention_mask for f in s_features], dtype=torch.long)
-            all_token_type_ids = torch.tensor([f.token_type_ids for f in s_features], dtype=torch.long)
-            all_start_positions = torch.tensor([f.start_position for f in s_features], dtype=torch.long)
-            all_end_positions = torch.tensor([f.end_position for f in s_features], dtype=torch.long)
-            s_dataset = MyDataset(all_input_ids, all_attention_masks, all_token_type_ids, all_start_positions,
-                                all_end_positions)
+    # if mode == "train":
+    #     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+    #     all_attention_masks = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
+    #     all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
+    #     all_start_positions = torch.tensor([f.start_position for f in features], dtype=torch.long)
+    #     all_end_positions = torch.tensor([f.end_position for f in features], dtype=torch.long)
+    #     dataset = MyDataset(all_input_ids, all_attention_masks, all_token_type_ids, all_start_positions,
+    #                         all_end_positions)
+    #     if s_tokenizer:
+    #         all_input_ids = torch.tensor([f.input_ids for f in s_features], dtype=torch.long)
+    #         all_attention_masks = torch.tensor([f.attention_mask for f in s_features], dtype=torch.long)
+    #         all_token_type_ids = torch.tensor([f.token_type_ids for f in s_features], dtype=torch.long)
+    #         all_start_positions = torch.tensor([f.start_position for f in s_features], dtype=torch.long)
+    #         all_end_positions = torch.tensor([f.end_position for f in s_features], dtype=torch.long)
+    #         s_dataset = MyDataset(all_input_ids, all_attention_masks, all_token_type_ids, all_start_positions,
+    #                             all_end_positions)
     # Convert to Tensors and build dataset
     if return_examples:
         return dataset, s_dataset, features, s_features, examples
@@ -555,11 +576,17 @@ def convert_examples_to_features(
         example_index += 1
     features = new_features
     del new_features
-    dataset = convert_features_to_dataset(features, is_training)
-    return features, dataset
+    # dataset = convert_features_to_dataset(features, is_training)
+    return features
 
 
-def convert_features_to_dataset(features, is_training):
+def convert_features_to_dataset(features, s_features=None, is_training=True):
+    s_all_input_ids = None
+    s_all_attention_masks = None
+    s_all_token_type_ids = None
+    s_all_cls_index = None
+    s_all_p_mask = None
+    s_all_is_impossible = None
     # Convert to Tensors and build dataset
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
     all_attention_masks = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
@@ -567,6 +594,13 @@ def convert_features_to_dataset(features, is_training):
     all_cls_index = torch.tensor([f.cls_index for f in features], dtype=torch.long)
     all_p_mask = torch.tensor([f.p_mask for f in features], dtype=torch.float)
     all_is_impossible = torch.tensor([f.is_impossible for f in features], dtype=torch.float)
+    if s_features:
+        s_all_input_ids = torch.tensor([f.input_ids for f in s_features], dtype=torch.long)
+        s_all_attention_masks = torch.tensor([f.attention_mask for f in s_features], dtype=torch.long)
+        s_all_token_type_ids = torch.tensor([f.token_type_ids for f in s_features], dtype=torch.long)
+        s_all_cls_index = torch.tensor([f.cls_index for f in s_features], dtype=torch.long)
+        s_all_p_mask = torch.tensor([f.p_mask for f in s_features], dtype=torch.float)
+        s_all_is_impossible = torch.tensor([f.is_impossible for f in s_features], dtype=torch.float)
 
     if not is_training:
         all_feature_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
@@ -576,15 +610,15 @@ def convert_features_to_dataset(features, is_training):
     else:
         all_start_positions = torch.tensor([f.start_position for f in features], dtype=torch.long)
         all_end_positions = torch.tensor([f.end_position for f in features], dtype=torch.long)
-        dataset = TensorDataset(
+        dataset = MyDataset(
             all_input_ids,
             all_attention_masks,
             all_token_type_ids,
             all_start_positions,
             all_end_positions,
-            all_cls_index,
-            all_p_mask,
-            all_is_impossible,
+            s_all_input_ids,
+            s_all_attention_masks,
+            s_all_token_type_ids
         )
     return dataset
 

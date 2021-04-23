@@ -32,7 +32,7 @@ def augment_data(iter_sample, augmenter, task_type):
 
 def aug_process(queue:Queue, examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None):
     while True:
-        if queue.qsize()<3:
+        if queue.empty():
             if args.task_type == "glue":
                 from glue_preprocess import convert_features_to_dataset, convert_examples_to_features
             elif args.task_type in ["squad", "squad2"]:
@@ -60,7 +60,7 @@ def aug_process(queue:Queue, examples, original_dataset, augmenter, args, tokeni
                 )
                 aug_examples = list(
                     tqdm(
-                        p.imap(annotate_, example_iter(examples), chunksize=32),
+                        p.imap(annotate_, example_iter(examples), chunksize=256),
                         total=int(len(examples) / 32) + 1,
                         desc="Data augmentation",
                         disable=False,

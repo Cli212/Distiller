@@ -1,9 +1,9 @@
 
 #set hyperparameters
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
-TEACHER_DIR=howey/electra-base-sst2
-STUDENT_DIR=howey/electra-small-sst2
-DATA_ROOT_DIR=../datasets/glue_data/SST-2
+TEACHER_DIR=howey/electra-large-mnli
+STUDENT_DIR=howey/electra-small-mnli
+DATA_ROOT_DIR=../datasets/glue_data/MNLI
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
@@ -11,7 +11,7 @@ accu=1
 ep=30
 lr=1
 #augmenter_config_path=augmenter_config.json
-intermediate_strategy=EMD
+intermediate_strategy=skip
 ## if you use mixup or augmenter, then the actual batch size will be batch_size * 2
 batch_size=32
 temperature=8
@@ -19,10 +19,10 @@ length=128
 torch_seed=9580
 task_name=sst-2
 task_type=glue
-NAME=electra_base_small_lr${lr}e-4_e${ep}_${task_type}_${task_name}
+NAME=electra_large_small_lr${lr}e-4_e${ep}_${task_type}_${task_name}
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
 
-gpu_nums=1
+gpu_nums=4
 
 #export CUDA_VISIBLE_DEVICES=0
 mkdir -p $OUTPUT_DIR
@@ -35,6 +35,8 @@ python -m torch.distributed.launch --nproc_per_node=${gpu_nums} ../src/Distiller
     --S_model_name_or_path $STUDENT_DIR \
     --output_dir $OUTPUT_DIR \
     --max_seq_length ${length} \
+    --intermediate_strategy ${intermediate_strategy} \
+    --intermediate_features hidden attention\
     --train \
     --eval \
     --doc_stride 128 \
