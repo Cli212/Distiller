@@ -124,6 +124,19 @@ def att_ce_mean_loss(attention_S, attention_T, mask=None):
     return loss
 
 
+def hid_ce_loss(state_S, state_T, mask=None):
+    probs_T = F.softmax(state_T, dim=-1)
+    if mask is None:
+        # probs_T_select = torch.where(attention_T <= -1e-3, torch.zeros_like(attention_T), probs_T)
+        loss = -((probs_T * F.log_softmax(state_S, dim=-1)).sum(dim=-1)).mean()
+    else:
+        # mask = mask.to(state_S).unsqueeze(1).expand(-1, attention_S.size(1), -1)  # (bs, num_of_heads, len)
+        mask = mask.to(state_S)
+        loss = -((probs_T * F.log_softmax(state_S, dim=-1) * mask.unsqueeze(2)).sum(
+            dim=-1) * mask).sum() / mask.sum()
+    return loss
+
+
 def hid_mse_loss(state_S, state_T, mask=None):
     '''
     * Calculates the mse loss between `state_S` and `state_T`, which are the hidden state of the models.
@@ -269,7 +282,7 @@ def mmd_loss(state_S, state_T, mask=None):
         loss = (F.mse_loss(gram_S, gram_T, reduction='none') * mask.unsqueeze(-1) * mask.unsqueeze(1)).sum() / valid_count
     return loss
 
-def MI_loss(state_S, state_T):
+def nce_loss(state_S, state_T, mask=None):
     # TO be justified
     criterion_t = ContrastLoss(state_T.shape[0])
     criterion_s = ContrastLoss(state_S.shape[0])

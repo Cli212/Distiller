@@ -6,20 +6,21 @@ from nlpaug.util import Action
 import json
 
 class AutoAugmenter:
-    def __init__(self, aug_args):
-        augmenter_table = {"context": naw.ContextualWordEmbsAug,
+    def __init__(self, aug_args, aug_type):
+        augmenter_table = {"contextual": naw.ContextualWordEmbsAug,
                            "random": naw.RandomWordAug,
                            "back_translation": naw.BackTranslationAug}
         # self.augs = []
         # for i in aug_args:
-        #     self.augs.append(augmenter_table.get(i.pop("augmenter"))(**i))
-        self.aug = augmenter_table.get(aug_args.pop("augmenter"))(**aug_args)
+        #     self.augs.append(augmenter_table.get(aug_type)(**i))
+        self.aug = augmenter_table.get(aug_type)(**aug_args)
 
     @classmethod
-    def from_config(cls, augmenter_config_path, *configs):
+    def from_config(cls, aug_type):
+        augmenter_config_path = f"{aug_type}_augmenter_config.json"
         with open(augmenter_config_path) as f:
             aug_args = json.load(f)
-        return cls(aug_args)
+        return cls(aug_args, aug_type)
 
     def augment(self, data):
         # result = []

@@ -20,9 +20,9 @@ def parse():
     parser.add_argument("--S_config_file", type=str, help="config file path of student model")
     parser.add_argument("--train", action="store_true")
     parser.add_argument("--eval", action="store_true")
-    parser.add_argument("--learning_rate", default=3e-5, type=float, help="The initial learning rate for Adam.")
-    parser.add_argument("--temperature", default=1, type=float, required=False)
-    parser.add_argument("--per_gpu_train_batch_size", default=8, type=int,
+    parser.add_argument("--learning_rate", default=1e-4, type=float, help="The initial learning rate for Adam.")
+    parser.add_argument("--temperature", default=4, type=float, required=False)
+    parser.add_argument("--per_gpu_train_batch_size", default=24, type=int,
                         help="Batch size per GPU/CPU for training.")
     parser.add_argument("--per_gpu_eval_batch_size", default=24, type=int,
                         help="Batch size per GPU/CPU for evaluation.")
@@ -32,7 +32,7 @@ def parse():
                         type=int,
                         default=1,
                         help="Number of updates steps to accumualte before performing a backward/update pass.")
-    parser.add_argument("--num_train_epochs", default=3.0, type=float,
+    parser.add_argument("--num_train_epochs", default=20, type=float,
                         help="Total number of training epochs to perform.")
     parser.add_argument("--augmenter_config_path", type=str, default=None)
     parser.add_argument("--aug_type", type=str, default=None, choices=["random","contextual","back_translation"])
@@ -41,7 +41,7 @@ def parse():
                                                                       "randomly")
     parser.add_argument("--eval_all_checkpoints", action="store_true",
                         help="Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number")
-    parser.add_argument("--max_seq_length", default=512, type=int,
+    parser.add_argument("--max_seq_length", default=128, type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. Sequences "
                              "longer than this will be truncated, and sequences shorter than this will be padded.")
     parser.add_argument("--doc_stride", default=128, type=int,
@@ -59,7 +59,7 @@ def parse():
                         help="The maximum length of an answer that can be generated. This is needed because the start "
                              "and end predictions are not conditioned on one another.")
     parser.add_argument("--intermediate_strategy", default=None, choices=[None, "skip","last","EMD"])
-    parser.add_argument("--intermediate_features", nargs="+", default=[], choices=["hidden","attention"], help="Not work when intermediate strategy is EMD")
+    parser.add_argument("--intermediate_features", nargs="+", default=["hidden"], choices=["hidden","attention"], help="Not work when intermediate strategy is EMD")
     parser.add_argument("--intermediate_loss_type", type=str, default="ce", choices=["ce","mse","cos","pkd","nce"])
     parser.add_argument("--mixup", action="store_true")
     parser.add_argument("--kd_loss_weight", default=1.0, type=float, help="weight of kd loss")

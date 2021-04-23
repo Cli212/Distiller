@@ -988,6 +988,8 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        mixup_labels=None,
+        mixup_value=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1018,14 +1020,32 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
         logits = self.classifier(pooled_output)
 
         loss = None
+        # if labels is not None:
+        #     if self.num_labels == 1:
+        #         #  We are doing regression
+        #         loss_fct = MSELoss()
+        #         loss = loss_fct(logits.view(-1), labels.view(-1))
+        #     else:
+        #         loss_fct = CrossEntropyLoss()
+        #         loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
         if labels is not None:
             if self.num_labels == 1:
+                if mixup_labels is not None:
+                    labels = mixup_value * labels + (1 - mixup_value) * mixup_labels
                 #  We are doing regression
                 loss_fct = MSELoss()
                 loss = loss_fct(logits.view(-1), labels.view(-1))
             else:
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                if mixup_labels is not None:
+                    labels = nn.functional.one_hot(labels,
+                                                            num_classes=self.num_labels)
+                    mixup_labels = nn.functional.one_hot(mixup_labels,
+                                                                  num_classes=self.num_labels)
+                    labels = mixup_value * labels + (1 - mixup_value) * mixup_labels
+                    loss = cross_entropy(logits, labels)
+                else:
+                    loss_fct = CrossEntropyLoss()
+                    loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -1318,3 +1338,6 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+def cross_entropy(input, target):
+    logsoftmax = nn.LogSoftmax(dim=-1)
+    return torch.mean(torch.sum(- target * logsoftmax(input), 1))

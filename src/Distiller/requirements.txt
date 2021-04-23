@@ -16,3 +16,5 @@ tensorboard
 sacremoses
 pyemd
 sklearn
+fairseq
+fastBPE

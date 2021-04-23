@@ -4,6 +4,7 @@ import glob
 import torch
 import logging
 import random
+from ray import tune
 import numpy as np
 from configs import parse
 from autoaug import AutoAugmenter
@@ -17,6 +18,7 @@ from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
 from torch.multiprocessing import Queue, Process, set_start_method
+
 # logger = logging.getLogger(__name__)
 task_dict = {'squad2': AutoModelForQuestionAnswering,
              'squad': AutoModelForQuestionAnswering,
@@ -37,31 +39,43 @@ def cal_layer_mapping(args, t_config, s_config):
     s_num_layers = s_config.num_hidden_layers
     k = t_num_layers/s_num_layers
     if args.intermediate_strategy and args.intermediate_strategy.lower() == "emd":
+        if args.intermediate_loss_type in ["cos", "nce", "pkd"]:
+            loss_type = args.intermediate_loss_type
+        elif args.intermediate_loss_type in ["ce", "mse"]:
+            loss_type = "hidden_" + args.intermediate_loss_type
+        else:
+            raise NotImplementedError
         matches = {'layer_num_S':s_config.num_hidden_layers+1, 'layer_num_T':t_config.num_hidden_layers+1,  #number of hidden_states + embedding_layer
-                                          'feature':'hidden','loss':'hidden_mse',
-                                          'weight':1.0,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size else None}
+                                          'feature':'hidden','loss':loss_type,
+                                          'weight':1.0,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size and args.intermediate_loss_type != "nce" else None}
     else:
         for feature in args.intermediate_features:
+            if args.intermediate_loss_type in ["cos", "nce", "pkd"]:
+                loss_type = args.intermediate_loss_type
+            elif args.intermediate_loss_type in ["ce", "mse"]:
+                loss_type = feature+"_"+args.intermediate_loss_type
+            else:
+                raise NotImplementedError
             if args.intermediate_strategy == "skip":
                 if feature == "hidden":
                     for i in range(s_num_layers+1):
-                        matches.append({'layer_T': int(i*k),'layer_S':i, 'feature':feature, 'loss':'hidden_mse', 'weight':1,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size else None})
+                        matches.append({'layer_T': int(i*k),'layer_S':i, 'feature':feature, 'loss':loss_type, 'weight':1,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size and args.intermediate_loss_type != "nce" else None})
                 elif feature == "attention":
                     for i in range(s_num_layers):
-                        matches.append({'layer_T': int((i+1)*k-1), 'layer_S': i, 'feature':feature, 'loss':'attention_ce', 'weight':1})
+                        matches.append({'layer_T': int((i+1)*k-1), 'layer_S': i, 'feature':feature, 'loss':loss_type, 'weight':1})
                 else:
                     continue
             elif args.intermediate_strategy == "last":
                 if feature == "hidden":
                     for i in range(s_num_layers+1):
-                        matches.append({'layer_T': int(t_num_layers-s_num_layers+i), 'layer_S': i, 'feature':feature, 'loss':'hidden_mse', 'weight':1,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size else None})
+                        matches.append({'layer_T': int(t_num_layers-s_num_layers+i), 'layer_S': i, 'feature':feature, 'loss':loss_type, 'weight':1,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size and args.intermediate_loss_type != "nce" else None})
                 elif feature == "attention":
                     for i in range(s_num_layers):
-                        matches.append({"layer_T": int(t_num_layers-s_num_layers+i),"layer_S":i, 'feature':feature, 'loss':'attention_ce', 'weight':1})
+                        matches.append({"layer_T": int(t_num_layers-s_num_layers+i),"layer_S":i, 'feature':feature, 'loss':loss_type, 'weight':1})
                 else:
                     continue
             else:
-                raise NotImplementedError
+                pass
     return matches
 
 
@@ -112,7 +126,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler_class = get_linear_schedule_with_warmup
     args.warmup_steps = int(t_total * args.warmup_proportion)
-    scheduler_args = {'num_warmup_steps': int(args.warmup_steps * t_total), 'num_training_steps': t_total}
+    scheduler_args = {'num_warmup_steps': args.warmup_steps, 'num_training_steps': t_total}
     # if args.fp16:
     #     try:
     #         from apex import amp
@@ -263,6 +277,7 @@ def main(args):
             # else:
             #     return evaluation_result
             model.train()
+            tune.report(iterations=step, accuracy=evaluation_result['acc'])
             return list(evaluation_result.values())[0]
         else:
             return None
@@ -274,9 +289,15 @@ def main(args):
                                                                 return_examples=True, s_tokenizer=s_tokenizer)
         augmenter = None
         q = None
-        if args.augmenter_config_path:
-            augmenter = AutoAugmenter.from_config(args.augmenter_config_path, "cpu" if args.n_gpu == 0 else "gpu")
-            # global q
+        # if args.augmenter_config_path:
+        #     augmenter = AutoAugmenter.from_config(args.augmenter_config_path, "cpu" if args.n_gpu == 0 else "gpu")
+        #     # global q
+        #     q = Queue()
+        #     process = Process(target=aug_process,
+        #                       args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
+        #     process.start()
+        if args.aug_type:
+            augmenter = AutoAugmenter.from_config(args.aug_type)
             q = Queue()
             process = Process(target=aug_process,
                               args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))

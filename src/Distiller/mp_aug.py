@@ -60,7 +60,7 @@ def aug_process(queue:Queue, examples, original_dataset, augmenter, args, tokeni
                 )
                 aug_examples = list(
                     tqdm(
-                        p.imap(annotate_, example_iter(examples), chunksize=32),
+                        p.imap(annotate_, example_iter(examples), chunksize=256),
                         total=int(len(examples) / 32) + 1,
                         desc="Data augmentation",
                         disable=False,
