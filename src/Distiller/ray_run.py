@@ -9,12 +9,12 @@ from ray import tune
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune import CLIReporter
 from configs import parse
-from src.Distiller.autoaug import AutoAugmenter
-from ..distiller import train
-from ..utils import cal_layer_mapping
-from ..transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering, AutoConfig, AutoTokenizer
+from autoaug import AutoAugmenter
+from distiller import train
+from utils import cal_layer_mapping
+from transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering, AutoConfig, AutoTokenizer
 from torch.multiprocessing import Queue, Process, set_start_method
-from ..mp_aug import aug_process
+from mp_aug import aug_process
 import boto3
 
 
@@ -127,11 +127,11 @@ def train_fn(config, args):
 def main(args):
     ray.init(address='auto', _redis_password='5241590000000000')
     search_space = {
-        "intermediate_strategy": tune.choice(["skip", "last", "EMD"]),
-        "kd_loss_type": tune.choice(["ce", "mse"]),
-        "intermediate_loss_type": tune.choice(["ce", "mse", "cos", "pkd", "nce"]),
-        "aug_type": tune.choice(["random", "contextual", "back_translation"]),
-        "mixup": tune.choice([True, False])}
+        "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),
+        "kd_loss_type": tune.grid_search(["ce", "mse"]),
+        "intermediate_loss_type": tune.grid_search(["ce", "mse", "cos", "pkd", "nce"]),
+        "aug_type": tune.grid_search(["random", "contextual", "back_translation"]),
+        "mixup": tune.grid_search([True, False])}
     scheduler = ASHAScheduler(
         metric="accuracy",
         mode="max",
@@ -159,13 +159,13 @@ if __name__ == "__main__":
         args.S_model_name_or_path = args.T_model_name_or_path
     if args.task_type in ["squad", "squad2"]:
         args.task_name = args.task_type
-        from ..evaluate import evaluate_squad as evaluate_func
-        from ..squad_preprocess import load_and_cache_examples
-        from ..adapters import BertForQAAdaptor as adaptor_func
+        from evaluate import evaluate_squad as evaluate_func
+        from squad_preprocess import load_and_cache_examples
+        from adapters import BertForQAAdaptor as adaptor_func
     elif args.task_type == "glue":
-        from ..evaluate import evaluate_glue as evaluate_func
-        from ..glue_preprocess import load_and_cache_examples
-        from ..adapters import BertForGLUEAdptor as adaptor_func
+        from evaluate import evaluate_glue as evaluate_func
+        from glue_preprocess import load_and_cache_examples
+        from adapters import BertForGLUEAdptor as adaptor_func
     logger = logging.getLogger(__name__)
     main(args)
 
