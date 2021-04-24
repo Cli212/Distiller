@@ -149,7 +149,6 @@ def main(args):
         config=search_space,
         scheduler=scheduler,
         progress_reporter=reporter)
-    train_fn(args)
 
 
 if __name__ == "__main__":
