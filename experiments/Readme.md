@@ -49,3 +49,12 @@ python ../src/Distiller/distiller.py -- \
 
 For the meaning of hyperparameters, see [configs.py](../src/Distiller/configs.py)
 
+At this time, we can run experiments on SQuAD and GLUE, if you want to try experiments on other baselines, first rewrite a preprocess function such as [glue_preprocess](../src/Distiller/glue_preprocess.py) , and then import them in [distiller.py](../src/Distiller/distiller.py)
+
+
+
+### To Dos
+
+- Implement  [MINE-alpha](https://arxiv.org/pdf/1801.04062.pdf) as a objective function. This objective function is used to measure cost between student hidden states and teacher hidden states. The implementation should be in [losses.py](src/Distiller/textbrewer/losses.py), and it accepts three parameters: student hidden states, teacher hidden states and a mask.
+- 
+

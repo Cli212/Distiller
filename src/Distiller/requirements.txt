@@ -18,3 +18,4 @@ pyemd
 sklearn
 fairseq
 fastBPE
+boto3

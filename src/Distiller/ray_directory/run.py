@@ -3,7 +3,9 @@ from ray import tune
 from ray.tune.schedulers import ASHAScheduler
 from configs import parse
 # from ..src.Distiller.utils import Logger
-from ..src.Distiller.distiller import main as train_fn
+from ..distiller import main as train_fn
+import boto3
+
 
 
 def main(args, config):

@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 task_dict = {'squad2': AutoModelForQuestionAnswering,
              'squad': AutoModelForQuestionAnswering,
              'glue': AutoModelForSequenceClassification,
-             'sequence_classification': AutoModelForTokenClassification}
+             'superglue': AutoModelForSequenceClassification}
 
 
 def set_seed(args):

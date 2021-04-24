@@ -5,6 +5,8 @@ import numpy as np
 import six
 from logging import handlers
 from scipy.special import logsumexp
+import os
+import boto3
 import re
 import json
 import string
@@ -537,4 +539,12 @@ def cal_params(vocab_size=30522, token_type=2, max_seqlen=512, num_layer=12, hid
     pooler_params = (hidden_size + 1) * hidden_size
     return embedding_params + num_layer * layer_params + pooler_params
 
+
+def uploadDirectory(path, bucketname="haoyu-nlp"):
+    session = boto3.Session(aws_access_key_id="AKIA237V3YQYPZMNHRNV",
+                            aws_secret_access_key="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")
+    s3 = session.resource('s3').Bucket(bucketname)
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            s3.upload_file(os.path.join(root, file), "experiments/"+os.path.join(root, file))
 
