@@ -41,6 +41,59 @@ class Logger(object):
         self.logger.addHandler(th)
 
 logger = Logger("all.log",level="debug").logger
+
+
+def cal_layer_mapping(args, t_config, s_config):
+    """
+    This function is used to calculate layer mapping of different mapping strategy
+    Strategy can be EMD, last or skip
+    """
+    matches = []
+    t_num_layers = t_config.num_hidden_layers
+    s_num_layers = s_config.num_hidden_layers
+    k = t_num_layers/s_num_layers
+    if args.intermediate_strategy and args.intermediate_strategy.lower() == "emd":
+        if args.intermediate_loss_type in ["cos", "nce", "pkd"]:
+            loss_type = args.intermediate_loss_type
+        elif args.intermediate_loss_type in ["ce", "mse"]:
+            loss_type = "hidden_" + args.intermediate_loss_type
+        else:
+            raise NotImplementedError
+        matches = {'layer_num_S':s_config.num_hidden_layers+1, 'layer_num_T':t_config.num_hidden_layers+1,  #number of hidden_states + embedding_layer
+                                          'feature':'hidden','loss':loss_type,
+                                          'weight':1.0,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size and args.intermediate_loss_type != "nce" else None}
+    else:
+        for feature in args.intermediate_features:
+            if args.intermediate_loss_type in ["cos", "nce", "pkd"]:
+                loss_type = args.intermediate_loss_type
+            elif args.intermediate_loss_type in ["ce", "mse"]:
+                loss_type = feature+"_"+args.intermediate_loss_type
+            else:
+                raise NotImplementedError
+            if args.intermediate_strategy == "skip":
+                if feature == "hidden":
+                    for i in range(s_num_layers+1):
+                        matches.append({'layer_T': int(i*k),'layer_S':i, 'feature':feature, 'loss':loss_type, 'weight':1,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size and args.intermediate_loss_type != "nce" else None})
+                elif feature == "attention":
+                    for i in range(s_num_layers):
+                        matches.append({'layer_T': int((i+1)*k-1), 'layer_S': i, 'feature':feature, 'loss':loss_type, 'weight':1})
+                else:
+                    continue
+            elif args.intermediate_strategy == "last":
+                if feature == "hidden":
+                    for i in range(s_num_layers+1):
+                        matches.append({'layer_T': int(t_num_layers-s_num_layers+i), 'layer_S': i, 'feature':feature, 'loss':loss_type, 'weight':1,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size and args.intermediate_loss_type != "nce" else None})
+                elif feature == "attention":
+                    for i in range(s_num_layers):
+                        matches.append({"layer_T": int(t_num_layers-s_num_layers+i),"layer_S":i, 'feature':feature, 'loss':loss_type, 'weight':1})
+                else:
+                    continue
+            else:
+                pass
+    return matches
+
+
+
 def write_predictions_squad(tokenizer, all_examples, all_features, all_results, n_best_size,
                              max_answer_length, do_lower_case, output_prediction_file,
                              output_nbest_file, output_null_log_odds_file, version_2_with_negative,
@@ -532,12 +585,15 @@ def merge_eval(main_eval, new_eval, prefix):
         main_eval["%s_%s" % (prefix, k)] = new_eval[k]
 
 
+
+
 def cal_params(vocab_size=30522, token_type=2, max_seqlen=512, num_layer=12, hidden_size=768, intermediate_size=3072):
     embedding_params = (vocab_size + max_seqlen + token_type + 2) * hidden_size
     layer_params = 4 * hidden_size * (hidden_size + 1) + 2 * hidden_size + (
                 intermediate_size + 1) * hidden_size + intermediate_size * (hidden_size + 1) + 2 * hidden_size
     pooler_params = (hidden_size + 1) * hidden_size
     return embedding_params + num_layer * layer_params + pooler_params
+
 
 
 def uploadDirectory(path, bucketname="haoyu-nlp"):

@@ -8,10 +8,10 @@ from ray import tune
 import numpy as np
 from configs import parse
 from autoaug import AutoAugmenter
-from utils import Logger
+from utils import Logger, cal_layer_mapping
 from mp_aug import aug_process
 from transformers import AutoConfig, AutoTokenizer
-from transformers import AutoModelForSequenceClassification, AutoModelForTokenClassification, AutoModelForQuestionAnswering
+from transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering
 from textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller, EMDDistiller
 import queue
 from torch.utils.data import DataLoader, RandomSampler
@@ -33,68 +33,12 @@ def set_seed(args):
     if args.n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
 
-def cal_layer_mapping(args, t_config, s_config):
-    matches = []
-    t_num_layers = t_config.num_hidden_layers
-    s_num_layers = s_config.num_hidden_layers
-    k = t_num_layers/s_num_layers
-    if args.intermediate_strategy and args.intermediate_strategy.lower() == "emd":
-        if args.intermediate_loss_type in ["cos", "nce", "pkd"]:
-            loss_type = args.intermediate_loss_type
-        elif args.intermediate_loss_type in ["ce", "mse"]:
-            loss_type = "hidden_" + args.intermediate_loss_type
-        else:
-            raise NotImplementedError
-        matches = {'layer_num_S':s_config.num_hidden_layers+1, 'layer_num_T':t_config.num_hidden_layers+1,  #number of hidden_states + embedding_layer
-                                          'feature':'hidden','loss':loss_type,
-                                          'weight':1.0,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size and args.intermediate_loss_type != "nce" else None}
-    else:
-        for feature in args.intermediate_features:
-            if args.intermediate_loss_type in ["cos", "nce", "pkd"]:
-                loss_type = args.intermediate_loss_type
-            elif args.intermediate_loss_type in ["ce", "mse"]:
-                loss_type = feature+"_"+args.intermediate_loss_type
-            else:
-                raise NotImplementedError
-            if args.intermediate_strategy == "skip":
-                if feature == "hidden":
-                    for i in range(s_num_layers+1):
-                        matches.append({'layer_T': int(i*k),'layer_S':i, 'feature':feature, 'loss':loss_type, 'weight':1,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size and args.intermediate_loss_type != "nce" else None})
-                elif feature == "attention":
-                    for i in range(s_num_layers):
-                        matches.append({'layer_T': int((i+1)*k-1), 'layer_S': i, 'feature':feature, 'loss':loss_type, 'weight':1})
-                else:
-                    continue
-            elif args.intermediate_strategy == "last":
-                if feature == "hidden":
-                    for i in range(s_num_layers+1):
-                        matches.append({'layer_T': int(t_num_layers-s_num_layers+i), 'layer_S': i, 'feature':feature, 'loss':loss_type, 'weight':1,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size and args.intermediate_loss_type != "nce" else None})
-                elif feature == "attention":
-                    for i in range(s_num_layers):
-                        matches.append({"layer_T": int(t_num_layers-s_num_layers+i),"layer_S":i, 'feature':feature, 'loss':loss_type, 'weight':1})
-                else:
-                    continue
-            else:
-                pass
-    return matches
-
 
 # class CustomDataLoader(DataLoader):
 
 
 def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=None, matches=None, predict_callback=None, q=None):
     """ Train the model """
-    if args.S_model_name_or_path is None:
-        args.S_model_name_or_path = args.T_model_name_or_path
-    if args.task_type in ["squad","squad2"]:
-        args.task_name = args.task_type
-        from evaluate import evaluate_squad as evaluate_func
-        from squad_preprocess import load_and_cache_examples
-        from adapters import BertForQAAdaptor as adaptor_func
-    elif args.task_type == "glue":
-        from evaluate import evaluate_glue as evaluate_func
-        from glue_preprocess import load_and_cache_examples
-        from adapters import BertForGLUEAdptor as adaptor_func
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     # train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
@@ -221,17 +165,6 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
 
 
 def main(args):
-    if args.S_model_name_or_path is None:
-        args.S_model_name_or_path = args.T_model_name_or_path
-    if args.task_type in ["squad","squad2"]:
-        args.task_name = args.task_type
-        from evaluate import evaluate_squad as evaluate_func
-        from squad_preprocess import load_and_cache_examples
-        from adapters import BertForQAAdaptor as adaptor_func
-    elif args.task_type == "glue":
-        from evaluate import evaluate_glue as evaluate_func
-        from glue_preprocess import load_and_cache_examples
-        from adapters import BertForGLUEAdptor as adaptor_func
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
@@ -395,16 +328,16 @@ def main(args):
 if __name__ == '__main__':
     args = parse()
     set_start_method('spawn')
-    # if args.S_model_name_or_path is None:
-    #     args.S_model_name_or_path = args.T_model_name_or_path
-    # if args.task_type in ["squad","squad2"]:
-    #     args.task_name = args.task_type
-    #     from evaluate import evaluate_squad as evaluate_func
-    #     from squad_preprocess import load_and_cache_examples
-    #     from adapters import BertForQAAdaptor as adaptor_func
-    # elif args.task_type == "glue":
-    #     from evaluate import evaluate_glue as evaluate_func
-    #     from glue_preprocess import load_and_cache_examples
-    #     from adapters import BertForGLUEAdptor as adaptor_func
-    # logger = Logger(f"{args.output_dir}/all.log", level="debug").logger
+    if args.S_model_name_or_path is None:
+        args.S_model_name_or_path = args.T_model_name_or_path
+    if args.task_type in ["squad","squad2"]:
+        args.task_name = args.task_type
+        from evaluate import evaluate_squad as evaluate_func
+        from squad_preprocess import load_and_cache_examples
+        from adapters import BertForQAAdaptor as adaptor_func
+    elif args.task_type == "glue":
+        from evaluate import evaluate_glue as evaluate_func
+        from glue_preprocess import load_and_cache_examples
+        from adapters import BertForGLUEAdptor as adaptor_func
+    logger = Logger(f"{args.output_dir}/all.log", level="debug").logger
     main(args)
