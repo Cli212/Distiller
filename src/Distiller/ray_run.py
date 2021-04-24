@@ -125,7 +125,6 @@ def train_fn(config, args):
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q)
 
 def main(args):
-    ray.init(address='auto', _redis_password='5241590000000000')
     search_space = {
         "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),
         "kd_loss_type": tune.grid_search(["ce", "mse"]),
@@ -152,6 +151,7 @@ def main(args):
 
 
 if __name__ == "__main__":
+    ray.init(address='auto', _redis_password='5241590000000000')
     args = parse()
     set_start_method('spawn')
     if args.S_model_name_or_path is None:
