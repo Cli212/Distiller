@@ -19,7 +19,7 @@ from torch.utils.data.distributed import DistributedSampler
 from transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
 from torch.multiprocessing import Queue, Process, set_start_method
 
-# logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 task_dict = {'squad2': AutoModelForQuestionAnswering,
              'squad': AutoModelForQuestionAnswering,
              'glue': AutoModelForSequenceClassification,
@@ -84,6 +84,18 @@ def cal_layer_mapping(args, t_config, s_config):
 
 def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=None, matches=None, predict_callback=None, q=None):
     """ Train the model """
+    if args.S_model_name_or_path is None:
+        args.S_model_name_or_path = args.T_model_name_or_path
+    if args.task_type in ["squad","squad2"]:
+        args.task_name = args.task_type
+        from evaluate import evaluate_squad as evaluate_func
+        from squad_preprocess import load_and_cache_examples
+        from adapters import BertForQAAdaptor as adaptor_func
+    elif args.task_type == "glue":
+        from evaluate import evaluate_glue as evaluate_func
+        from glue_preprocess import load_and_cache_examples
+        from adapters import BertForGLUEAdptor as adaptor_func
+
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     # train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
     # mix_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
@@ -209,6 +221,17 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
 
 
 def main(args):
+    if args.S_model_name_or_path is None:
+        args.S_model_name_or_path = args.T_model_name_or_path
+    if args.task_type in ["squad","squad2"]:
+        args.task_name = args.task_type
+        from evaluate import evaluate_squad as evaluate_func
+        from squad_preprocess import load_and_cache_examples
+        from adapters import BertForQAAdaptor as adaptor_func
+    elif args.task_type == "glue":
+        from evaluate import evaluate_glue as evaluate_func
+        from glue_preprocess import load_and_cache_examples
+        from adapters import BertForGLUEAdptor as adaptor_func
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
@@ -372,16 +395,16 @@ def main(args):
 if __name__ == '__main__':
     args = parse()
     set_start_method('spawn')
-    if args.S_model_name_or_path is None:
-        args.S_model_name_or_path = args.T_model_name_or_path
-    if args.task_type in ["squad","squad2"]:
-        args.task_name = args.task_type
-        from evaluate import evaluate_squad as evaluate_func
-        from squad_preprocess import convert_examples_to_features, load_and_cache_examples, DataProvider, MyDataset
-        from adapters import BertForQAAdaptor as adaptor_func
-    elif args.task_type == "glue":
-        from evaluate import evaluate_glue as evaluate_func
-        from glue_preprocess import convert_examples_to_features, load_and_cache_examples, DataProvider
-        from adapters import BertForGLUEAdptor as adaptor_func
-    logger = Logger(f"{args.output_dir}/all.log", level="debug").logger
+    # if args.S_model_name_or_path is None:
+    #     args.S_model_name_or_path = args.T_model_name_or_path
+    # if args.task_type in ["squad","squad2"]:
+    #     args.task_name = args.task_type
+    #     from evaluate import evaluate_squad as evaluate_func
+    #     from squad_preprocess import load_and_cache_examples
+    #     from adapters import BertForQAAdaptor as adaptor_func
+    # elif args.task_type == "glue":
+    #     from evaluate import evaluate_glue as evaluate_func
+    #     from glue_preprocess import load_and_cache_examples
+    #     from adapters import BertForGLUEAdptor as adaptor_func
+    # logger = Logger(f"{args.output_dir}/all.log", level="debug").logger
     main(args)
