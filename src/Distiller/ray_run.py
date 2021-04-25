@@ -32,7 +32,7 @@ def set_seed(args):
         torch.cuda.manual_seed_all(args.seed)
 
 
-def train_fn(config, args):
+def train_fn(config, args, checkpoint=None):
     # Set ray tune hyper parameters
     for k,v in config.items():
         args.k = v
