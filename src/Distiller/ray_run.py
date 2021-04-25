@@ -284,7 +284,6 @@ def main(args, gpus_per_trial=2):
         partial(train_fn, args=args),
         resources_per_trial={"cpu": 2, "gpu": gpus_per_trial},
         config=search_space,
-        num_samples=10,
         scheduler=scheduler,
         progress_reporter=reporter)
     best_trial = result.get_best_trial("loss", "min", "last")

@@ -20,7 +20,7 @@ task_name=mnli
 task_type=glue
 NAME=electra_tiny_lr${lr}e-4_e${ep}_${task_type}_${task_name}
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
-
+export PYTHONPATH=$(dirname $(pwd)):$PYTHONPATH
 gpu_nums=1
 
 mkdir -p $OUTPUT_DIR
