@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader, SequentialSampler
 from .utils import write_predictions_squad, get_raw_scores, apply_no_ans_threshold, make_eval_dict, merge_eval, find_all_best_thresh_v2
 import argparse
 import logging
-from glue_preprocess import glue_compute_metrics
+from .glue_preprocess import glue_compute_metrics
 logger = logging.getLogger(__name__ )
 def evaluate_squad(args, model, tokenizer, prefix="",write_prediction=False):
     from squad_preprocess import load_and_cache_examples

@@ -1,7 +1,7 @@
 import os
 import json
 from tqdm import tqdm
-from utils import Logger
+from .utils import Logger
 import torch
 from multiprocessing import Pool, cpu_count
 import numpy as np

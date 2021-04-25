@@ -163,7 +163,7 @@ def main(args, gpus_per_trial=2):
 
 
 if __name__ == "__main__":
-    ray.init(address='auto', _redis_password='5241590000000000')
+    # ray.init(address='auto', _redis_password='5241590000000000')
     args = parse()
     set_start_method('spawn')
     if args.S_model_name_or_path is None:

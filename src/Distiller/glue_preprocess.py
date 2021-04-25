@@ -25,7 +25,7 @@ from multiprocessing import cpu_count, Pool
 from enum import Enum
 from tqdm import tqdm
 from typing import List, Optional, Union
-from transformers import PreTrainedTokenizer
+from .transformers import PreTrainedTokenizer
 from .utils import Logger
 from torch.utils.data import Dataset, DataLoader, RandomSampler, SequentialSampler, TensorDataset, ConcatDataset
 from torch.utils.data.distributed import DistributedSampler
