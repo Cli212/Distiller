@@ -12,6 +12,16 @@ Code for experiements can be put in directory /src.
 
 You can do KD experiments now using our code [here](experiments/). We only support experiments on QA tasks now but I am very confident that we will support NER tasks soon.
 
+## Ray Tune
+
+To use [ray](https://docs.ray.io/en/master/index.html) cluster to run the experiments, first
+
+```shell
+pip install -e .
+```
+
+then go to [ray_directory](ray_directory) 
+
 ## Dataset
 
 For QA task, you can download SQuAD dataset by using gluon-nlp command:
