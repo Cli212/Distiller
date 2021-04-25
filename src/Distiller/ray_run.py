@@ -125,8 +125,7 @@ def train_fn(config, args):
             # process.join()
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q)
 
-def main(args):
-    gpus_per_trial = 8
+def main(args, gpus_per_trial=2):
     search_space = {
         "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),
         "kd_loss_type": tune.grid_search(["ce", "mse"]),
@@ -151,7 +150,7 @@ def main(args):
     # )
     result = tune.run(
         partial(train_fn, args=args),
-        resources_per_trial={"cpu": 8, "gpu": gpus_per_trial},
+        resources_per_trial={"cpu": 2, "gpu": gpus_per_trial},
         config=search_space,
         num_samples=10,
         scheduler=scheduler,
