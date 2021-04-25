@@ -296,6 +296,8 @@ def main(args, gpus_per_trial=2):
 
 
 if __name__ == "__main__":
+    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    os.environ["PYTHONPATH"] = parent_dir + ":" + os.environ.get("PYTHONPATH", "")
     ray.init(address='auto', _redis_password='5241590000000000')
     args = parse()
     set_start_method('spawn')
