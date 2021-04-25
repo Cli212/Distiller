@@ -145,7 +145,7 @@ def main(args):
         metric_columns=["accuracy"])
     from functools import partial
     distributed_train_cifar = DistributedTrainableCreator(
-        partial(train_fn(), args=args),
+        partial(train_fn, args=args),
         use_gpu=True,
         num_workers=2,  # number of parallel workers to use
         num_cpus_per_worker=8
