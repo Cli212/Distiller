@@ -170,13 +170,13 @@ if __name__ == "__main__":
         args.S_model_name_or_path = args.T_model_name_or_path
     if args.task_type in ["squad", "squad2"]:
         args.task_name = args.task_type
-        from evaluate import evaluate_squad as evaluate_func
-        from squad_preprocess import load_and_cache_examples
-        from adapters import BertForQAAdaptor as adaptor_func
+        from Distiller.evaluate import evaluate_squad as evaluate_func
+        from Distiller.squad_preprocess import load_and_cache_examples
+        from Distiller.adapters import BertForQAAdaptor as adaptor_func
     elif args.task_type == "glue":
-        from evaluate import evaluate_glue as evaluate_func
-        from glue_preprocess import load_and_cache_examples
-        from adapters import BertForGLUEAdptor as adaptor_func
+        from Distiller.evaluate import evaluate_glue as evaluate_func
+        from Distiller.glue_preprocess import load_and_cache_examples
+        from Distiller.adapters import BertForGLUEAdptor as adaptor_func
     logger = logging.getLogger(__name__)
     main(args)
 
