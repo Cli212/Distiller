@@ -7,7 +7,7 @@ import json
 import logging
 from ray import tune
 from ray.tune.schedulers import ASHAScheduler
-from ray.tune.integration.torch import DistributedTrainableCreator
+# from ray.tune.integration.torch import DistributedTrainableCreator
 from ray.tune import CLIReporter
 from configs import parse
 from autoaug import AutoAugmenter
@@ -32,7 +32,7 @@ def set_seed(args):
         torch.cuda.manual_seed_all(args.seed)
 
 
-def train_fn(config, args, checkpoint=None):
+def train_fn(config, args):
     # Set ray tune hyper parameters
     for k,v in config.items():
         args.k = v
@@ -144,13 +144,13 @@ def main(args):
         # parameter_columns=["l1", "l2", "lr", "batch_size"],
         metric_columns=["accuracy"])
     from functools import partial
-    distributed_train_cifar = DistributedTrainableCreator(
-        partial(train_fn, args=args),
-        num_gpus_per_worker=10,
-        num_cpus_per_worker=8
-    )
+    # distributed_train_cifar = DistributedTrainableCreator(
+    #     partial(train_fn, args=args),
+    #     num_gpus_per_worker=10,
+    #     num_cpus_per_worker=8
+    # )
     result = tune.run(
-        distributed_train_cifar,
+        partial(train_fn, args=args),
         resources_per_trial={"cpu": 8, "gpu": gpus_per_trial},
         config=search_space,
         num_samples=10,
