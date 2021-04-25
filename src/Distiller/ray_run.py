@@ -32,7 +32,7 @@ def set_seed(args):
         torch.cuda.manual_seed_all(args.seed)
 
 
-def train_fn(config, args, checkpoint_dir=None):
+def train_fn(config, args):
     # Set ray tune hyper parameters
     for k,v in config.items():
         args.k = v
@@ -150,7 +150,7 @@ def main(args):
         num_cpus_per_worker=8
     )
     result = tune.run(
-        partial(distributed_train_cifar, args=args),
+        distributed_train_cifar,
         resources_per_trial={"cpu": 8, "gpu": gpus_per_trial},
         config=search_space,
         num_samples=10,
