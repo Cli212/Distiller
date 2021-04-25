@@ -7,6 +7,7 @@ import json
 import logging
 from ray import tune
 from ray.tune.schedulers import ASHAScheduler
+from ray.util.sgd.integration.torch import DistributedTrainableCreator
 from ray.tune import CLIReporter
 from configs import parse
 from autoaug import AutoAugmenter
@@ -125,6 +126,7 @@ def train_fn(config, args):
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q)
 
 def main(args):
+    gpus_per_trial = 8
     search_space = {
         "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),
         "kd_loss_type": tune.grid_search(["ce", "mse"]),
@@ -142,12 +144,25 @@ def main(args):
         # parameter_columns=["l1", "l2", "lr", "batch_size"],
         metric_columns=["accuracy"])
     from functools import partial
+    distributed_train_cifar = DistributedTrainableCreator(
+        partial(train_fn(), args=args),
+        use_gpu=True,
+        num_workers=2,  # number of parallel workers to use
+        num_cpus_per_worker=8
+    )
     result = tune.run(
-        partial(train_fn, args=args),
-        resources_per_trial={"cpu": 8, "gpu": 10},
+        partial(distributed_train_cifar, args=args),
+        resources_per_trial={"cpu": 8, "gpu": gpus_per_trial},
         config=search_space,
+        num_samples=10,
         scheduler=scheduler,
         progress_reporter=reporter)
+    best_trial = result.get_best_trial("loss", "min", "last")
+    print("Best trial config: {}".format(best_trial.config))
+    # print("Best trial final validation loss: {}".format(
+    #     best_trial.last_result["loss"]))
+    print("Best trial final validation accuracy: {}".format(
+        best_trial.last_result["accuracy"]))
 
 
 if __name__ == "__main__":

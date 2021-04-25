@@ -960,9 +960,9 @@ def glue_compute_metrics(task_name, preds, labels):
     elif task_name == "qqp":
         return acc_and_f1(preds, labels)
     elif task_name == "mnli":
-        return {"mnli/acc": simple_accuracy(preds, labels)}
+        return {"mnli/acc": simple_accuracy(preds, labels), "acc":simple_accuracy(preds, labels)}
     elif task_name == "mnli-mm":
-        return {"mnli-mm/acc": simple_accuracy(preds, labels)}
+        return {"mnli-mm/acc": simple_accuracy(preds, labels), "acc":simple_accuracy(preds, labels)}
     elif task_name == "qnli":
         return {"acc": simple_accuracy(preds, labels)}
     elif task_name == "rte":

@@ -233,7 +233,10 @@ def main(args):
             # else:
             #     return evaluation_result
             model.train()
-            tune.report(iterations=step, accuracy=evaluation_result['acc'])
+            try:
+                tune.report(iterations=step, accuracy=evaluation_result['acc'])
+            except Exception as e:
+                logger.warning(e)
             return list(evaluation_result.values())[0]
         else:
             return None
