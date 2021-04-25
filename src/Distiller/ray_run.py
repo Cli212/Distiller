@@ -7,7 +7,7 @@ import json
 import logging
 from ray import tune
 from ray.tune.schedulers import ASHAScheduler
-from ray.util.sgd.integration.torch import DistributedTrainableCreator
+from ray.tune.integration.torch import DistributedTrainableCreator
 from ray.tune import CLIReporter
 from configs import parse
 from autoaug import AutoAugmenter
