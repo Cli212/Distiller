@@ -2,7 +2,7 @@ import random
 import numpy as np
 from multiprocessing.dummy import Pool as ThreadPool
 
-from nlpaug.util import Action, Method, WarningException, WarningName, WarningCode, WarningMessage
+from .util import Action, Method, WarningException, WarningName, WarningCode, WarningMessage
 
 
 class Augmenter:

@@ -1,8 +1,8 @@
-import nlpaug.augmenter.char as nac
-import nlpaug.augmenter.word as naw
-import nlpaug.flow as naf
-from nlpaug.util.audio.loader import AudioLoader
-from nlpaug.util import Action
+from .nlpaug.augmenter import char as nac
+from .nlpaug.augmenter import word as naw
+from .nlpaug import flow as naf
+from .nlpaug.util.audio.loader import AudioLoader
+from .nlpaug.util import Action
 import json
 
 class AutoAugmenter:

@@ -6,17 +6,17 @@ import logging
 import random
 from ray import tune
 import numpy as np
-from configs import parse
-from autoaug import AutoAugmenter
-from utils import Logger, cal_layer_mapping
-from mp_aug import aug_process
-from transformers import AutoConfig, AutoTokenizer
-from transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering
-from textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller, EMDDistiller
+from .configs import parse
+from .autoaug import AutoAugmenter
+from .utils import Logger, cal_layer_mapping
+from .mp_aug import aug_process
+from .transformers import AutoConfig, AutoTokenizer
+from .transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering
+from .textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller, EMDDistiller
 import queue
 from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
-from transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
+from .transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
 from torch.multiprocessing import Queue, Process, set_start_method
 
 logger = logging.getLogger(__name__)

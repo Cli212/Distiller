@@ -5,7 +5,7 @@ from utils import Logger
 import torch
 from multiprocessing import Pool, cpu_count
 import numpy as np
-from transformers.models.bert.tokenization_bert import whitespace_tokenize
+from .transformers.models.bert.tokenization_bert import whitespace_tokenize
 from torch.utils.data import Dataset, DataLoader, RandomSampler, SequentialSampler, TensorDataset, ConcatDataset
 from torch.utils.data.distributed import DistributedSampler
 # This file defines data preprocessing methods for various datasets

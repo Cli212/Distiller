@@ -25,7 +25,7 @@ gpu_nums=1
 
 mkdir -p $OUTPUT_DIR
 
-python ray_run.py \
+python run.py \
     --task_type ${task_type} \
     --task_name ${task_name} \
     --data_dir $DATA_ROOT_DIR \

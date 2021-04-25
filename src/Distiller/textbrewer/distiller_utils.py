@@ -14,7 +14,7 @@ from .presets import *
 from .configurations import TrainingConfig, DistillationConfig
 import random
 from .compatibility import mask_dtype, is_apex_available
-from utils import Logger
+from Distiller.utils import Logger
 has_apex = is_apex_available()
 if has_apex:
     from apex import amp

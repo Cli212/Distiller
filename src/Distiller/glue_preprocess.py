@@ -26,7 +26,7 @@ from enum import Enum
 from tqdm import tqdm
 from typing import List, Optional, Union
 from transformers import PreTrainedTokenizer
-from utils import Logger
+from .utils import Logger
 from torch.utils.data import Dataset, DataLoader, RandomSampler, SequentialSampler, TensorDataset, ConcatDataset
 from torch.utils.data.distributed import DistributedSampler
 from sklearn.metrics import f1_score, matthews_corrcoef
