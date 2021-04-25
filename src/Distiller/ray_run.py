@@ -11,9 +11,14 @@ from ray.tune.schedulers import ASHAScheduler
 from ray.tune import CLIReporter
 from configs import parse
 from autoaug import AutoAugmenter
-from distiller import train
+# from distiller import train
 from utils import cal_layer_mapping
 from transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering, AutoConfig, AutoTokenizer
+from textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller, EMDDistiller
+import queue
+from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data.distributed import DistributedSampler
+from transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
 from torch.multiprocessing import Queue, Process, set_start_method
 from mp_aug import aug_process
 import boto3
@@ -30,6 +35,133 @@ def set_seed(args):
     torch.manual_seed(args.seed)
     if args.n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
+
+
+def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=None, matches=None, predict_callback=None, q=None):
+    """ Train the model """
+
+    args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
+    # train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    # mix_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    # train_dataloader = CustomDataLoader(train_dataset, examples, args=args, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn, tokenizer=tokenizer, augmenter=augmenter)
+    # train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
+    # def collate_fn(batch):
+    #     return [({i:k[0] for i,k in piece.items()}) for piece in batch], [({i:k[0] for i,k in piece.items()}) for piece in batch]
+    if augmenter:
+        QUEUE_LIMIT = 60
+        count = 0
+        while count<QUEUE_LIMIT:
+            try:
+                count+=1
+                train_dataset = q.get(timeout=60)
+                break
+            except queue.Empty:
+                logger.info("Waiting for data augmentation process to return data")
+        # train_dataloader = DataProvider(train_dataset, examples, args, tokenizer, augmenter,s_tokenizer,s_dataset)
+
+    # else:
+    #     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    #     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
+    # mix_dataloader = DataLoader(train_dataset, sampler=mix_sampler,
+    #                             batch_size=args.train_batch_size) if args.mixup else None
+    train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
+    if args.max_steps > 0:
+        t_total = args.max_steps
+        args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
+    else:
+        t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
+        # t_total =
+    # Prepare optimizer and schedule (linear warmup and decay)
+    no_decay = ["bias", "LayerNorm.weight"]
+    optimizer_grouped_parameters = [
+        {"params": [p for n, p in s_model.named_parameters() if not any(nd in n for nd in no_decay)],
+         "weight_decay": args.weight_decay},
+        {"params": [p for n, p in s_model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0}
+    ]
+    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    scheduler_class = get_linear_schedule_with_warmup
+    args.warmup_steps = int(t_total * args.warmup_proportion)
+    scheduler_args = {'num_warmup_steps': args.warmup_steps, 'num_training_steps': t_total}
+    # if args.fp16:
+    #     try:
+    #         from apex import amp
+    #     except ImportError:
+    #         raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
+    #     s_model, optimizer = amp.initialize(s_model, optimizer, opt_level=args.fp16_opt_level)
+
+    # multi-gpu training (should be after apex fp16 initialization)
+    if args.n_gpu > 1 and args.local_rank == -1:
+        t_model = torch.nn.DataParallel(t_model)
+        s_model = torch.nn.DataParallel(s_model)
+
+    # Distributed training (should be after apex fp16 initialization)
+    if args.local_rank != -1:
+        s_model = torch.nn.parallel.DistributedDataParallel(s_model, device_ids=[args.local_rank],
+                                                          output_device=args.local_rank,
+                                                          find_unused_parameters=True)
+        t_model = torch.nn.parallel.DistributedDataParallel(t_model, device_ids=[args.local_rank],
+                                                            output_device=args.local_rank,
+                                                            find_unused_parameters=True)
+    actual_batch_size = args.per_gpu_train_batch_size
+    num_train_steps = len(train_dataloader) // args.gradient_accumulation_steps * actual_batch_size
+    if augmenter:
+        actual_batch_size *= 2
+    if args.mixup:
+        actual_batch_size *= 2
+
+    # Train!
+    logger.info("***** Running training *****")
+    logger.info("  Num examples = %d", len(train_dataset))
+    logger.info("  Num Epochs = %d", args.num_train_epochs)
+    logger.info("  Instantaneous batch size per GPU = %d", actual_batch_size)
+    logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d",
+                actual_batch_size * args.gradient_accumulation_steps * (
+                    torch.distributed.get_world_size() if args.local_rank != -1 else 1))
+    logger.info("  Actual train batch size (w. mixup & data augmentation) = %d", actual_batch_size)
+    logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
+    logger.info("  Total optimization steps = %d", t_total)
+    if args.train:
+        if args.intermediate_strategy and args.intermediate_strategy.lower() == "emd":
+            distill_config = DistillationConfig(
+                temperature=args.temperature,
+                kd_loss_weight=args.kd_loss_weight,
+                kd_loss_type=args.kd_loss_type)
+        else:
+            # intermediate_matches = matches
+            # if args.intermediate_strategy == "skip":
+            #     intermediate_matches = []
+            #     for match in matches:
+            #         intermediate_matches += matches[match]
+            logger.info(f"{matches}")
+            distill_config = DistillationConfig(
+                temperature=args.temperature,
+                intermediate_matches=matches,
+                kd_loss_weight=args.kd_loss_weight,
+                kd_loss_type=args.kd_loss_type)
+        train_config = TrainingConfig(gradient_accumulation_steps=args.gradient_accumulation_steps, device=args.device,
+                                      log_dir=os.path.join(args.output_dir, "log"), output_dir=args.output_dir,
+                                      fp16=args.fp16, mixup=args.mixup, local_rank=args.local_rank,
+                                      task_type=args.task_type, q=q)
+        adaptor_T = adaptor_func
+        adaptor_S = adaptor_func
+        if args.intermediate_strategy == "EMD":
+            distiller = EMDDistiller(train_config=train_config,
+                                     distill_config=distill_config,
+                                     model_T=t_model, model_S=s_model,
+                                     adaptor_T=adaptor_T,
+                                     adaptor_S=adaptor_S,
+                                     emd=matches)
+        else:
+            distiller = GeneralDistiller(train_config, distill_config, t_model, s_model, adaptor_T, adaptor_S, )
+        with distiller:
+            distiller.train(optimizer, scheduler_class=scheduler_class, scheduler_args=scheduler_args, dataloader=train_dataloader,
+                            num_epochs=args.num_train_epochs, callback=predict_callback,max_grad_norm=args.max_grad_norm)
+            # distiller.train(optimizer,train_dataloader,args.num_train_epochs,
+            #                 scheduler_class=scheduler_class, scheduler_args=scheduler_args,
+            #                 max_grad_norm=1.0, callback=predict_callback, mixup_value=args.mixup_value,
+            #                 mix_dataloader=mix_dataloader, local_rank=args.local_rank)
+    return
 
 
 def train_fn(config, args):
