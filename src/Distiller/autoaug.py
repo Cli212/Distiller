@@ -1,33 +1,69 @@
-from .nlpaug.augmenter import char as nac
-from .nlpaug.augmenter import word as naw
-from .nlpaug import flow as naf
-from .nlpaug.util.audio.loader import AudioLoader
-from .nlpaug.util import Action
+from nlpaug.augmenter import char as nac
+from nlpaug.augmenter import word as naw
+from nlpaug import flow as naf
+from nlpaug.util.audio.loader import AudioLoader
+from nlpaug.util import Action
+import numpy as np
 import json
 
 class AutoAugmenter:
-    def __init__(self, aug_args, aug_type):
+    def __init__(self, aug_args):
         augmenter_table = {"contextual": naw.ContextualWordEmbsAug,
                            "random": naw.RandomWordAug,
                            "back_translation": naw.BackTranslationAug}
-        # self.augs = []
-        # for i in aug_args:
-        #     self.augs.append(augmenter_table.get(aug_type)(**i))
-        self.aug = augmenter_table.get(aug_type)(**aug_args)
+        self.augs = []
+        for i in aug_args:
+            if i:
+                self.augs.append(augmenter_table.get(i.pop("aug_type"))(**i))
+        # self.aug = augmenter_table.get(aug_type)(**aug_args)
 
     @classmethod
     def from_config(cls, aug_type):
         augmenter_config_path = f"{aug_type}_augmenter_config.json"
         with open(augmenter_config_path) as f:
             aug_args = json.load(f)
-        return cls(aug_args, aug_type)
+        aug_args["aug_type"] = aug_type
+        return cls(aug_args)
+
+    @classmethod
+    def init_pipeline(cls, p=None):
+        config_list = [{
+          "aug_type": "contextual",
+          "model_type": "distilbert",
+          "top_k": 15,
+          "aug_min": 10,
+          "aug_max": 25,
+          "aug_p": 0.5,
+          "device": "cpu"
+            },{
+            "aug_type": "back_translation",
+            "from_model_name": "transformer.wmt18.en-de",
+            "from_model_checkpt": "wmt18.model1.pt",
+            "to_model_name": "transformer.wmt19.de-en",
+            "to_model_checkpt": "model1.pt"
+        },{
+        "aug_type": "random",
+        "action": "swap",
+        "aug_min": 3,
+        "aug_max": 10
+    },None
+        ]
+        selected = []
+        aug_args = []
+        for i in np.random.choice(4,3,p=p):
+            if i not in selected:
+                selected.append(i)
+                aug_args.append(config_list[i])
+        return cls(aug_args)
+
 
     def augment(self, data):
         # result = []
-        # for aug in self.augs:
-        #     result.extend(aug.augment(data))
-        return self.aug.augment(data)
+        for aug in self.augs:
+            data = aug.augment(data)
+        return data
+        # return self.aug.augment(data)
 
     def __len__(self):
-        # return len(self.augs)
-        return 1
+        return len(self.augs)
+        # return 1
