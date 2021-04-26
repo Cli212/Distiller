@@ -172,11 +172,9 @@ if __name__ == "__main__":
         args.task_name = args.task_type
         from Distiller.evaluate import evaluate_squad as evaluate_func
         from Distiller.squad_preprocess import load_and_cache_examples
-        from Distiller.adapters import BertForQAAdaptor as adaptor_func
     elif args.task_type == "glue":
         from Distiller.evaluate import evaluate_glue as evaluate_func
         from Distiller.glue_preprocess import load_and_cache_examples
-        from Distiller.adapters import BertForGLUEAdptor as adaptor_func
     logger = logging.getLogger(__name__)
     main(args)
 
