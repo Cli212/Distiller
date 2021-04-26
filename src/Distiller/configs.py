@@ -36,6 +36,7 @@ def parse():
                         help="Total number of training epochs to perform.")
     parser.add_argument("--augmenter_config_path", type=str, default=None)
     parser.add_argument("--aug_type", type=str, default=None, choices=["random","contextual","back_translation"])
+    parser.add_argument("--aug_pipeline", action="store_true")
     parser.add_argument("--layer_mapping_strategy", default='skip', choices=["skip", "first", "last"])
     parser.add_argument("--random_student", action="store_true", help="If true, the student model will initiate "
                                                                       "randomly")

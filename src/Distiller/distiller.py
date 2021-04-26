@@ -267,6 +267,15 @@ def main(args):
                               args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
             process.start()
             # process.join()
+        if args.aug_pipeline:
+            augmenter = AutoAugmenter.init_pipeline()
+            if len(augmenter):
+                args.augs = augmenter.aug_names
+                q = Queue()
+                process = Process(target=aug_process,
+                                  args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
+                process.start()
+
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q)
         # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
         # p.start()

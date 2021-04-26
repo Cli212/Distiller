@@ -12,9 +12,12 @@ class AutoAugmenter:
                            "random": naw.RandomWordAug,
                            "back_translation": naw.BackTranslationAug}
         self.augs = []
+        self.aug_names = []
         for i in aug_args:
             if i:
-                self.augs.append(augmenter_table.get(i.pop("aug_type"))(**i))
+                name = i.pop("aug_type")
+                self.aug_names.append(name)
+                self.augs.append(augmenter_table.get(name)(**i))
         # self.aug = augmenter_table.get(aug_type)(**aug_args)
 
     @classmethod
@@ -30,7 +33,7 @@ class AutoAugmenter:
         config_list = [{
           "aug_type": "contextual",
           "model_type": "distilbert",
-          "top_k": 15,
+          "top_k": 100,
           "aug_min": 10,
           "aug_max": 25,
           "aug_p": 0.5,
