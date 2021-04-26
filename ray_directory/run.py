@@ -125,7 +125,7 @@ def train_fn(config, args):
             # process.join()
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q)
 
-def main(args, gpus_per_trial=2):
+def main(args, gpus_per_trial=4):
     search_space = {
         "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),
         "kd_loss_type": tune.grid_search(["ce", "mse"]),
