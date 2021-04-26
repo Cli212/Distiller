@@ -145,9 +145,9 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                                       task_type=args.task_type, q=q)
         if args.task_type in ["squad", "squad2"]:
             args.task_name = args.task_type
-            from adapters import BertForQAAdaptor as adaptor_func
+            from .adapters import BertForQAAdaptor as adaptor_func
         elif args.task_type == "glue":
-            from adapters import BertForGLUEAdptor as adaptor_func
+            from .adapters import BertForGLUEAdptor as adaptor_func
         adaptor_T = adaptor_func
         adaptor_S = adaptor_func
         if args.intermediate_strategy == "EMD":
