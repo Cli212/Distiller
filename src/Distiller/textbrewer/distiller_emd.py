@@ -190,7 +190,12 @@ class EMDDistiller(BasicDistiller):
             total_loss += total_hl_loss * self.d_config.hard_label_weight
             losses_dict['unweighted_hard_label_loss'] = total_hl_loss
         if 'loss' in results_S:
-            losses_dict['unweighted_hard_label_loss'] = results_S['loss']
+            total_hl_loss = 0
+            for loss in results_S['loss']:
+                # in case of multi-GPU
+                total_hl_loss += loss.mean()
+            total_loss += total_hl_loss * self.d_config.hard_label_weight
+            losses_dict['unweighted_hard_label_loss'] = total_hl_loss
         return total_loss, losses_dict
 
 
