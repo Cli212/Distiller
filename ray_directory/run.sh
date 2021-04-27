@@ -31,6 +31,7 @@ python run.py \
     --S_model_name_or_path $STUDENT_DIR \
     --output_dir $OUTPUT_DIR \
     --max_seq_length ${length} \
+    --intermediate_feature hidden \
     --train \
     --eval \
     --doc_stride 128 \

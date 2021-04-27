@@ -27,7 +27,7 @@ gpu_nums=4
 #export CUDA_VISIBLE_DEVICES=0
 mkdir -p $OUTPUT_DIR
 
-python -m torch.distributed.launch --nproc_per_node=${gpu_nums} ../src/Distiller/distiller.py -- \
+python -m torch.distributed.launch --nproc_per_node=${gpu_nums} distiller.py -- \
     --task_type ${task_type} \
     --task_name ${task_name} \
     --data_dir $DATA_ROOT_DIR \
