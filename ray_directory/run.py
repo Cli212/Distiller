@@ -452,9 +452,7 @@ def main(args, gpus_per_trial=4):
     search_space = {
         "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),
         "kd_loss_type": tune.grid_search(["ce", "mse"]),
-        "intermediate_loss_type": tune.grid_search(["ce", "mse", "cos", "pkd", "nce"]),
-        "aug_pipeline": tune.grid_search([True, False]),
-        "mixup": tune.grid_search([True, False])}
+        "intermediate_loss_type": tune.grid_search(["ce", "mse", "cos", "pkd", "nce"])}
     scheduler = ASHAScheduler(
         metric="accuracy",
         mode="max",
@@ -473,11 +471,11 @@ def main(args, gpus_per_trial=4):
     # )
     result = tune.run(
         partial(remote_fn, args=args),
-        resources_per_trial={"cpu": 2, "gpu": gpus_per_trial},
+        resources_per_trial={"cpu": 8, "gpu": gpus_per_trial},
         config=search_space,
         scheduler=scheduler,
         progress_reporter=reporter)
-    best_trial = result.get_best_trial("loss", "min", "last")
+    best_trial = result.get_best_trial("accuracy", "max", "last")
     print("Best trial config: {}".format(best_trial.config))
     # print("Best trial final validation loss: {}".format(
     #     best_trial.last_result["loss"]))
