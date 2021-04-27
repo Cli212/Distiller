@@ -12,7 +12,7 @@ setup(
     author = "test",
     author_email = "test@gmail.com",
 
-    packages=find_packages("src"),
+    packages=["Distiller"],
     package_dir={'': 'src'},
     include_package_data = True,
     platforms = "any",
