@@ -141,7 +141,7 @@ def _squad_evaluate(args, tokenizer, eval_examples, eval_features, all_results, 
 
 
 def evaluate_glue(args, model, tokenizer, prefix="",write_prediction=False):
-    from glue_preprocess import load_and_cache_examples
+    from .glue_preprocess import load_and_cache_examples
     dataset, s_dataset, features, s_features, examples = load_and_cache_examples(args, tokenizer, mode="dev",
                                                                                  return_examples=True)
 

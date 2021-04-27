@@ -48,6 +48,8 @@ class BasicDistiller(AbstractDistiller):
             self.tb_writer.add_scalar('scalar/total_loss', cpu_total_loss, writer_step)
             if losses_dict is not None:
                 for name, loss in losses_dict.items():
+                    logger.info(loss)
+                    print(loss)
                     cpu_loss = loss.cpu().item()
                     self.tb_writer.add_scalar(f"scalar/{name}", cpu_loss, writer_step)
 

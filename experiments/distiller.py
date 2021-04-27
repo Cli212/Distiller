@@ -356,5 +356,6 @@ if __name__ == '__main__':
         from Distiller.evaluate import evaluate_glue as evaluate_func
         from Distiller.glue_preprocess import load_and_cache_examples
         from Distiller.adapters import BertForGLUEAdptor as adaptor_func
-    logger = Logger(f"{args.output_dir}/all.log", level="debug").logger
+    # logger = Logger(f"{args.output_dir}/all.log", level="debug").logger
+    logger = logging.getLogger(__name__)
     main(args)

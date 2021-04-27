@@ -16,6 +16,8 @@ And then you need to install the dependencies by running:
 pip3 install -r ../src/Distiller/requirements.txt
 ```
 
+Remember to install torch which is compatible with your CUDA version!
+
 Then you can launch the experiment by:
 
 ```shell
