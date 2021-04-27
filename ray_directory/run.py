@@ -452,7 +452,7 @@ def main(args, gpus_per_trial=4):
     search_space = {
         "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),
         "kd_loss_type": tune.grid_search(["ce", "mse"]),
-        "intermediate_loss_type": tune.grid_search(["ce", "mse", "cos", "pkd", "nce"])}
+        "intermediate_loss_type": tune.grid_search(["ce", "mse", "cos", "pkd"])}
     scheduler = ASHAScheduler(
         metric="accuracy",
         mode="max",
