@@ -10,17 +10,17 @@ import numpy as np
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler
 
-from src.Distiller.configs import parse
-from src.Distiller.autoaug import AutoAugmenter
-from src.Distiller.utils import Logger, cal_layer_mapping
-from src.Distiller.mp_aug import aug_process
-from src.Distiller.transformers import AutoConfig, AutoTokenizer
-from src.Distiller.transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering
-from src.Distiller.textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller, EMDDistiller
+from Distiller.configs import parse
+from Distiller.autoaug import AutoAugmenter
+from Distiller.utils import Logger, cal_layer_mapping
+from Distiller.mp_aug import aug_process
+from Distiller.transformers import AutoConfig, AutoTokenizer
+from Distiller.transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering
+from Distiller.textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller, EMDDistiller
 import queue
 from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
-from src.Distiller.transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
+from Distiller.transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
 from torch.multiprocessing import Queue, Process, set_start_method
 
 logger = logging.getLogger(__name__)
@@ -149,9 +149,9 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                                       task_type=args.task_type, q=q)
         if args.task_type in ["squad", "squad2"]:
             args.task_name = args.task_type
-            from src.Distiller.adapters import BertForQAAdaptor as adaptor_func
+            from Distiller.adapters import BertForQAAdaptor as adaptor_func
         elif args.task_type == "glue":
-            from src.Distiller.adapters import BertForGLUEAdptor as adaptor_func
+            from Distiller.adapters import BertForGLUEAdptor as adaptor_func
         adaptor_T = adaptor_func
         adaptor_S = adaptor_func
         if args.intermediate_strategy == "EMD":
@@ -495,11 +495,11 @@ if __name__ == '__main__':
         args.S_model_name_or_path = args.T_model_name_or_path
     if args.task_type in ["squad", "squad2"]:
         args.task_name = args.task_type
-        from src.Distiller.evaluate import evaluate_squad as evaluate_func
-        from src.Distiller.squad_preprocess import load_and_cache_examples
+        from Distiller.evaluate import evaluate_squad as evaluate_func
+        from Distiller.squad_preprocess import load_and_cache_examples
     elif args.task_type == "glue":
-        from src.Distiller.evaluate import evaluate_glue as evaluate_func
-        from src.Distiller.glue_preprocess import load_and_cache_examples
+        from Distiller.evaluate import evaluate_glue as evaluate_func
+        from Distiller.glue_preprocess import load_and_cache_examples
     logger = logging.getLogger(__name__)
     main(args)
 
