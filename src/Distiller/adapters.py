@@ -1,5 +1,3 @@
-
-
 def BertForQAAdaptor(batch, model_outputs, no_mask=False, no_logits=False):
     dict_obj = {'hidden':  model_outputs.hidden_states, 'attention': model_outputs.attentions,"loss":model_outputs.loss}
     if no_mask is False:

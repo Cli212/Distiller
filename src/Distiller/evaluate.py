@@ -207,6 +207,3 @@ def evaluate_glue(args, model, tokenizer, prefix="",write_prediction=False):
     logger.info(f"step {prefix}: {eval_metric}")
     return eval_metric
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--directory", type=str, required=True, help="Directory of checkpoints")
