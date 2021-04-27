@@ -22,8 +22,8 @@ NAME=electra_tiny_lr${lr}e-4_e${ep}_${task_type}_${task_name}
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
 
 mkdir -p $OUTPUT_DIR
-
-python run.py \
+gpu_nums=4
+python -m torch.distributed.launch --nproc_per_node=${gpu_nums} run.py \
     --task_type ${task_type} \
     --task_name ${task_name} \
     --data_dir $DATA_ROOT_DIR \
