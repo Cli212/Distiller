@@ -1,4 +1,4 @@
- TEACHER_DIR=howey/electra-base-mnli
+TEACHER_DIR=howey/electra-base-mnli
 STUDENT_DIR=huawei-noah/TinyBERT_General_4L_312D
 DATA_ROOT_DIR=/home/ray/Distillation_QA_benchmark/datasets/glue_data/MNLI
 OUTPUT_ROOT_DIR=output-student
@@ -20,8 +20,6 @@ task_name=mnli
 task_type=glue
 NAME=electra_tiny_lr${lr}e-4_e${ep}_${task_type}_${task_name}
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
-export PYTHONPATH=$(dirname $(pwd)):$PYTHONPATH
-gpu_nums=1
 
 mkdir -p $OUTPUT_DIR
 

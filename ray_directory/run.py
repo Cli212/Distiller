@@ -173,16 +173,6 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     return
 
 
-
-def set_seed(args):
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if args.n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
-
-
-@ray.remote
 def remote_fn(config, args):
     # Set ray tune hyper parameters
     for k,v in config.items():
@@ -274,6 +264,14 @@ def remote_fn(config, args):
                               args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
             process.start()
             # process.join()
+        if args.aug_pipeline:
+            augmenter = AutoAugmenter.init_pipeline()
+            if len(augmenter):
+                args.augs = augmenter.aug_names
+                q = Queue()
+                process = Process(target=aug_process,
+                                  args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
+                process.start()
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q)
 
 

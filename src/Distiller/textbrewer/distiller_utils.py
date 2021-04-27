@@ -20,9 +20,10 @@ if has_apex:
     from apex import amp
 from torch.cuda import amp
 
-
+import logging
+logger = logging.getLogger(__name__)
 # logger = logging.getLogger("Distillation")
-logger = Logger("all.log",level="debug").logger
+# logger = Logger("all.log",level="debug").logger
 #logger.setLevel(logging.INFO)
 
 #handler_stream = logging.StreamHandler()
