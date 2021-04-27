@@ -9,13 +9,13 @@ from ray import tune
 from ray.tune.schedulers import ASHAScheduler
 # from ray.tune.integration.torch import DistributedTrainableCreator
 from ray.tune import CLIReporter
-from Distiller.configs import parse
-from Distiller.autoaug import AutoAugmenter
-from Distiller.distiller import train
-from Distiller.utils import cal_layer_mapping
-from Distiller.transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering, AutoConfig, AutoTokenizer
+from ..src.Distiller.configs import parse
+from ..src.Distiller.autoaug import AutoAugmenter
+from ..src.Distiller.distiller import train
+from ..src.Distiller.utils import cal_layer_mapping
+from ..src.Distiller.transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering, AutoConfig, AutoTokenizer
 from torch.multiprocessing import Queue, Process, set_start_method
-from Distiller.mp_aug import aug_process
+from ..src.Distiller.mp_aug import aug_process
 import boto3
 
 
@@ -32,6 +32,7 @@ def set_seed(args):
         torch.cuda.manual_seed_all(args.seed)
 
 
+@ray.remote()
 def train_fn(config, args):
     # Set ray tune hyper parameters
     for k,v in config.items():
@@ -170,11 +171,11 @@ if __name__ == "__main__":
         args.S_model_name_or_path = args.T_model_name_or_path
     if args.task_type in ["squad", "squad2"]:
         args.task_name = args.task_type
-        from Distiller.evaluate import evaluate_squad as evaluate_func
-        from Distiller.squad_preprocess import load_and_cache_examples
+        from ..src.Distiller.evaluate import evaluate_squad as evaluate_func
+        from ..src.Distiller.squad_preprocess import load_and_cache_examples
     elif args.task_type == "glue":
-        from Distiller.evaluate import evaluate_glue as evaluate_func
-        from Distiller.glue_preprocess import load_and_cache_examples
+        from ..src.Distiller.evaluate import evaluate_glue as evaluate_func
+        from ..src.Distiller.glue_preprocess import load_and_cache_examples
     logger = logging.getLogger(__name__)
     main(args)
 
