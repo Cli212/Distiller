@@ -18,12 +18,12 @@ length=128
 torch_seed=9580
 task_name=mnli
 task_type=glue
-NAME=electra_tiny_lr${lr}e-4_e${ep}_${task_type}_${task_name}
-OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
+#NAME=electra_tiny_lr${lr}e-4_e${ep}_${task_type}_${task_name}
+OUTPUT_DIR=${OUTPUT_ROOT_DIR}
 
 mkdir -p $OUTPUT_DIR
 gpu_nums=4
-python -m torch.distributed.launch --nproc_per_node=${gpu_nums} run.py \
+python run.py \
     --task_type ${task_type} \
     --task_name ${task_name} \
     --data_dir $DATA_ROOT_DIR \

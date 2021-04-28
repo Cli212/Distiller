@@ -231,6 +231,9 @@ def remote_fn(config, args):
     s_model.to(args.device)
     t_model.to(args.device)
 
+    args.output_dir = os.path.join(args.output_dir, args.T_model_name_or_path+"_"+args.S_model_name_or_path+
+                                   "_"+args.intermediate_strategy+"_"+args.intermediate_loss_type+"_mixup" if args.mixup)
+
     def predict_callback(model, step):
         if args.eval and args.local_rank in [-1, 0]:
             evaluation_result = evaluate_func(args, model, s_tokenizer if s_tokenizer else t_tokenizer, prefix=step)

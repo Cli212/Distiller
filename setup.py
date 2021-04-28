@@ -22,7 +22,6 @@ setup(
         "requests>=2.22.0",
         "pyarrow",
         "fsspec",
-        "huggingface_hub==0.0.2",
         "dill",
         "pandas",
         "tqdm>=4.27",
@@ -30,7 +29,6 @@ setup(
         "multiprocess",
         "packaging",
         "regex!=2019.12.17",
-        "tokenizers==0.9.4",
         "tensorboard",
         "sacremoses",
         "pyemd",
@@ -38,7 +36,8 @@ setup(
         "fairseq",
         "fastBPE",
         "boto3",
-        "nlpaug"
+        "nlpaug",
+        "transformers==4.3.2",
     ],
 
     scripts = [],
