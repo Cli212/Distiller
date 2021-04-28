@@ -175,8 +175,10 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
 
 def remote_fn(config, args):
     # Set ray tune hyper parameters
-    for k,v in config.items():
-        args.k = v
+    for c in config:
+        args.c[0] = c[1]
+    # for k,v in config.items():
+    #     args.k = v
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
