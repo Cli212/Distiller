@@ -175,8 +175,8 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
 
 def remote_fn(config, args):
     # Set ray tune hyper parameters
-    for c in config:
-        args.c[0] = c[1]
+    for c in config.items():
+        args.__setattr__(c[0],c[1])
     # for k,v in config.items():
     #     args.k = v
     # Setup CUDA, GPU & distributed training

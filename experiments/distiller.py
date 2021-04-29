@@ -203,7 +203,8 @@ def main(args):
     s_config.output_attentions = True
     t_tokenizer = AutoTokenizer.from_pretrained(args.T_model_name_or_path,
                                                 use_fast=False,
-                                                config=t_config)
+                                                config=t_config,
+                                                )
     s_tokenizer = AutoTokenizer.from_pretrained(args.S_model_name_or_path,
                                                 use_fast=False,
                                                 config=s_config) if args.S_model_name_or_path != args.T_model_name_or_path else None
@@ -274,7 +275,10 @@ def main(args):
                 q = Queue()
                 process = Process(target=aug_process,
                                   args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
-                process.start()
+                from Distiller.mp_aug import generate_aug_data
+                train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
+                # process.start()
+                # process.join()
 
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q)
         # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
