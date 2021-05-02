@@ -300,7 +300,7 @@ def mi_loss(state_S, state_T, critic, alpha):
         cls_S = state_S
     log_baseline = torch.squeeze(log_prob_gaussian(cls_T))
     scores = critic(cls_S, cls_T)
-    return interpolated_lower_bound(scores, log_baseline, alpha)
+    return -interpolated_lower_bound(scores, log_baseline, alpha)
 
 
 def log_prob_gaussian(x):
