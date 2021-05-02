@@ -91,7 +91,8 @@ MATCH_LOSS_MAP = {'attention_mse_sum': att_mse_sum_loss,
                   'fsp'  : fsp_loss,
                   'mmd'  : mmd_loss,
                   'nst'  : mmd_loss,
-                  'nce' : nce_loss}
+                  'nce' : nce_loss,
+                  'mi' : mi_loss}
 """
 (*dict*) intermediate feature matching loss functions, includes:
 

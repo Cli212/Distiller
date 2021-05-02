@@ -79,7 +79,6 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
          "weight_decay": args.weight_decay},
         {"params": [p for n, p in s_model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0}
     ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler_class = get_linear_schedule_with_warmup
     args.warmup_steps = int(t_total * args.warmup_proportion)
     scheduler_args = {'num_warmup_steps': args.warmup_steps, 'num_training_steps': t_total}
@@ -122,11 +121,25 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
     logger.info("  Total optimization steps = %d", t_total)
     if args.train:
+        critic = None
+        if args.intermediate_loss_type == 'mi':
+            from Distiller.utils import mlp_critic
+            critic = mlp_critic(t_model.config.hidden_size if args.local_rank==-1 else t_model.module.config.hidden_size, s_model.config.hidden_size if args.local_rank==-1 else s_model.module.config.hidden_size, 64, 32)
+            critic.to(args.device)
+            critic_parameters = [
+                {"params": [p for n, p in critic.named_parameters() if not any(nd in n for nd in no_decay)],
+                 "weight_decay": args.weight_decay},
+                {"params": [p for n, p in critic.named_parameters() if any(nd in n for nd in no_decay)],
+                 "weight_decay": 0.0}
+            ]
+            optimizer_grouped_parameters.extend(critic_parameters)
+        optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
         if args.intermediate_strategy and args.intermediate_strategy.lower() == "emd":
             distill_config = DistillationConfig(
                 temperature=args.temperature,
                 kd_loss_weight=args.kd_loss_weight,
-                kd_loss_type=args.kd_loss_type)
+                kd_loss_type=args.kd_loss_type,
+                critic=critic)
         else:
             # intermediate_matches = matches
             # if args.intermediate_strategy == "skip":
@@ -138,7 +151,9 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                 temperature=args.temperature,
                 intermediate_matches=matches,
                 kd_loss_weight=args.kd_loss_weight,
-                kd_loss_type=args.kd_loss_type)
+                kd_loss_type=args.kd_loss_type,
+                critic=critic,
+                alpha=args.alpha)
         train_config = TrainingConfig(gradient_accumulation_steps=args.gradient_accumulation_steps, device=args.device,
                                       log_dir=os.path.join(args.output_dir, "log"), output_dir=args.output_dir,
                                       fp16=args.fp16, mixup=args.mixup, local_rank=args.local_rank,

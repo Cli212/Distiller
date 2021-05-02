@@ -6,6 +6,7 @@ import six
 from logging import handlers
 from scipy.special import logsumexp
 import os
+import torch
 import boto3
 import re
 import json
@@ -64,7 +65,7 @@ def cal_layer_mapping(args, t_config, s_config):
                                           'weight':1.0,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size and args.intermediate_loss_type != "nce" else None}
     else:
         for feature in args.intermediate_features:
-            if args.intermediate_loss_type in ["cos", "nce", "pkd"]:
+            if args.intermediate_loss_type in ["cos", "nce", "pkd","mi"]:
                 loss_type = args.intermediate_loss_type
             elif args.intermediate_loss_type in ["ce", "mse"]:
                 loss_type = feature+"_"+args.intermediate_loss_type
@@ -604,3 +605,20 @@ def uploadDirectory(path, bucketname="haoyu-nlp"):
         for file in files:
             s3.upload_file(os.path.join(root, file), "experiments/"+os.path.join(root, file))
 
+def mlp(in_dim, hidden_size, out_dim):
+    return torch.nn.Sequential(
+        torch.nn.Linear(in_dim, hidden_size),
+        torch.nn.ReLU(),
+        torch.nn.Linear(hidden_size, out_dim),
+        torch.nn.ReLU()
+    )
+
+
+class mlp_critic(torch.nn.Module):
+    def __init__(self, t_dim, s_dim , hidden_size, out_dim):
+        super(mlp_critic, self).__init__()
+        self._t = mlp(t_dim, hidden_size, out_dim)
+        self._s = mlp(s_dim, hidden_size, out_dim)
+
+    def forward(self, x, y):
+        return torch.matmul(self._s(x), self._t(y).T)

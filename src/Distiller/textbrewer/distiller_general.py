@@ -147,10 +147,13 @@ class GeneralDistiller(BasicDistiller):
                 inter_T = inters_T[feature][layer_T]
                 name_S = str(layer_S)
                 name_T = str(layer_T)
-                if self.projs[ith]:
+                if self.projs[ith] and loss_type != "mi":
                     #inter_T = self.projs[ith](inter_T)
                     inter_S = self.projs[ith](inter_S)
-            intermediate_loss = match_loss(inter_S, inter_T, mask=inputs_mask_S)
+            if loss_type == 'mi':
+                intermediate_loss = match_loss(inter_S, inter_T, self.d_config.critic, self.d_config.alpha)
+            else:
+                intermediate_loss = match_loss(inter_S, inter_T, mask=inputs_mask_S)
             total_loss += intermediate_loss * match_weight
             losses_dict[f'unweighted_{feature}_{loss_type}_{name_S}_{name_T}'] = intermediate_loss
 
@@ -174,9 +177,12 @@ class GeneralDistiller(BasicDistiller):
             losses_dict['unweighted_hard_label_loss'] = total_hl_loss
         if 'loss' in results_S:
             total_hl_loss = 0
-            for loss in results_S['loss']:
-                # in case of multi-GPU
-                total_hl_loss += loss.mean()
+            if isinstance(results_S['loss'], list):
+                for loss in results_S['loss']:
+                    # in case of multi-GPU
+                    total_hl_loss += loss.mean()
+            else:
+                total_hl_loss = results_S['loss']
             total_loss += total_hl_loss * self.d_config.hard_label_weight
             losses_dict['unweighted_hard_label_loss'] = total_hl_loss
             # total_loss += results_S['loss']

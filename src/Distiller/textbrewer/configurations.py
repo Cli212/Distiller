@@ -224,6 +224,8 @@ class DistillationConfig(Config):
                       kd_loss_weight_scheduler = 'none',
                       probability_shift = False,
                       emd = False,
+                      critic=None,
+                      alpha=None,
                       emd_args = None,
                       intermediate_matches:Optional[List[Dict]]=None,
                       is_caching_logits = False):
@@ -244,7 +246,8 @@ class DistillationConfig(Config):
             assert hard_label_weight_scheduler in WEIGHT_SCHEDULER, \
                     "Invalid hard_label_weight_scheduler"
             self.hard_label_weight_scheduler = WEIGHT_SCHEDULER[hard_label_weight_scheduler]
-
+        self.critic=critic
+        self.alpha=alpha
         self.kd_loss_type = kd_loss_type
         self.kd_loss_weight = kd_loss_weight
         self.kd_loss_weight_scheduler = None

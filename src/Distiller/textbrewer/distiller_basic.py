@@ -386,9 +386,12 @@ class BasicDistiller(AbstractDistiller):
             losses_dict['unweighted_hard_label_loss'] = total_hl_loss
         if 'loss' in results_S:
             total_hl_loss = 0
-            for loss in results_S['loss']:
-                # in case of multi-GPU
-                total_hl_loss += loss.mean()
+            if isinstance(results_S['loss'], list):
+                for loss in results_S['loss']:
+                    # in case of multi-GPU
+                    total_hl_loss += loss.mean()
+            else:
+                total_hl_loss = results_S['loss']
             total_loss += total_hl_loss * self.d_config.hard_label_weight
             losses_dict['unweighted_hard_label_loss'] = total_hl_loss
         return total_loss, losses_dict

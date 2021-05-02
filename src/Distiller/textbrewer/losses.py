@@ -1,5 +1,6 @@
 import torch.nn.functional as F
 import torch
+import numpy as np
 from typing import List
 
 from .compatibility import mask_dtype
@@ -281,6 +282,106 @@ def mmd_loss(state_S, state_T, mask=None):
         gram_T = torch.bmm(state_T_0, state_T_1.transpose(1, 2)) / state_T_1.size(1)
         loss = (F.mse_loss(gram_S, gram_T, reduction='none') * mask.unsqueeze(-1) * mask.unsqueeze(1)).sum() / valid_count
     return loss
+
+
+def mi_loss(state_S, state_T, critic, alpha):
+    if state_T.dim() == 3:
+        # cls label states
+        cls_T = state_T[:, 0]  # (batch_size, hidden_dim)
+        # mean pooling
+        # cls_T =
+    else:
+        cls_T = state_T
+    if state_S.dim() == 3:
+        # cls label states
+        cls_S = state_S[:, 0]  # (batch_size, hidden_dim)
+        # cls_S =
+    else:
+        cls_S = state_S
+    log_baseline = torch.squeeze(log_prob_gaussian(cls_T))
+    scores = critic(cls_S, cls_T)
+    return interpolated_lower_bound(scores, log_baseline, alpha)
+
+
+def log_prob_gaussian(x):
+    return torch.sum(torch.distributions.normal.Normal(0.,1.).log_prob(x), dim=-1, keepdim=False)
+
+
+def reduce_logmeanexp_nodiag(x, axis=None):
+    batch_size = x.shape[0]
+    diag_inf = torch.diag(torch.tensor(np.inf) * torch.ones(batch_size)).to("cuda")
+    logsumexp = torch.logsumexp(x - diag_inf, dim=(0,1))
+    if axis:
+        num_elem = batch_size - 1.
+    else:
+        num_elem = batch_size * (batch_size - 1.)
+    return logsumexp - torch.log(torch.tensor(num_elem))
+
+
+def log_interpolate(log_a, log_b, alpha_logit):
+    """Numerically stable implementation of log(alpha * a + (1-alpha) * b)."""
+    log_alpha = -torch.nn.functional.softplus(-torch.tensor(alpha_logit))
+    log_1_minus_alpha = -torch.nn.functional.softplus(torch.tensor(alpha_logit))
+    y = torch.logsumexp(torch.stack((log_alpha + log_a, log_1_minus_alpha + log_b),0), dim=0)
+    return y
+
+
+def softplus_inverse(x):
+    return torch.log(torch.exp(x) - torch.tensor(1.))
+
+
+def compute_log_loomean(scores):
+    """Compute the log leave-one-out mean of the exponentiated scores.
+
+    For each column j we compute the log-sum-exp over the row holding out column j.
+    This is a numerically stable version of:
+    log_loosum = scores + tfp.math.softplus_inverse(tf.reduce_logsumexp(scores, axis=1, keepdims=True) - scores)
+    Implementation based on tfp.vi.csiszar_divergence.csiszar_vimco_helper.
+    """
+    max_scores = torch.max(scores, dim=1, keepdim=True)[0]
+    lse_minus_max = torch.logsumexp(scores - max_scores, dim=1, keepdim=True)
+    d = lse_minus_max + (max_scores - scores)
+    d_ok = torch.ne(d, torch.tensor(0.))
+    safe_d = torch.where(d_ok, d, torch.ones_like(d))
+    loo_lse = scores + softplus_inverse(safe_d)
+    # Normalize to get the leave one out log mean exp
+    loo_lme = loo_lse - torch.log(torch.tensor(scores.shape[1] - 1.))
+    return loo_lme
+
+
+def interpolated_lower_bound(scores, baseline, alpha_logit):
+    """Interpolated lower bound on mutual information.
+
+    Interpolates between the InfoNCE baseline ( alpha_logit -> -infty),
+    and the single-sample TUBA baseline (alpha_logit -> infty)
+
+    Args:
+    scores: [batch_size, batch_size] critic scores
+    baseline: [batch_size] log baseline scores
+    alpha_logit: logit for the mixture probability
+
+    Returns:
+    scalar, lower bound on MI
+    """
+    batch_size = scores.shape[0]
+    # Compute InfoNCE baseline
+    nce_baseline = compute_log_loomean(scores)
+    # Inerpolated baseline interpolates the InfoNCE baseline with a learned baseline
+    interpolated_baseline = log_interpolate(
+      nce_baseline, torch.tile(baseline[:, None], (1, batch_size)), alpha_logit)
+    # Marginal term.
+    critic_marg = scores - torch.diagonal(interpolated_baseline, offset=0, dim1=-2, dim2=-1)[:, None]
+    marg_term = torch.exp(reduce_logmeanexp_nodiag(critic_marg))
+
+    # Joint term.
+    critic_joint = torch.diagonal(scores, offset=0, dim1=-2, dim2=-1)[:, None] - interpolated_baseline
+    joint_term = (torch.sum(critic_joint) -
+                torch.sum(torch.diagonal(critic_joint, offset=0, dim1=-2, dim2=-1))) / (batch_size * (batch_size - 1.))
+    return torch.tensor(1) + joint_term  - marg_term
+
+
+
+
 
 def nce_loss(state_S, state_T, mask=None):
     # TO be justified
