@@ -615,10 +615,14 @@ def mlp(in_dim, hidden_size, out_dim):
 
 
 class mlp_critic(torch.nn.Module):
-    def __init__(self, t_dim, s_dim , hidden_size, out_dim):
+    def __init__(self, t_dim, s_dim=None, hidden_size=64, out_dim=32):
         super(mlp_critic, self).__init__()
         self._t = mlp(t_dim, hidden_size, out_dim)
-        self._s = mlp(s_dim, hidden_size, out_dim)
+        if s_dim:
+            self._s = mlp(s_dim, hidden_size, out_dim)
 
-    def forward(self, x, y):
-        return torch.matmul(self._s(x), self._t(y).T)
+    def forward(self, x=None, y=None):
+        if x==None:
+            return self._t(y)
+        else:
+            return torch.matmul(self._s(x), self._t(y).T)

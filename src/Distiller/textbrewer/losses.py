@@ -284,7 +284,7 @@ def mmd_loss(state_S, state_T, mask=None):
     return loss
 
 
-def mi_loss(state_S, state_T, critic, alpha):
+def mi_loss(state_S, state_T, critic, baseline_fn, alpha):
     if state_T.dim() == 3:
         # cls label states
         cls_T = state_T[:, 0]  # (batch_size, hidden_dim)
@@ -298,9 +298,9 @@ def mi_loss(state_S, state_T, critic, alpha):
         # cls_S =
     else:
         cls_S = state_S
-    log_baseline = torch.squeeze(log_prob_gaussian(cls_T))
+    log_baseline = torch.squeeze(baseline_fn(y=cls_T))
     scores = critic(cls_S, cls_T)
-    return -interpolated_lower_bound(scores, log_baseline, alpha)
+    return torch.tensor(1.)-interpolated_lower_bound(scores, log_baseline, alpha)
 
 
 def log_prob_gaussian(x):
@@ -377,7 +377,7 @@ def interpolated_lower_bound(scores, baseline, alpha_logit):
     critic_joint = torch.diagonal(scores, offset=0, dim1=-2, dim2=-1)[:, None] - interpolated_baseline
     joint_term = (torch.sum(critic_joint) -
                 torch.sum(torch.diagonal(critic_joint, offset=0, dim1=-2, dim2=-1))) / (batch_size * (batch_size - 1.))
-    return torch.tensor(1) + joint_term  - marg_term
+    return torch.tensor(1.) + joint_term  - marg_term
 
 
 

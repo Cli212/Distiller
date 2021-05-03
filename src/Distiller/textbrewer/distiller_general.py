@@ -151,7 +151,7 @@ class GeneralDistiller(BasicDistiller):
                     #inter_T = self.projs[ith](inter_T)
                     inter_S = self.projs[ith](inter_S)
             if loss_type == 'mi':
-                intermediate_loss = match_loss(inter_S, inter_T, self.d_config.critic, self.d_config.alpha)
+                intermediate_loss = match_loss(inter_S, inter_T, self.d_config.critic, self.d_config.baseline_fn, self.d_config.alpha)
             else:
                 intermediate_loss = match_loss(inter_S, inter_T, mask=inputs_mask_S)
             total_loss += intermediate_loss * match_weight
