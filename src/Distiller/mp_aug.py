@@ -49,7 +49,7 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
         )
         aug_examples = list(
             tqdm(
-                p.imap(annotate_, example_iter(examples), chunksize=256),
+                p.imap(annotate_, example_iter(examples)),
                 total=int(len(examples) / 32) + 1,
                 desc="Data augmentation",
                 disable=False,
@@ -71,15 +71,17 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
 
     dataset = convert_features_to_dataset(features, s_features)
     new_dataset = ConcatDataset([original_dataset, dataset])
-    if args.local_rank == 0:
-        torch.distributed.barrier()
     return new_dataset
 
 def aug_process(queue:Queue, examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None):
     while True:
         if queue.empty():
+            if args.local_rank not in [-1, 0]:
+                torch.distributed.barrier()
             new_dataset = generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer)
             queue.put(new_dataset)
+        if args.local_rank == 0:
+            torch.distributed.barrier()
         else:
             time.sleep(300)
             continue

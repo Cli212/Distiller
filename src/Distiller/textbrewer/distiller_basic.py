@@ -204,7 +204,7 @@ class BasicDistiller(AbstractDistiller):
         for current_epoch in tqdm(range(int(num_epochs)), disable=tqdm_disable):
             if self.t_config.q and current_epoch%5 == 0 and current_epoch != 0:
                 train_dataset = None
-                QUEUE_LIMIT = 60
+                QUEUE_LIMIT = 600
                 count = 0
                 while count < QUEUE_LIMIT:
                     try:
@@ -262,6 +262,9 @@ class BasicDistiller(AbstractDistiller):
                         #     torch.nn.utils.clip_grad_norm_(self.model_S.parameters(), max_grad_norm)
                         # Since the gradients of optimizer's assigned params are unscaled, clips as usual:
                         torch.nn.utils.clip_grad_norm_(self.model_S.parameters(), max_grad_norm)
+                        if self.d_config.critic and self.d_config.baseline_fn:
+                            torch.nn.utils.clip_grad_norm_(self.d_config.critic.parameters(), max_grad_norm)
+                            torch.nn.utils.clip_grad_norm_(self.d_config.baseline_fn.parameters(), max_grad_norm)
 
                     if self.t_config.fp16:
                         scaler.step(optimizer)

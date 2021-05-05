@@ -88,10 +88,10 @@ class GeneralDistiller(BasicDistiller):
         total_loss = 0
         # losses_dict['unweighted_hard_label_loss'] = results_S['loss']
         # total_loss += (1-self.d_config.kd_loss_weight)*results_S['loss']
-        if self.d_config.emd:
-            emd_loss = transformer_loss(results_S['attention'], results_T['attention'], results_S["hidden"], results_T["hidden"],device=self.t_config.device,args=self.d_config.emd_args,T=self.d_config.temperature)
-            losses_dict['emd_loss'] = emd_loss
-            total_loss += emd_loss
+        # if self.d_config.emd:
+        #     emd_loss = transformer_loss(results_S['attention'], results_T['attention'], results_S["hidden"], results_T["hidden"],device=self.t_config.device,args=self.d_config.emd_args,T=self.d_config.temperature)
+        #     losses_dict['emd_loss'] = emd_loss
+        #     total_loss += emd_loss
         if 'logits' in results_T and 'logits' in results_S:
             logits_list_T = results_T['logits']  # list of tensor
             logits_list_S = results_S['logits']  # list of tensor

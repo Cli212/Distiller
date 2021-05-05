@@ -21,7 +21,7 @@ length=128
 torch_seed=9580
 task_name=mnli
 task_type=glue
-NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-4_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_mixup
+NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-6_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_mixup
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
 
 gpu_nums=4
@@ -47,7 +47,8 @@ python -m torch.distributed.launch --nproc_per_node=${gpu_nums} --master_port=12
     --per_gpu_train_batch_size ${batch_size} \
     --seed ${torch_seed} \
     --num_train_epochs ${ep} \
-    --learning_rate ${lr}e-4 \
+    --learning_rate ${lr}e-6 \
+    --max_grad_norm -1.0 \
     --thread 64 \
     --mixup \
     --gradient_accumulation_steps ${accu} \

@@ -16,6 +16,7 @@ class AutoAugmenter:
         for i in aug_args:
             if i:
                 name = i.pop("aug_type")
+                print(f"Load Augmenter {name}")
                 self.aug_names.append(name)
                 self.augs.append(augmenter_table.get(name)(**i))
         # self.aug = augmenter_table.get(aug_type)(**aug_args)
@@ -29,7 +30,7 @@ class AutoAugmenter:
         return cls(aug_args)
 
     @classmethod
-    def init_pipeline(cls, p=None):
+    def init_pipeline(cls, p=[0.3,0.3,0.4,0]):
         config_list = [{
           "aug_type": "contextual",
           "model_type": "distilbert",

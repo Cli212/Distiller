@@ -331,7 +331,7 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples=False, s_toke
     # dataset = convert_features_to_dataset(features, is_training=(mode == 'train'))
     if s_tokenizer:
         if os.path.exists(s_cached_features_file) and not args.overwrite_cache:
-            logger.info("Loading student features from cached file %s", cached_features_file)
+            logger.info("Loading student features from cached file %s", s_cached_features_file)
             s_features = torch.load(s_cached_features_file)
         else:
             logger.info("Creating student features from dataset file at %s", args.data_dir)

@@ -241,7 +241,7 @@ class DistillationConfig(Config):
                     "Invalid temperature_scheduler"
             self.temperature_scheduler = TEMPERATURE_SCHEDULER[temperature_scheduler]
 
-        self.hard_label_weight = hard_label_weight
+        self.hard_label_weight = 1. - kd_loss_weight
         self.hard_label_weight_scheduler = None
         if hard_label_weight_scheduler != 'none':
             assert hard_label_weight_scheduler in WEIGHT_SCHEDULER, \

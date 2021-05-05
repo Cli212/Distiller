@@ -47,7 +47,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     # def collate_fn(batch):
     #     return [({i:k[0] for i,k in piece.items()}) for piece in batch], [({i:k[0] for i,k in piece.items()}) for piece in batch]
     if augmenter:
-        QUEUE_LIMIT = 60
+        QUEUE_LIMIT = 600
         count = 0
         while count<QUEUE_LIMIT:
             try:
@@ -126,7 +126,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
             from Distiller.utils import mlp_critic
             baseline_fn = mlp_critic(t_model.config.hidden_size if args.local_rank==-1 else t_model.module.config.hidden_size, hidden_size=512, out_dim=1)
             baseline_fn.to(args.device)
-            critic = mlp_critic(t_model.config.hidden_size if args.local_rank==-1 else t_model.module.config.hidden_size, s_model.config.hidden_size if args.local_rank==-1 else s_model.module.config.hidden_size, 64, 32)
+            critic = mlp_critic(t_model.config.hidden_size if args.local_rank==-1 else t_model.module.config.hidden_size, s_model.config.hidden_size if args.local_rank==-1 else s_model.module.config.hidden_size, 512, 32)
             critic.to(args.device)
             critic_parameters = [
                 {"params": [p for n, p in critic.named_parameters() if not any(nd in n for nd in no_decay)],
@@ -294,11 +294,10 @@ def main(args):
                 q = Queue()
                 process = Process(target=aug_process,
                                   args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
-                from Distiller.mp_aug import generate_aug_data
-                train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
-                # process.start()
-                # process.join()
 
+                # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
+                process.start()
+                # process.join()
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q)
         # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
         # p.start()

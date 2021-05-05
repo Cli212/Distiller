@@ -609,8 +609,9 @@ def mlp(in_dim, hidden_size, out_dim):
     return torch.nn.Sequential(
         torch.nn.Linear(in_dim, hidden_size),
         torch.nn.ReLU(),
+        torch.nn.Linear(hidden_size, hidden_size),
+        torch.nn.ReLU(),
         torch.nn.Linear(hidden_size, out_dim),
-        torch.nn.ReLU()
     )
 
 
