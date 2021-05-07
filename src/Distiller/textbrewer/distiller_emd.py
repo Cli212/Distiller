@@ -145,7 +145,11 @@ class EMDDistiller(BasicDistiller):
             f_S = feature_maps_S[s]
             for t in range(feature_num_T):
                 f_T = feature_maps_T[t]
-                distance_matrix[s][t + feature_num_S] = distance_matrix[t + feature_num_S][s] = match_loss(f_S, f_T,
+                if loss_type == 'mi':
+                    distance_matrix[s][t + feature_num_S] = distance_matrix[t + feature_num_S][s] = match_loss(f_S, f_T, self.d_config.critic, self.d_config.baseline_fn,
+                                                   self.d_config.alpha)
+                else:
+                    distance_matrix[s][t + feature_num_S] = distance_matrix[t + feature_num_S][s] = match_loss(f_S, f_T,
                                                                                                            mask=inputs_mask_S)
 
         feature_weight_S = np.concatenate([self.feature_weight_S, np.zeros(feature_num_T)])
@@ -178,7 +182,11 @@ class EMDDistiller(BasicDistiller):
         #    trans_matrix, distance_matrix.detach(), feature_weight_S, feature_weight_T, self.d_config.temperature)
 
         # embedding matching
-        embedding_loss = match_loss(embeddings_S, embeddings_T, mask=inputs_mask_S)
+        if loss_type == 'mi':
+            embedding_loss = match_loss(embeddings_S, embeddings_T, self.d_config.critic, self.d_config.baseline_fn, self.d_config.alpha)
+        else:
+            embedding_loss = match_loss(embeddings_S, embeddings_T, mask=inputs_mask_S)
+        # embedding_loss = match_loss(embeddings_S, embeddings_T, mask=inputs_mask_S)
         total_loss += embedding_loss * emd_loss_weight  # sharing the same weight
         losses_dict[f'unweighted_embedding_{loss_type}'] = embedding_loss
 
@@ -191,9 +199,12 @@ class EMDDistiller(BasicDistiller):
             losses_dict['unweighted_hard_label_loss'] = total_hl_loss
         if 'loss' in results_S:
             total_hl_loss = 0
-            for loss in results_S['loss']:
-                # in case of multi-GPU
-                total_hl_loss += loss.mean()
+            if isinstance(results_S['loss'], list):
+                for loss in results_S['loss']:
+                    # in case of multi-GPU
+                    total_hl_loss += loss.mean()
+            else:
+                total_hl_loss = results_S['loss']
             total_loss += total_hl_loss * self.d_config.hard_label_weight
             losses_dict['unweighted_hard_label_loss'] = total_hl_loss
         return total_loss, losses_dict

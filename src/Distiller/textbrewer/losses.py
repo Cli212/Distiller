@@ -300,7 +300,7 @@ def mi_loss(state_S, state_T, critic, baseline_fn, alpha):
         cls_S = state_S
     log_baseline = torch.squeeze(baseline_fn(y=cls_T))
     scores = critic(cls_S, cls_T)
-    return torch.tensor(1.)-interpolated_lower_bound(scores, log_baseline, alpha)
+    return -interpolated_lower_bound(scores, log_baseline, alpha)
 
 
 def log_prob_gaussian(x):
@@ -309,7 +309,7 @@ def log_prob_gaussian(x):
 
 def reduce_logmeanexp_nodiag(x, axis=None):
     batch_size = x.shape[0]
-    diag_inf = torch.diag(torch.tensor(np.inf) * torch.ones(batch_size)).to("cuda")
+    diag_inf = torch.diag(torch.tensor(np.inf) * torch.ones(batch_size)).to(x.device)
     logsumexp = torch.logsumexp(x - diag_inf, dim=(0,1))
     if axis:
         num_elem = batch_size - 1.
@@ -320,14 +320,27 @@ def reduce_logmeanexp_nodiag(x, axis=None):
 
 def log_interpolate(log_a, log_b, alpha_logit):
     """Numerically stable implementation of log(alpha * a + (1-alpha) * b)."""
-    log_alpha = -torch.nn.functional.softplus(-torch.tensor(alpha_logit))
+    log_alpha = -torch.nn.functional.softplus(torch.tensor(-alpha_logit))
     log_1_minus_alpha = -torch.nn.functional.softplus(torch.tensor(alpha_logit))
     y = torch.logsumexp(torch.stack((log_alpha + log_a, log_1_minus_alpha + log_b),0), dim=0)
     return y
 
 
 def softplus_inverse(x):
-    return torch.log(torch.exp(x) - torch.tensor(1.))
+    # x = x.numpy()
+    threshold = torch.log(torch.tensor(torch.finfo(x.dtype).eps)) + torch.tensor(2.)
+    is_too_small = x < torch.exp(threshold)
+    is_too_large = x > -threshold
+    too_small_value = torch.log(x).type(x.dtype)
+    too_large_value = x
+    # This `where` will ultimately be a NOP because we won't select this
+    # codepath whenever we used the surrogate `ones_like`.
+    x = torch.where(is_too_small | is_too_large, torch.ones([], dtype=x.dtype).to(x.device), x)
+    y = x + torch.log(-torch.expm1(-x)).type(x.dtype)  # == log(expm1(x))
+    return torch.where(is_too_small,
+                    too_small_value,
+                    torch.where(is_too_large, too_large_value, y))
+    # return torch.log(torch.exp(x) - torch.tensor(1.))
 
 
 def compute_log_loomean(scores):
@@ -370,13 +383,13 @@ def interpolated_lower_bound(scores, baseline, alpha_logit):
     interpolated_baseline = log_interpolate(
       nce_baseline, torch.tile(baseline[:, None], (1, batch_size)), alpha_logit)
     # Marginal term.
-    critic_marg = scores - torch.diagonal(interpolated_baseline, offset=0, dim1=-2, dim2=-1)[:, None]
+    critic_marg = scores - torch.diagonal(interpolated_baseline, offset=0)[:, None]
     marg_term = torch.exp(reduce_logmeanexp_nodiag(critic_marg))
 
     # Joint term.
-    critic_joint = torch.diagonal(scores, offset=0, dim1=-2, dim2=-1)[:, None] - interpolated_baseline
+    critic_joint = torch.diagonal(scores, offset=0)[:, None] - interpolated_baseline
     joint_term = (torch.sum(critic_joint) -
-                torch.sum(torch.diagonal(critic_joint, offset=0, dim1=-2, dim2=-1))) / (batch_size * (batch_size - 1.))
+                torch.sum(torch.diagonal(critic_joint, offset=0))) / (batch_size * (batch_size - 1.))
     return torch.tensor(1.) + joint_term  - marg_term
 
 

@@ -217,7 +217,7 @@ class DistillationConfig(Config):
     """
     def __init__(self,temperature=4,
                       temperature_scheduler = 'none',
-                      hard_label_weight=0,
+                      hard_label_weight=1,
                       hard_label_weight_scheduler = 'none',
                       kd_loss_type='ce',
                       kd_loss_weight=1,
@@ -226,7 +226,7 @@ class DistillationConfig(Config):
                       emd = False,
                       critic=None,
                       baseline_fn=None,
-                      alpha=None,
+                      alpha=1.0,
                       emd_args = None,
                       intermediate_matches:Optional[List[Dict]]=None,
                       is_caching_logits = False):
@@ -241,7 +241,7 @@ class DistillationConfig(Config):
                     "Invalid temperature_scheduler"
             self.temperature_scheduler = TEMPERATURE_SCHEDULER[temperature_scheduler]
 
-        self.hard_label_weight = 1. - kd_loss_weight
+        self.hard_label_weight = hard_label_weight
         self.hard_label_weight_scheduler = None
         if hard_label_weight_scheduler != 'none':
             assert hard_label_weight_scheduler in WEIGHT_SCHEDULER, \

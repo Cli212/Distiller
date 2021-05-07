@@ -125,28 +125,40 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
         if args.intermediate_loss_type == 'mi':
             from Distiller.utils import mlp_critic
             baseline_fn = mlp_critic(t_model.config.hidden_size if args.local_rank==-1 else t_model.module.config.hidden_size, hidden_size=512, out_dim=1)
+            for name, param in baseline_fn.named_parameters():
+                if 'weight' in name:
+                    torch.nn.init.xavier_uniform(param)
+                    print(name, param.data)
+                elif 'bias' in name:
+                    torch.nn.init.constant_(param, 0)
+                    print(name, param.data)
             baseline_fn.to(args.device)
             critic = mlp_critic(t_model.config.hidden_size if args.local_rank==-1 else t_model.module.config.hidden_size, s_model.config.hidden_size if args.local_rank==-1 else s_model.module.config.hidden_size, 512, 32)
             critic.to(args.device)
             critic_parameters = [
-                {"params": [p for n, p in critic.named_parameters() if not any(nd in n for nd in no_decay)],
+                {"params": [p for n, p in critic.named_parameters()],
                  "weight_decay": args.weight_decay},
-                {"params": [p for n, p in critic.named_parameters() if any(nd in n for nd in no_decay)],
-                 "weight_decay": 0.0},
-                {"params": [p for n, p in baseline_fn.named_parameters() if not any(nd in n for nd in no_decay)],
-                 "weight_decay": args.weight_decay},
-                {"params": [p for n, p in baseline_fn.named_parameters() if any(nd in n for nd in no_decay)],
-                 "weight_decay": 0.0}
+                {"params": [p for n, p in baseline_fn.named_parameters()],
+                 "weight_decay": args.weight_decay}
             ]
             optimizer_grouped_parameters.extend(critic_parameters)
         optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+
+        def sigmoid_reverse(x):
+            """
+                transform alpha logit from range [0.0, 1.0] to [-5.0,0.0,5.0]
+            """
+            return -np.log(1 / x - 1.)
+        args.alpha = sigmoid_reverse(args.alpha)
         if args.intermediate_strategy and args.intermediate_strategy.lower() == "emd":
             distill_config = DistillationConfig(
                 temperature=args.temperature,
+                hard_label_weight=args.hard_label_weight,
                 kd_loss_weight=args.kd_loss_weight,
                 kd_loss_type=args.kd_loss_type,
                 critic=critic,
-                baseline_fn=baseline_fn)
+                baseline_fn=baseline_fn,
+                alpha=args.alpha)
         else:
             # intermediate_matches = matches
             # if args.intermediate_strategy == "skip":
@@ -157,6 +169,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
             distill_config = DistillationConfig(
                 temperature=args.temperature,
                 intermediate_matches=matches,
+                hard_label_weight=args.hard_label_weight,
                 kd_loss_weight=args.kd_loss_weight,
                 kd_loss_type=args.kd_loss_type,
                 critic=critic,
@@ -173,7 +186,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
             from Distiller.adapters import BertForGLUEAdptor as adaptor_func
         adaptor_T = adaptor_func
         adaptor_S = adaptor_func
-        if args.intermediate_strategy == "EMD":
+        if args.intermediate_strategy == "emd":
             distiller = EMDDistiller(train_config=train_config,
                                      distill_config=distill_config,
                                      model_T=t_model, model_S=s_model,
@@ -268,6 +281,8 @@ def main(args):
     ## Training
     if args.train:
         # examples = read_examples_from_file(args.data_dir, mode="train", task_type=args.task_type)
+        if args.local_rank not in [-1, 0]:
+            torch.distributed.barrier()
         matches = cal_layer_mapping(args, t_config, s_config)
         train_dataset, s_dataset, features, s_features, examples = load_and_cache_examples(args, t_tokenizer, mode="train",
                                                                 return_examples=True, s_tokenizer=s_tokenizer)
@@ -298,6 +313,8 @@ def main(args):
                 # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
                 process.start()
                 # process.join()
+        if args.local_rank == 0:
+            torch.distributed.barrier()
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q)
         # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
         # p.start()
@@ -366,7 +383,7 @@ def main(args):
 
 if __name__ == '__main__':
     args = parse()
-    set_start_method('spawn')
+    # set_start_method('spawn')
     if args.S_model_name_or_path is None:
         args.S_model_name_or_path = args.T_model_name_or_path
     if args.task_type in ["squad","squad2"]:

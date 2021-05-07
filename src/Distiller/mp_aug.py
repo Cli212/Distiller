@@ -49,7 +49,7 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
         )
         aug_examples = list(
             tqdm(
-                p.imap(annotate_, example_iter(examples)),
+                p.map(annotate_, example_iter(examples)),
                 total=int(len(examples) / 32) + 1,
                 desc="Data augmentation",
                 disable=False,

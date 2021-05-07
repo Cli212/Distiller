@@ -2,7 +2,7 @@
 #set hyperparameters
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
 TEACHER_DIR=howey/electra-base-mnli
-STUDENT_DIR=google/electra-small-generator
+STUDENT_DIR=huawei-noah/TinyBERT_General_4L_312D
 DATA_ROOT_DIR=../datasets/glue_data/MNLI
 OUTPUT_ROOT_DIR=output-student
 
@@ -21,7 +21,7 @@ length=128
 torch_seed=9580
 task_name=mnli
 task_type=glue
-NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-6_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_mixup
+NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_mixup
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
 
 gpu_nums=4
@@ -47,13 +47,14 @@ python -m torch.distributed.launch --nproc_per_node=${gpu_nums} --master_port=12
     --per_gpu_train_batch_size ${batch_size} \
     --seed ${torch_seed} \
     --num_train_epochs ${ep} \
-    --learning_rate ${lr}e-6 \
+    --learning_rate ${lr}e-5 \
     --max_grad_norm -1.0 \
     --thread 64 \
     --mixup \
     --gradient_accumulation_steps ${accu} \
     --temperature ${temperature} \
-    --kd_loss_weight 1.0 \
+    --hard_label_weight 0.5 \
+    --kd_loss_weight 0.5 \
     --kd_loss_type ce
 
 #aws s3 cp --recursive $OUTPUT_DIR s3://haoyu-nlp/experiments/$OUTPUT_DIR
