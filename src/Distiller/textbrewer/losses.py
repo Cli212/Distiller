@@ -337,9 +337,7 @@ def softplus_inverse(x):
     # codepath whenever we used the surrogate `ones_like`.
     x = torch.where(is_too_small | is_too_large, torch.ones([], dtype=x.dtype).to(x.device), x)
     y = x + torch.log(-torch.expm1(-x)).type(x.dtype)  # == log(expm1(x))
-    return torch.where(is_too_small,
-                    too_small_value,
-                    torch.where(is_too_large, too_large_value, y))
+    return torch.where(is_too_small, too_small_value, torch.where(is_too_large, too_large_value, y))
     # return torch.log(torch.exp(x) - torch.tensor(1.))
 
 
@@ -393,8 +391,31 @@ def interpolated_lower_bound(scores, baseline, alpha_logit):
     return torch.tensor(1.) + joint_term  - marg_term
 
 
+def infonce_lower_bound(scores):
+  """InfoNCE lower bound from van den Oord et al. (2018)."""
+  nll = torch.mean(torch.diagonal(scores) - torch.logsumexp(scores, dim=1), dim=-1)
+  # Alternative implementation:
+  # nll = -tf.nn.sparse_softmax_cross_entropy_with_logits(logits=scores, labels=tf.range(batch_size))
+  mi = torch.log(scores.shape[0]) + nll
+  return mi
 
 
+
+def tuba_lower_bound(scores, log_baseline=None):
+  if log_baseline is not None:
+    scores -= log_baseline[:, None]
+  batch_size = scores.shape[0]
+  # First term is an expectation over samples from the joint,
+  # which are the diagonal elmements of the scores matrix.
+  joint_term = torch.mean(torch.diagonal(scores), dim=-1)
+  # Second term is an expectation over samples from the marginal,
+  # which are the off-diagonal elements of the scores matrix.
+  marg_term = torch.exp(reduce_logmeanexp_nodiag(scores))
+  return 1. + joint_term - marg_term
+
+def nwj_lower_bound(scores):
+  # equivalent to: tuba_lower_bound(scores, log_baseline=1.)
+  return tuba_lower_bound(scores - 1.)
 
 def nce_loss(state_S, state_T, mask=None):
     # TO be justified

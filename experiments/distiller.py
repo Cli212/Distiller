@@ -7,7 +7,7 @@ import random
 import numpy as np
 from Distiller.configs import parse
 from Distiller.autoaug import AutoAugmenter
-from Distiller.utils import Logger, cal_layer_mapping
+from Distiller.utils import Logger, cal_layer_mapping, uploadDirectory
 from Distiller.mp_aug import aug_process
 from Distiller.transformers import AutoConfig, AutoTokenizer
 from Distiller.transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering
@@ -124,29 +124,32 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
         baseline_fn = None
         if args.intermediate_loss_type == 'mi':
             from Distiller.utils import mlp_critic
-            baseline_fn = mlp_critic(t_model.config.hidden_size if args.local_rank==-1 else t_model.module.config.hidden_size, hidden_size=512, out_dim=1)
+            baseline_fn = mlp_critic(t_model.config.hidden_size if args.local_rank==-1 else t_model.module.config.hidden_size, hidden_size=64, out_dim=1)
             for name, param in baseline_fn.named_parameters():
                 if 'weight' in name:
                     torch.nn.init.xavier_uniform(param)
-                    print(name, param.data)
                 elif 'bias' in name:
                     torch.nn.init.constant_(param, 0)
-                    print(name, param.data)
             baseline_fn.to(args.device)
-            critic = mlp_critic(t_model.config.hidden_size if args.local_rank==-1 else t_model.module.config.hidden_size, s_model.config.hidden_size if args.local_rank==-1 else s_model.module.config.hidden_size, 512, 32)
+            critic = mlp_critic(t_model.config.hidden_size if args.local_rank==-1 else t_model.module.config.hidden_size, s_model.config.hidden_size if args.local_rank==-1 else s_model.module.config.hidden_size, 128, 32)
             critic.to(args.device)
+            critic_no_decay=['bias']
             critic_parameters = [
-                {"params": [p for n, p in critic.named_parameters()],
+                {"params": [p for n, p in critic.named_parameters() if not any(nd in n for nd in critic_no_decay)],
                  "weight_decay": args.weight_decay},
-                {"params": [p for n, p in baseline_fn.named_parameters()],
-                 "weight_decay": args.weight_decay}
+                {"params": [p for n, p in critic.named_parameters() if any(nd in n for nd in critic_no_decay)],
+                          "weight_decay": 0.0,},
+                {"params": [p for n, p in baseline_fn.named_parameters() if not any(nd in n for nd in critic_no_decay)],
+                 "weight_decay": args.weight_decay},
+                {"params": [p for n, p in baseline_fn.named_parameters() if any(nd in n for nd in critic_no_decay)],
+                 "weight_decay": 0.0}
             ]
             optimizer_grouped_parameters.extend(critic_parameters)
         optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
 
         def sigmoid_reverse(x):
             """
-                transform alpha logit from range [0.0, 1.0] to [-5.0,0.0,5.0]
+                transform alpha logit from range [0.0, 1.0] to [-infty, infty]
             """
             return -np.log(1 / x - 1.)
         args.alpha = sigmoid_reverse(args.alpha)
@@ -260,12 +263,16 @@ def main(args):
     logger.info("Training/evaluation parameters %s", args)
     s_model.to(args.device)
     t_model.to(args.device)
+
     def predict_callback(model, step):
         if args.eval and args.local_rank in [-1, 0]:
             evaluation_result = evaluate_func(args, model, s_tokenizer if s_tokenizer else t_tokenizer, prefix=step)
             logger.info("***** Eval results *****")
             logger.info(json.dumps(evaluation_result, indent=2) + '\n')
-
+            global best_evaluation
+            if evaluation_result['acc']>best_evaluation:
+                best_evaluation = evaluation_result['acc']
+            evaluation_result['best_result'] = best_evaluation
             output_eval_file = os.path.join(args.output_dir, f"{step}_eval_results.txt")
             logger.info(f"Write evaluation result to {output_eval_file}...")
             with open(output_eval_file, "a") as writer:
@@ -338,11 +345,12 @@ def main(args):
         else:
             t_tokenizer.save_pretrained(args.output_dir)
         torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
+        with open(os.path.join(args.output_dir, "training_args.json"),'w') as f:
+            arg_dict = vars(args)
+            arg_dict['device'] = str(arg_dict['device'])
+            json.dump(arg_dict, f)
+        uploadDirectory(args.output_dir)
         model = model_class.from_pretrained(args.output_dir)  # , force_download=True)
-
-        # SquadDataset is not compatible with Fast tokenizers which have a smarter overflow handeling
-        # So we use use_fast=False here for now until Fast-tokenizer-compatible-examples are out
-
         model.to(args.device)
         # Good practice: save your training arguments together with the trained model
 
@@ -371,6 +379,8 @@ def main(args):
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
             evaluation_result = evaluate_func(args, model, s_tokenizer if s_tokenizer else t_tokenizer, prefix=global_step,write_prediction=True)
+            global best_evaluation
+            evaluation_result['best_result'] = best_evaluation
             logger.info("***** Eval results *****")
             logger.info(json.dumps(evaluation_result, indent=2) + '\n')
 
@@ -397,4 +407,5 @@ if __name__ == '__main__':
         from Distiller.adapters import BertForGLUEAdptor as adaptor_func
     logger = Logger(f"{args.output_dir}/all.log", level="debug").logger
     # logger = logging.getLogger(__name__)
+    best_evaluation = 0.0
     main(args)

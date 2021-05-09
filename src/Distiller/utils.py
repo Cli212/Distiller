@@ -65,7 +65,7 @@ def cal_layer_mapping(args, t_config, s_config):
                                           'weight':1.0,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size and args.intermediate_loss_type != "mi" else None}
     else:
         for feature in args.intermediate_features:
-            if args.intermediate_loss_type in ["cos", "pkd","mi"]:
+            if args.intermediate_loss_type in ["cos", "pkd","mi","nce","nwj","tuba"]:
                 loss_type = args.intermediate_loss_type
             elif args.intermediate_loss_type in ["ce", "mse"]:
                 loss_type = feature+"_"+args.intermediate_loss_type

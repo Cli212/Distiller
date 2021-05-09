@@ -61,7 +61,7 @@ def parse():
                              "and end predictions are not conditioned on one another.")
     parser.add_argument("--intermediate_strategy", default=None, choices=[None, "skip","last","emd"])
     parser.add_argument("--intermediate_features", nargs="+", default=[], choices=["hidden","attention"], help="Not work when intermediate strategy is EMD")
-    parser.add_argument("--intermediate_loss_type", type=str, default="ce", choices=["ce","mse","cos","pkd","mi"])
+    parser.add_argument("--intermediate_loss_type", type=str, default="ce", choices=["ce","mse","cos","pkd","mi","nce","nwj","tuba"])
     parser.add_argument("--alpha", type=float, default=0.5, help="only useful when using mi loss")
     parser.add_argument("--mixup", action="store_true")
     parser.add_argument("--kd_loss_weight", default=1.0, type=float, help="weight of kd loss")
