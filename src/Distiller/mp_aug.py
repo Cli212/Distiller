@@ -80,8 +80,8 @@ def aug_process(queue:Queue, examples, original_dataset, augmenter, args, tokeni
                 torch.distributed.barrier()
             new_dataset = generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer)
             queue.put(new_dataset)
-        if args.local_rank == 0:
-            torch.distributed.barrier()
+            if args.local_rank == 0:
+                torch.distributed.barrier()
         else:
             time.sleep(300)
             continue

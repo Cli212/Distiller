@@ -125,11 +125,11 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
         if args.intermediate_loss_type == 'mi':
             from Distiller.utils import mlp_critic
             baseline_fn = mlp_critic(t_model.config.hidden_size if args.local_rank==-1 else t_model.module.config.hidden_size, hidden_size=64, out_dim=1)
-            for name, param in baseline_fn.named_parameters():
-                if 'weight' in name:
-                    torch.nn.init.xavier_uniform(param)
-                elif 'bias' in name:
-                    torch.nn.init.constant_(param, 0)
+            # for name, param in baseline_fn.named_parameters():
+            #     if 'weight' in name:
+            #         torch.nn.init.xavier_uniform(param)
+            #     elif 'bias' in name:
+            #         torch.nn.init.constant_(param, 0)
             baseline_fn.to(args.device)
             critic = mlp_critic(t_model.config.hidden_size if args.local_rank==-1 else t_model.module.config.hidden_size, s_model.config.hidden_size if args.local_rank==-1 else s_model.module.config.hidden_size, 128, 32)
             critic.to(args.device)
@@ -138,7 +138,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                 {"params": [p for n, p in critic.named_parameters() if not any(nd in n for nd in critic_no_decay)],
                  "weight_decay": args.weight_decay},
                 {"params": [p for n, p in critic.named_parameters() if any(nd in n for nd in critic_no_decay)],
-                          "weight_decay": 0.0,},
+                 "weight_decay": 0.0},
                 {"params": [p for n, p in baseline_fn.named_parameters() if not any(nd in n for nd in critic_no_decay)],
                  "weight_decay": args.weight_decay},
                 {"params": [p for n, p in baseline_fn.named_parameters() if any(nd in n for nd in critic_no_decay)],
@@ -293,6 +293,8 @@ def main(args):
         matches = cal_layer_mapping(args, t_config, s_config)
         train_dataset, s_dataset, features, s_features, examples = load_and_cache_examples(args, t_tokenizer, mode="train",
                                                                 return_examples=True, s_tokenizer=s_tokenizer)
+        if args.local_rank == 0:
+            torch.distributed.barrier()
         augmenter = None
         q = None
         # if args.augmenter_config_path:
@@ -320,8 +322,6 @@ def main(args):
                 # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
                 process.start()
                 # process.join()
-        if args.local_rank == 0:
-            torch.distributed.barrier()
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q)
         # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
         # p.start()
