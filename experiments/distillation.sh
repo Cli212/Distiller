@@ -9,19 +9,23 @@ OUTPUT_ROOT_DIR=output-student
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
 accu=1
 ep=30
-lr=1
+lr=5
+alpha=0.01
 #augmenter_config_path=augmenter_config.json
-intermediate_strategy=skip
-intermediate_loss_type=ce
+intermediate_strategy=last
+intermediate_loss_type=mi
 intermediate_features=hidden
+kd_loss_type=mse
 ## if you use mixup or augmenter, then the actual batch size will be batch_size * 2
 batch_size=32
-temperature=8
+temperature=1
 length=128
 torch_seed=9580
+hard_label_weight=0.0
+kd_loss_weight=1.0
 task_name=mnli
 task_type=glue
-NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_mixup
+NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_alpha${alpha}_h${hard_label_weight}_k${kd_loss_weight}_${kd_loss_type}
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
 
 gpu_nums=4
@@ -29,7 +33,7 @@ gpu_nums=4
 #export CUDA_VISIBLE_DEVICES=0
 mkdir -p $OUTPUT_DIR
 
-python -m torch.distributed.launch --nproc_per_node=${gpu_nums} --master_port=12585 distiller.py -- \
+python -m torch.distributed.launch --nproc_per_node=${gpu_nums} --master_port=12592 distiller.py -- \
     --task_type ${task_type} \
     --task_name ${task_name} \
     --data_dir $DATA_ROOT_DIR \
@@ -50,11 +54,11 @@ python -m torch.distributed.launch --nproc_per_node=${gpu_nums} --master_port=12
     --learning_rate ${lr}e-5 \
     --max_grad_norm -1.0 \
     --thread 64 \
-    --mixup \
     --gradient_accumulation_steps ${accu} \
     --temperature ${temperature} \
-    --hard_label_weight 0.5 \
-    --kd_loss_weight 0.5 \
-    --kd_loss_type ce
+    --alpha ${alpha} \
+    --hard_label_weight ${hard_label_weight} \
+    --kd_loss_weight ${kd_loss_weight} \
+    --kd_loss_type ${kd_loss_type}
 
 #aws s3 cp --recursive $OUTPUT_DIR s3://haoyu-nlp/experiments/$OUTPUT_DIR
