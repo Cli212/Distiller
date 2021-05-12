@@ -3,7 +3,7 @@
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
 TEACHER_DIR=howey/electra-base-mnli
 STUDENT_DIR=huawei-noah/TinyBERT_General_4L_312D
-DATA_ROOT_DIR=../datasets/glue_data/MNLI
+DATA_ROOT_DIR=~/Distillation_QA_benchmark/ray_directory/datasets/glue_data/MNLI
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
@@ -33,7 +33,7 @@ gpu_nums=4
 #export CUDA_VISIBLE_DEVICES=0
 mkdir -p $OUTPUT_DIR
 
-python run.py -- \
+python -m torch.distributed.launch --nproc_per_node=${gpu_nums} run.py \
     --task_type ${task_type} \
     --task_name ${task_name} \
     --data_dir $DATA_ROOT_DIR \
