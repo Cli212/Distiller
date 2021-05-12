@@ -3,7 +3,7 @@
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
 TEACHER_DIR=howey/electra-base-mnli
 STUDENT_DIR=huawei-noah/TinyBERT_General_4L_312D
-DATA_ROOT_DIR=~/Distillation_QA_benchmark/ray_directory/datasets/glue_data/MNLI
+DATA_ROOT_DIR=~/Distillation_QA_benchmark/datasets/glue_data/MNLI
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
