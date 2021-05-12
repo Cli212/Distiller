@@ -30,7 +30,7 @@ class AutoAugmenter:
         return cls(aug_args)
 
     @classmethod
-    def init_pipeline(cls, p=[0.3,0.3,0.4,0]):
+    def init_pipeline(cls, p=[0,0,1,0]):
         config_list = [{
           "aug_type": "contextual",
           "model_type": "distilbert",

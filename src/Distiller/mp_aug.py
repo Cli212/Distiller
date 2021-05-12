@@ -29,6 +29,7 @@ def augment_data(iter_sample, augmenter, task_type):
                 result[ii].text_b = dd
     return result
 
+from functools import wraps
 
 def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None):
     if args.task_type == "glue":
@@ -76,12 +77,8 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
 def aug_process(queue:Queue, examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None):
     while True:
         if queue.empty():
-            if args.local_rank not in [-1, 0]:
-                torch.distributed.barrier()
             new_dataset = generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer)
             queue.put(new_dataset)
-            if args.local_rank == 0:
-                torch.distributed.barrier()
         else:
             time.sleep(300)
             continue

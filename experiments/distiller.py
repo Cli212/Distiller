@@ -47,6 +47,8 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     # def collate_fn(batch):
     #     return [({i:k[0] for i,k in piece.items()}) for piece in batch], [({i:k[0] for i,k in piece.items()}) for piece in batch]
     if augmenter:
+        if args.local_rank not in [-1, 0]:
+            torch.distributed.barrier()
         QUEUE_LIMIT = 600
         count = 0
         while count<QUEUE_LIMIT:
@@ -56,6 +58,8 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                 break
             except queue.Empty:
                 logger.info("Waiting for data augmentation process to return data")
+        if args.local_rank == 0:
+            torch.distributed.barrier()
         # train_dataloader = DataProvider(train_dataset, examples, args, tokenizer, augmenter,s_tokenizer,s_dataset)
 
     # else:
@@ -151,7 +155,12 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
             """
                 transform alpha logit from range [0.0, 1.0] to [-infty, infty]
             """
-            return -np.log(1 / x - 1.)
+            if x == 0.0:
+                return -np.inf
+            elif x==1.0:
+                return np.inf
+            else:
+                return -np.log(1 / x - 1.)
         args.alpha = sigmoid_reverse(args.alpha)
         if args.intermediate_strategy and args.intermediate_strategy.lower() == "emd":
             distill_config = DistillationConfig(
@@ -288,15 +297,13 @@ def main(args):
     ## Training
     if args.train:
         # examples = read_examples_from_file(args.data_dir, mode="train", task_type=args.task_type)
+        augmenter = None
+        q = None
         if args.local_rank not in [-1, 0]:
             torch.distributed.barrier()
         matches = cal_layer_mapping(args, t_config, s_config)
         train_dataset, s_dataset, features, s_features, examples = load_and_cache_examples(args, t_tokenizer, mode="train",
                                                                 return_examples=True, s_tokenizer=s_tokenizer)
-        if args.local_rank == 0:
-            torch.distributed.barrier()
-        augmenter = None
-        q = None
         # if args.augmenter_config_path:
         #     augmenter = AutoAugmenter.from_config(args.augmenter_config_path, "cpu" if args.n_gpu == 0 else "gpu")
         #     # global q
@@ -322,6 +329,8 @@ def main(args):
                 # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
                 process.start()
                 # process.join()
+        if args.local_rank == 0:
+            torch.distributed.barrier()
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q)
         # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
         # p.start()
@@ -393,7 +402,7 @@ def main(args):
 
 if __name__ == '__main__':
     args = parse()
-    # set_start_method('spawn')
+    set_start_method('fork')
     if args.S_model_name_or_path is None:
         args.S_model_name_or_path = args.T_model_name_or_path
     if args.task_type in ["squad","squad2"]:
