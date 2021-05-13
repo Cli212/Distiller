@@ -128,14 +128,17 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
         baseline_fn = None
         if args.intermediate_loss_type == 'mi':
             from Distiller.utils import mlp_critic
-            baseline_fn = mlp_critic(t_model.module.config.hidden_size, hidden_size=64, out_dim=1)
+            baseline_fn = mlp_critic(t_model.module.config.hidden_size if hasattr(t_model,
+                                                          "module") else t_model.config.hidden_size, hidden_size=64, out_dim=1)
             # for name, param in baseline_fn.named_parameters():
             #     if 'weight' in name:
             #         torch.nn.init.xavier_uniform(param)
             #     elif 'bias' in name:
             #         torch.nn.init.constant_(param, 0)
             baseline_fn.to(args.device)
-            critic = mlp_critic(t_model.module.config.hidden_size, s_model.module.config.hidden_size, 128, 32)
+            critic = mlp_critic(t_model.module.config.hidden_size if hasattr(t_model,
+                                                          "module") else t_model.config.hidden_size, s_model.module.config.hidden_size if hasattr(s_model,
+                                                          "module") else s_model.config.hidden_size, 128, 32)
             critic.to(args.device)
             critic_no_decay=['bias']
             critic_parameters = [
@@ -281,6 +284,12 @@ def main(args):
             global best_evaluation
             if evaluation_result['acc']>best_evaluation:
                 best_evaluation = evaluation_result['acc']
+                logger.info("Saving best model checkpoint to %s", os.path.join(args.output_dir,'best_model'))
+                # Save a trained model, configuration and tokenizer using `save_pretrained()`.
+                # They can then be reloaded using `from_pretrained()`
+                model_to_save = model.module if hasattr(model,
+                                                          "module") else model  # Take care of distributed/parallel training
+                model_to_save.save_pretrained(os.path.join(args.output_dir,'best_model'))
             evaluation_result['best_result'] = best_evaluation
             output_eval_file = os.path.join(args.output_dir, f"{step}_eval_results.txt")
             logger.info(f"Write evaluation result to {output_eval_file}...")
