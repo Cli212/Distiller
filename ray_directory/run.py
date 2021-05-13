@@ -227,6 +227,7 @@ def remote_fn(config, args):
     # Set ray tune hyper parameters
     for c in config.items():
         args.__setattr__(c[0],c[1])
+    # best_evaluation = 0.0
     # for k,v in config.items():
     #     args.k = v
     # Setup CUDA, GPU & distributed training
@@ -289,10 +290,10 @@ def remote_fn(config, args):
             evaluation_result = evaluate_func(args, model, s_tokenizer if s_tokenizer else t_tokenizer, prefix=step)
             logger.info("***** Eval results *****")
             logger.info(json.dumps(evaluation_result, indent=2) + '\n')
-            global best_evaluation
-            if evaluation_result['acc'] > best_evaluation:
-                best_evaluation = evaluation_result['acc']
-            evaluation_result['best_result'] = best_evaluation
+            # global best_evaluation
+            # if evaluation_result['acc'] > best_evaluation:
+            #     best_evaluation = evaluation_result['acc']
+            # evaluation_result['best_result'] = best_evaluation
             output_eval_file = os.path.join(args.output_dir, f"{step}_eval_results.txt")
             logger.info(f"Write evaluation result to {output_eval_file}...")
             with open(output_eval_file, "a") as writer:
@@ -407,8 +408,8 @@ def remote_fn(config, args):
             model.to(args.device)
             evaluation_result = evaluate_func(args, model, s_tokenizer if s_tokenizer else t_tokenizer,
                                               prefix=global_step, write_prediction=True)
-            global best_evaluation
-            evaluation_result['best_result'] = best_evaluation
+            # global best_evaluation
+            # evaluation_result['best_result'] = best_evaluation
             logger.info("***** Eval results *****")
             logger.info(json.dumps(evaluation_result, indent=2) + '\n')
 
