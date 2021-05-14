@@ -284,7 +284,7 @@ def remote_fn(config, args):
     logger.info("Training/evaluation parameters %s", args)
     s_model.to(args.device)
     t_model.to(args.device)
-
+    globals()['best_evaluation'] = 0.0
     def predict_callback(model, step):
         if args.eval and args.local_rank in [-1, 0]:
             evaluation_result = evaluate_func(args, model, s_tokenizer if s_tokenizer else t_tokenizer, prefix=step)
@@ -294,6 +294,17 @@ def remote_fn(config, args):
             # if evaluation_result['acc'] > best_evaluation:
             #     best_evaluation = evaluation_result['acc']
             # evaluation_result['best_result'] = best_evaluation
+            global best_evaluation
+            if evaluation_result['acc'] > best_evaluation:
+                best_evaluation = evaluation_result['acc']
+                logger.info("Saving best model checkpoint to %s", os.path.join(args.output_dir, 'best_model'))
+                # Save a trained model, configuration and tokenizer using `save_pretrained()`.
+                # They can then be reloaded using `from_pretrained()`
+                model_to_save = model.module.module if hasattr(model,
+                                                               "module") else model  # Take care of distributed/parallel training
+                model_to_save.save_pretrained(os.path.join(args.output_dir, 'best_model'))
+                with open(os.path.join(args.output_dir, 'best_model/best_results.txt'), "a") as writer:
+                    writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
             output_eval_file = os.path.join(args.output_dir, f"{step}_eval_results.txt")
             logger.info(f"Write evaluation result to {output_eval_file}...")
             with open(output_eval_file, "a") as writer:
@@ -447,6 +458,8 @@ def main(args, gpus_per_trial=4):
         config=search_space,
         scheduler=scheduler,
         progress_reporter=reporter)
+    with open('/home/ubuntu/ray_results.json','w') as f:
+        json.dump(result, f)
     best_trial = result.get_best_trial("accuracy", "max", "last")
     print("Best trial config: {}".format(best_trial.config))
     # print("Best trial final validation loss: {}".format(
