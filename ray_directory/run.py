@@ -22,6 +22,8 @@ from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from Distiller.transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
 from torch.multiprocessing import Queue, Process, set_start_method
+from ray.util.sgd.integration.torch import DistributedTrainableCreator
+
 
 logger = logging.getLogger(__name__)
 task_dict = {'squad2': AutoModelForQuestionAnswering,
@@ -223,7 +225,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
 
 
 
-def remote_fn(config, args):
+def remote_fn(config, checkpoint_dir=None, args=None):
     # Set ray tune hyper parameters
     for c in config.items():
         args.__setattr__(c[0],c[1])
@@ -452,8 +454,16 @@ def main(args, gpus_per_trial=4):
     #     num_gpus_per_worker=10,
     #     num_cpus_per_worker=8
     # )
-    result = tune.run(
+    distributed_remote_fn = DistributedTrainableCreator(
         partial(remote_fn, args=args),
+        use_gpu=True,
+        num_workers=2,
+        num_cpus_per_worker=8,
+        num_gpus_per_worker=4,
+        backend="nccl"
+    )
+    result = tune.run(
+        distributed_remote_fn,
         resources_per_trial={"cpu": 8, "gpu": gpus_per_trial},
         config=search_space,
         scheduler=scheduler,
