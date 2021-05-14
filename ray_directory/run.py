@@ -456,7 +456,6 @@ def main(args, gpus_per_trial=4):
     # )
     distributed_remote_fn = DistributedTrainableCreator(
         partial(remote_fn, args=args),
-        use_gpu=True,
         num_workers=2,
         num_cpus_per_worker=8,
         num_gpus_per_worker=4,
