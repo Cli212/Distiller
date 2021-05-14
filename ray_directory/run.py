@@ -434,10 +434,13 @@ def remote_fn(config, checkpoint_dir=None, args=None):
 
 
 def main(args, gpus_per_trial=4):
+    # search_space = {
+    #     "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),
+    #     "kd_loss_type": tune.grid_search(["ce", "mse"]),
+    #     "intermediate_loss_type": tune.grid_search(["ce", "mse", "cos", "pkd","mi"])}
     search_space = {
-        "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),
-        "kd_loss_type": tune.grid_search(["ce", "mse"]),
-        "intermediate_loss_type": tune.grid_search(["ce", "mse", "cos", "pkd","mi"])}
+        "alpha": tune.grid_search([0.0,0.01,0.1,0.3,0.5,0.7,0.9,0.99,1.0]),
+        "mixup": tune.grid_search([True, False])}
     scheduler = ASHAScheduler(
         metric="accuracy",
         mode="max",
@@ -456,7 +459,7 @@ def main(args, gpus_per_trial=4):
     # )
     distributed_remote_fn = DistributedTrainableCreator(
         partial(remote_fn, args=args),
-        num_workers=2,
+        num_workers=6,
         num_cpus_per_worker=8,
         num_gpus_per_worker=4,
         backend="nccl"
@@ -492,4 +495,3 @@ if __name__ == '__main__':
         from Distiller.glue_preprocess import load_and_cache_examples
     logger = logging.getLogger(__name__)
     main(args)
-
