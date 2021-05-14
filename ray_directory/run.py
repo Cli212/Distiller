@@ -463,7 +463,7 @@ def main(args, gpus_per_trial=4):
     )
     result = tune.run(
         distributed_remote_fn,
-        resources_per_trial={"cpu": 8, "gpu": gpus_per_trial},
+        resources_per_trial=None,
         config=search_space,
         scheduler=scheduler,
         progress_reporter=reporter)
