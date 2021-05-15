@@ -459,8 +459,8 @@ def main(args, gpus_per_trial=4):
     # )
     distributed_remote_fn = DistributedTrainableCreator(
         partial(remote_fn, args=args),
-        num_workers=4,
-        num_cpus_per_worker=8,
+        num_workers=8,
+        num_cpus_per_worker=16,
         num_gpus_per_worker=4,
         backend="nccl"
     )
@@ -469,7 +469,8 @@ def main(args, gpus_per_trial=4):
         resources_per_trial=None,
         config=search_space,
         scheduler=scheduler,
-        progress_reporter=reporter)
+        progress_reporter=reporter,
+        queue_trials=True)
     with open('/home/ubuntu/ray_results.json','w') as f:
         json.dump(result, f)
     best_trial = result.get_best_trial("accuracy", "max", "last")
