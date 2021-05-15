@@ -20,3 +20,4 @@ fairseq
 fastBPE
 boto3
 nlpaug
+Cython
