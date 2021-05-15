@@ -22,6 +22,7 @@ setup(
         "requests>=2.22.0",
         "Cython",
         "fsspec",
+        "wheel",
         "dill",
         "pandas",
         "tqdm>=4.27",
