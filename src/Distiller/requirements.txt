@@ -1,7 +1,6 @@
 scipy >= 1.0.0
 numpy>=1.17
 requests>=2.22.0
-pyarrow
 fsspec
 huggingface_hub==0.0.2
 dill
