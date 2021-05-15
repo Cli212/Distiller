@@ -20,7 +20,7 @@ setup(
         "scipy >= 1.0.0",
         "numpy>=1.17",
         "requests>=2.22.0",
-        "pyarrow",
+        "Cython",
         "fsspec",
         "dill",
         "pandas",
