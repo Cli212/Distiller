@@ -256,7 +256,10 @@ def mixup_assist(batch, model, random_index, lmbd, local_rank, task_type, device
     if local_rank != -1:
         embeddings = model.module.module.base_model.embeddings.word_embeddings
     else:
-        embeddings = model.base_model.embeddings.word_embeddings
+        if hasattr(model,'module'):
+            embeddings = model.module.base_model.embeddings.word_embeddings
+        else:
+            embeddings = model.base_model.embeddings.word_embeddings
     input_embeddings = embeddings(batch['input_ids'])
     new_batch["inputs_embeds"] = input_embeddings
     new_mixup_batch["inputs_embeds"] = lmbd * input_embeddings + (1 - lmbd) * embeddings(mix_ids)
