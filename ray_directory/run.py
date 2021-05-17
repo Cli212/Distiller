@@ -445,8 +445,9 @@ def main(args, gpus_per_trial=4):
         metric="accuracy",
         mode="max",
         max_t=args.num_train_epochs,
-        grace_period=1,
-        reduction_factor=2)
+        grace_period=10,
+        reduction_factor=3,
+        brackets=1)
 
     reporter = CLIReporter(
         # parameter_columns=["l1", "l2", "lr", "batch_size"],

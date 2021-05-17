@@ -8,7 +8,7 @@ OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
 accu=1
-ep=15
+ep=20
 lr=5
 alpha=0.1
 #augmenter_config_path=augmenter_config.json
