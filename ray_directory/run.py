@@ -434,13 +434,13 @@ def remote_fn(config, checkpoint_dir=None, args=None):
 
 
 def main(args, gpus_per_trial=4):
-    # search_space = {
-    #     "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),
-    #     "kd_loss_type": tune.grid_search(["ce", "mse"]),
-    #     "intermediate_loss_type": tune.grid_search(["ce", "mse", "cos", "pkd","mi"])}
     search_space = {
-        "alpha": tune.grid_search([0.0,0.01,0.1,0.3,0.5,0.7,0.9,0.99,1.0]),
-        "mixup": tune.grid_search([True, False])}
+        "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),
+        "kd_loss_type": tune.grid_search(["ce", "mse"]),
+        "intermediate_loss_type": tune.grid_search(["ce", "mse", "cos", "pkd","mi"])}
+    # search_space = {
+    #     "alpha": tune.grid_search([0.0,0.01,0.1,0.3,0.5,0.7,0.9,0.99,1.0]),
+    #     "mixup": tune.grid_search([True, False])}
     scheduler = ASHAScheduler(
         metric="accuracy",
         mode="max",
