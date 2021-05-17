@@ -290,7 +290,7 @@ def main(args):
                 model_to_save = model.module.module if hasattr(model,
                                                                "module") else model  # Take care of distributed/parallel training
                 model_to_save.save_pretrained(os.path.join(args.output_dir, 'best_model'))
-                with open(os.path.join(args.output_dir, 'best_model/best_results.txt'), "a") as writer:
+                with open(os.path.join(args.output_dir, 'best_model/best_results.txt'), "w") as writer:
                     writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
             evaluation_result['best_result'] = best_evaluation
             output_eval_file = os.path.join(args.output_dir, f"{step}_eval_results.txt")

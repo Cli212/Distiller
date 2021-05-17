@@ -305,7 +305,7 @@ def remote_fn(config, checkpoint_dir=None, args=None):
                 model_to_save = model.module.module if hasattr(model.module,
                                                                "module") else model.module  # Take care of distributed/parallel training
                 model_to_save.save_pretrained(os.path.join(args.output_dir, 'best_model'))
-                with open(os.path.join(args.output_dir, 'best_model/best_results.txt'), "a") as writer:
+                with open(os.path.join(args.output_dir, 'best_model/best_results.txt'), "w") as writer:
                     writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
             output_eval_file = os.path.join(args.output_dir, f"{step}_eval_results.txt")
             logger.info(f"Write evaluation result to {output_eval_file}...")
@@ -457,16 +457,26 @@ def main(args, gpus_per_trial=4):
     #     num_gpus_per_worker=10,
     #     num_cpus_per_worker=8
     # )
-    distributed_remote_fn = DistributedTrainableCreator(
-        partial(remote_fn, args=args),
-        num_workers=4,
-        num_cpus_per_worker=8,
-        num_gpus_per_worker=4,
-        backend="nccl"
-    )
+    # distributed_remote_fn = DistributedTrainableCreator(
+    #     partial(remote_fn, args=args),
+    #     num_workers=4,
+    #     num_cpus_per_worker=8,
+    #     num_gpus_per_worker=4,
+    #     backend="nccl"
+    # )
+    # result = tune.run(
+    #     distributed_remote_fn,
+    #     resources_per_trial=None,
+    #     config=search_space,
+    #     scheduler=scheduler,
+    #     progress_reporter=reporter,
+    #     queue_trials=True)
     result = tune.run(
-        distributed_remote_fn,
-        resources_per_trial=None,
+        partial(remote_fn, args=args),
+        resources_per_trial={
+            "cpu": 32,
+            "gpu": gpus_per_trial
+        },
         config=search_space,
         scheduler=scheduler,
         progress_reporter=reporter,
