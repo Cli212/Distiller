@@ -228,7 +228,11 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
 def remote_fn(config, checkpoint_dir=None, args=None):
     # Set ray tune hyper parameters
     for c in config.items():
-        args.__setattr__(c[0],c[1])
+        if c[0] == 'intermediate_loss_type' and 'mi' in c[0]:
+            args.__setattr__('intermediate_loss_type', c[1].split('_')[0])
+            args.__setattr__('alpha', float(c[1].split('_')[1]))
+        else:
+            args.__setattr__(c[0], c[1])
     # best_evaluation = 0.0
     # for k,v in config.items():
     #     args.k = v
@@ -434,14 +438,17 @@ def remote_fn(config, checkpoint_dir=None, args=None):
 
 
 def main(args, gpus_per_trial=4):
-    # search_space = {
-    #     "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),
-    #     "kd_loss_type": tune.grid_search(["ce", "mse"]),
-    #     "intermediate_loss_type": tune.grid_search(["ce", "mse", "cos", "pkd","mi"])}
+    # for i in ['mse','ce']:
+    #     for j in ['skip','last','EMD']:
+    #         for k in ['ce', 'mse', 'cos', 'pkd', '']
     search_space = {
-        "alpha": tune.grid_search([0.0,0.1,0.3,0.5,0.7,0.9,1.0]),
-        "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),
-        "mixup": tune.grid_search([True, False])}
+        "intermediate_strategy": tune.choice(["skip", "last", "EMD"]),
+        "kd_loss_type": tune.choice(["ce", "mse"]),
+        "intermediate_loss_type": tune.choice(["ce", "mse", "cos", "pkd","mi_0.0","mi_0.1","mi_0.5","mi_0.7","mi_1.0"])}
+    # search_space = {
+    #     "alpha": tune.grid_search([0.0, 0.1, 0.5, 0.9, 1.0]),
+    #     "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),
+    #     "mixup": tune.grid_search([True, False])}
     scheduler = ASHAScheduler(
         metric="accuracy",
         mode="max",
@@ -480,8 +487,8 @@ def main(args, gpus_per_trial=4):
             "gpu": gpus_per_trial
         },
         config=search_space,
-        scheduler=scheduler,
         progress_reporter=reporter,
+        num_samples=35,
         queue_trials=True)
     with open('/home/ubuntu/ray_results.json','w') as f:
         json.dump(result, f)
@@ -491,6 +498,10 @@ def main(args, gpus_per_trial=4):
     #     best_trial.last_result["loss"]))
     print("Best trial final validation accuracy: {}".format(
         best_trial.last_result["accuracy"]))
+    print("Best config: ", best_trial.get_best_config(metric="mean_loss", mode="min"))
+
+    # Get a dataframe for analyzing trial results.
+    df = best_trial.results_df
 
 
 if __name__ == '__main__':
