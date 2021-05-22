@@ -228,7 +228,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
 def remote_fn(config, checkpoint_dir=None, args=None):
     # Set ray tune hyper parameters
     for c in config.items():
-        if c[0] == 'intermediate_loss_type' and 'mi' in c[0]:
+        if c[0] == 'intermediate_loss_type' and 'mi' in c[1]:
             args.__setattr__('intermediate_loss_type', c[1].split('_')[0])
             args.__setattr__('alpha', float(c[1].split('_')[1]))
         else:
