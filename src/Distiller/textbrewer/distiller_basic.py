@@ -229,6 +229,8 @@ class BasicDistiller(AbstractDistiller):
                 dataloader = self.logits_cache
             logger.info(f"Length of current epoch in forward batch: {len(dataloader)}")
             for step, batch in tqdm(enumerate(dataloader), disable=tqdm_disable):
+                if hasattr(batch,'guid'):
+                    batch = "x"
                 if self.d_config.is_caching_logits is False and batch_postprocessor is not None:
                         batch = batch_postprocessor(batch)
                 if self.t_config.fp16:

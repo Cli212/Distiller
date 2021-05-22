@@ -72,6 +72,28 @@ class MyDataset(Dataset):
         return len(self.all_input_ids)
 
 
+class ExampleDataset(Dataset):
+    def __init__(self, all_guids, all_text_a, all_text_b, all_labels):
+        super(ExampleDataset, self).__init__()
+        self.all_guids = all_guids
+        self.all_text_a = all_text_a
+        self.all_text_b = all_text_b
+        self.all_labels = all_labels
+
+    def __getitem__(self, index):
+        guid = self.all_guids[index]
+        text_a = self.all_text_a[index]
+        text_b = self.all_text_b[index]
+        label = self.all_labels[index]
+        return {'guid': guid,
+                'text_a': text_a,
+                'text_b': text_b,
+                'label': label}
+
+    def __len__(self):
+        return len(self.all_text_ax)
+
+
 @dataclass
 class InputExample:
     """
@@ -317,6 +339,8 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples=False, s_toke
 
     processor = glue_processors[args.task_name]()
     examples = processor.get_dev_examples(args.data_dir) if mode == "dev" else processor.get_train_examples(args.data_dir)
+    if args.repeated_aug:
+        return convert_examples_to_dataset(examples), None, None, None, examples
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
@@ -348,6 +372,14 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples=False, s_toke
     if return_examples:
         return dataset, s_dataset, features, s_features, examples
     return dataset
+
+
+def convert_examples_to_dataset(examples):
+    all_guids = [i.guid for i in examples]
+    all_text_a = [i.text_a for i in examples]
+    all_text_b = [i.text_b for i in examples]
+    all_labels = [i.label for i in examples]
+    return ExampleDataset(all_guids, all_text_a, all_text_b, all_labels)
 
 
 def convert_features_to_dataset(features, s_features=None, is_training=True):

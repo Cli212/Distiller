@@ -64,6 +64,7 @@ def parse():
     parser.add_argument("--intermediate_loss_type", type=str, default="ce", choices=["ce","mse","cos","pkd","mi","nce","nwj","tuba"])
     parser.add_argument("--alpha", type=float, default=0.5, help="only useful when using mi loss")
     parser.add_argument("--mixup", action="store_true")
+    parser.add_argument("--repeated_aug", action="store_true")
     parser.add_argument("--kd_loss_weight", default=1.0, type=float, help="weight of kd loss")
     parser.add_argument("--hard_label_weight", default=1.0, type=float, help="weight of hard label loss")
     parser.add_argument("--kd_loss_type", default="ce", choices=["ce", "mse"])
