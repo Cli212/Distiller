@@ -91,7 +91,7 @@ class ExampleDataset(Dataset):
                 'label': label}
 
     def __len__(self):
-        return len(self.all_text_ax)
+        return len(self.all_text_a)
 
 
 @dataclass
