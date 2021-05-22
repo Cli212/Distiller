@@ -85,10 +85,17 @@ class ExampleDataset(Dataset):
         text_a = self.all_text_a[index]
         text_b = self.all_text_b[index]
         label = self.all_labels[index]
-        return {'guid': guid,
-                'text_a': text_a,
-                'text_b': text_b,
-                'label': label}
+        if text_b is None:
+            return {'guid': guid,
+                    'text_a': text_a,
+                    'label': label}
+        else:
+            return {'guid': guid,
+                    'text_a': text_a,
+                    'text_b': text_b,
+                    'label': label}
+
+
 
     def __len__(self):
         return len(self.all_text_a)
