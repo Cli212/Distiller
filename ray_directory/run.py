@@ -300,8 +300,8 @@ def remote_fn(config, checkpoint_dir=None, args=None):
                 logger.info("Saving best model checkpoint to %s", os.path.join(args.output_dir, 'best_model'))
                 # Save a trained model, configuration and tokenizer using `save_pretrained()`.
                 # They can then be reloaded using `from_pretrained()`
-                model_to_save = model.module.module if hasattr(model,
-                                                               "module") else model  # Take care of distributed/parallel training
+                model_to_save = model.module.module if hasattr(model.module,
+                                                               "module") else model.module # Take care of distributed/parallel training
                 model_to_save.save_pretrained(os.path.join(args.output_dir, 'best_model'))
                 with open(os.path.join(args.output_dir, 'best_model/best_results.txt'), "w") as writer:
                     writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
