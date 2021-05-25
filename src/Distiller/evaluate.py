@@ -156,9 +156,9 @@ def evaluate_glue(args, model, tokenizer, prefix="",write_prediction=False):
     #     metric = load_metric("glue", args.task_name)
     preds = []
     label_list = []
-
+    model.eval()
     for step, batch in enumerate(eval_dataloader):
-        model.eval()
+
         # labels = batch['labels']
         # batch = tuple(t.to(args.device) for t in batch)
         batch = {key: value.to(args.device) for key, value in batch.items()}
@@ -176,18 +176,18 @@ def evaluate_glue(args, model, tokenizer, prefix="",write_prediction=False):
     # eval_metric_compute = metric.compute()
     eval_metric = glue_compute_metrics(args.task_name,np.array(preds), np.array(label_list))
     if args.task_name == 'mnli':
-        new_args = args.copy()
-        new_args.task_name = 'mnli-mm'
-        dataset, s_dataset, features, s_features, examples = load_and_cache_examples(new_args, tokenizer, mode="dev",
+        # new_args = args.copy()
+        args.task_name = 'mnli-mm'
+        dataset, s_dataset, features, s_features, examples = load_and_cache_examples(args, tokenizer, mode="dev",
                                                                                      return_examples=True)
 
-        if not os.path.exists(new_args.output_dir) and new_args.local_rank in [-1, 0]:
-            os.makedirs(new_args.output_dir)
+        if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
+            os.makedirs(args.output_dir)
 
-        new_args.eval_batch_size = new_args.per_gpu_eval_batch_size * max(1, new_args.n_gpu)
+        args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
         # Note that DistributedSampler samples randomly
         eval_sampler = SequentialSampler(dataset)
-        eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=new_args.eval_batch_size)
+        eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
         # if args.task_name is not None:
         #     metric = load_metric("glue", args.task_name)
         preds = []
@@ -197,7 +197,7 @@ def evaluate_glue(args, model, tokenizer, prefix="",write_prediction=False):
             model.eval()
             # labels = batch['labels']
             # batch = tuple(t.to(args.device) for t in batch)
-            batch = {key: value.to(new_args.device) for key, value in batch.items()}
+            batch = {key: value.to(args.device) for key, value in batch.items()}
             with torch.no_grad():
                 outputs = model(**batch)
             # outputs = model(**batch)
@@ -206,9 +206,10 @@ def evaluate_glue(args, model, tokenizer, prefix="",write_prediction=False):
             preds.extend(predictions.tolist())
 
         # eval_metric_compute = metric.compute()
-        mm_eval_metric = glue_compute_metrics(new_args.task_name, np.array(preds), np.array(label_list))
+        mm_eval_metric = glue_compute_metrics(args.task_name, np.array(preds), np.array(label_list))
         eval_metric['mnli-mm/acc'] = mm_eval_metric['mnli-mm/acc']
         eval_metric['m_mm_acc'] = (eval_metric['mnli/acc'] + eval_metric['mnli-mm/acc'])/2
+        args.task_name='mnli'
     logger.info(f"step {prefix}: {eval_metric}")
     return eval_metric
 
