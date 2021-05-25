@@ -627,3 +627,14 @@ class mlp_critic(torch.nn.Module):
             return self._t(y)
         else:
             return torch.matmul(self._s(x), self._t(y).T)
+
+def glue_criterion(task_name):
+    return {'cola':['mcc'],
+            'sst-2':['acc'],
+            'mrpc':['acc','f1','acc_and_f1'],
+            'stsb':['spearmanr','pearson','corr'],
+            'qqp':['acc','f1','acc_and_f1'],
+            'mnli':['m_mm_acc','mnli/acc','mnli-mm/acc'],
+            'qnli':['acc'],
+            'rte':['acc'],
+            'wnli':['acc']}[task_name]

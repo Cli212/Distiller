@@ -73,32 +73,17 @@ class MyDataset(Dataset):
 
 
 class ExampleDataset(Dataset):
-    def __init__(self, all_guids, all_text_a, all_text_b, all_labels):
+    def __init__(self, examples):
         super(ExampleDataset, self).__init__()
-        self.all_guids = all_guids
-        self.all_text_a = all_text_a
-        self.all_text_b = all_text_b
-        self.all_labels = all_labels
+        self.examples = examples
 
     def __getitem__(self, index):
-        guid = self.all_guids[index]
-        text_a = self.all_text_a[index]
-        text_b = self.all_text_b[index]
-        label = self.all_labels[index]
-        if text_b is None:
-            return {'guid': guid,
-                    'text_a': text_a,
-                    'label': label}
-        else:
-            return {'guid': guid,
-                    'text_a': text_a,
-                    'text_b': text_b,
-                    'label': label}
+        return self.examples[index]
 
 
 
     def __len__(self):
-        return len(self.all_text_a)
+        return len(self.examples)
 
 
 @dataclass
@@ -148,137 +133,6 @@ class InputFeatures:
     def to_json_string(self):
         """Serializes this instance to a JSON string."""
         return json.dumps(dataclasses.asdict(self)) + "\n"
-# @dataclass(frozen=True)
-# class InputFeatures(object):
-#     """A single set of features of data."""
-#
-#     input_ids: List[int]
-#     attention_mask: Optional[List[int]] = None
-#     token_type_ids: Optional[List[int]] = None
-#     label: Optional[Union[int, float]] = None
-#
-#     def to_json_string(self):
-#         return json.dumps(dataclasses.asdict(self)) + "\n"
-
-
-# def example_iter(examples):
-#     i = 0
-#     while i < len(examples):
-#         if (i + 32) >= len(examples):
-#             # yield [j.context_text for j in examples[i:]],i
-#             yield examples[i:]
-#         else:
-#             # yield [j.context_text for j in examples[i:i+32]], i
-#             yield examples[i:i + 32]
-#         i += 32
-#
-#
-# def augment_data(iter_sample, augmenter):
-#     result = iter_sample.copy()
-#     for ii, dd in enumerate(augmenter.augment([i.text_a for i in iter_sample])):
-#         result[ii].text_a = dd
-#     if hasattr(iter_sample[0],"text_b"):
-#         for ii, dd in enumerate(augmenter.augment([i.text_b for i in iter_sample])):
-#             result[ii].text_b = dd
-#     return result
-#
-#
-# class DataProvider:
-#     def __init__(self, dataset, examples, args, tokenizer=None, augmenter=None,s_tokenizer=None, s_dataset=None, collate_fn=None):
-#         self.examples = examples
-#         self.dataset = dataset
-#         self.augmenter = augmenter
-#         self.args = args
-#         self.tokenizer = tokenizer
-#         self.s_tokenizer = s_tokenizer
-#         self.s_dataset = s_dataset
-#         self.collate_fn = collate_fn
-#         self.batch_size = args.train_batch_size * 2 if augmenter else args.train_batch_size
-#         self.epoch = 0
-#         self.dataloader = None
-#         self.s_dataloader = None
-#         self.build()
-#     def build(self):
-#         if self.augmenter and self.epoch % 5 == 0:
-#             if self.args.local_rank not in [-1, 0]:
-#                 torch.distributed.barrier()
-#             # new_examples = self.examples.copy()
-#             # pbar = tqdm(total=int(len(self.examples) / 32) + 1, desc="Data augmentation")
-#             # for iter_sample in example_iter():
-#             #     text, i = iter_sample
-#             #     for ii, dd in enumerate(self.augmenter.augment(text)):
-#             #         new_examples[i + ii].context_text = dd
-#             #     pbar.update()
-#             threads = min(self.args.thread, cpu_count())
-#             from functools import partial
-#             with Pool(threads) as p:
-#                 # global examples
-#                 # examples = self.examples
-#                 annotate_ = partial(
-#                     augment_data,
-#                     augmenter=self.augmenter
-#                 )
-#                 aug_examples = list(
-#                     tqdm(
-#                         p.imap(annotate_, example_iter(self.examples), chunksize=32),
-#                         total=int(len(self.examples) / 32) + 1,
-#                         desc="Data augmentation",
-#                         disable=False,
-#                     )
-#                 )
-#             new_examples = []
-#             for i in aug_examples:
-#                 new_examples.extend(i)
-#             del aug_examples
-#             features = convert_examples_to_features(new_examples, self.tokenizer, self.args.max_seq_length,
-#                                                              task=self.args.task_name
-#                                                              )
-#             s_features = None
-#             if self.s_tokenizer:
-#                 s_features = convert_examples_to_features(new_examples, self.s_tokenizer,
-#                                                                      self.args.max_seq_length,
-#                                                                      task=self.args.task_name
-#                                                                      )
-#
-#             dataset = convert_features_to_dataset(features, s_features)
-#             new_dataset = ConcatDataset([self.dataset, dataset])
-#             self.dataset = new_dataset
-#
-#                 # s_dataset = convert_features_to_dataset(s_features, is_training=True)
-#                 # s_new_dataset = ConcatDataset([self.s_dataset, s_dataset])
-#                 # self.s_dataset = s_new_dataset
-#             if self.args.local_rank == 0:
-#                 torch.distributed.barrier()
-#
-#         train_sampler = RandomSampler(self.dataset) if self.args.local_rank == -1 else DistributedSampler(
-#             self.dataset)
-#         if self.args.local_rank != -1:
-#             train_sampler.set_epoch(self.epoch)
-#         self.dataloader = DataLoader(self.dataset, sampler=train_sampler, batch_size=self.batch_size,
-#                                      collate_fn=self.collate_fn, num_workers=self.args.num_workers)
-#         # if self.s_tokenizer:
-#         #     self.s_dataloader = DataLoader(self.s_dataset, sampler=train_sampler, batch_size=self.batch_size,
-#         #                                    collate_fn=self.collate_fn, num_workers=self.args.num_workers)
-#
-#
-#     def __len__(self):
-#         ## To Do
-#         if len(self.examples) % self.batch_size == 0:
-#             return int(len(self.examples) / self.batch_size)
-#         return int(len(self.examples) / self.batch_size) + 1
-#
-#     def __iter__(self):
-#         self.build()
-#         self.epoch += 1
-#         ## Lack in handling s_dataloader
-#         # if self.s_tokenizer:
-#         #     for i in range(self.__len__()):
-#         #         teacher_batch, student_batch = next(iter(self.dataloader))
-#         #         yield {"teacher": teacher_batch, "student": student_batch}
-#         # else:
-#         for i in range(self.__len__()):
-#             yield next(iter(self.dataloader))
-#             # return self.dataloader.__iter__()
 
 class DataProcessor:
     """Base class for data converters for sequence classification data sets."""
@@ -324,6 +178,207 @@ class DataProcessor:
             return list(csv.reader(f, delimiter="\t", quotechar=quotechar))
 
 
+class Processor:
+    def __init__(self, args, tokenizer, task, max_length, s_tokenizer=None):
+        self.args = args
+        self.tokenizer = tokenizer
+        self.task = task
+        self.max_length = max_length
+        self.s_tokenizer = s_tokenizer
+    def load_and_cache_examples(self, mode, return_examples=False):
+        s_dataset = None
+        s_features = None
+        s_cached_features_file = None
+        if self.args.local_rank not in [-1, 0] and mode != "dev":
+            torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+
+        # Load data features from cache or dataset file
+        cached_features_file = os.path.join(self.args.data_dir, "cached_{}_{}_{}_{}".format(mode, self.args.task_name,
+                                                                                       list(filter(None,
+                                                                                                   self.tokenizer.name_or_path.split(
+                                                                                                       "/"))).pop(),
+                                                                                       str(self.args.max_seq_length)))
+        if self.s_tokenizer:
+            s_cached_features_file = os.path.join(self.args.data_dir, "cached_{}_{}_{}_{}".format(mode, self.args.task_name,
+                                                                                             list(filter(None,
+                                                                                                         self.s_tokenizer.name_or_path.split(
+                                                                                                             "/"))).pop(),
+                                                                                             str(self.args.max_seq_length)))
+
+        processor = glue_processors[self.args.task_name]()
+        examples = processor.get_dev_examples(self.args.data_dir) if mode == "dev" else processor.get_train_examples(
+            self.args.data_dir)
+        if self.args.repeated_aug and mode == 'train':
+            return convert_examples_to_dataset(examples), None, None, None, examples
+        if os.path.exists(cached_features_file) and not self.args.overwrite_cache:
+            logger.info("Loading features from cached file %s", cached_features_file)
+            features = torch.load(cached_features_file)
+            ## This place need to be more flexible
+        else:
+            logger.info("Creating features from dataset file at %s", self.args.data_dir)
+            features = self.convert_examples_to_features(examples, self.tokenizer, task=self.args.task_name,
+                                                    max_length=self.args.max_seq_length,
+                                                    label_list=processor.get_labels(),
+                                                    output_mode=glue_output_modes[self.args.task_name])
+            if self.args.local_rank in [-1, 0]:
+                logger.info("Saving features into cached file %s", cached_features_file)
+                torch.save(features, cached_features_file)
+        # dataset = convert_features_to_dataset(features, is_training=(mode == 'train'))
+        if self.s_tokenizer:
+            if os.path.exists(s_cached_features_file) and not self.args.overwrite_cache:
+                logger.info("Loading student features from cached file %s", s_cached_features_file)
+                s_features = torch.load(s_cached_features_file)
+            else:
+                logger.info("Creating student features from dataset file at %s", self.args.data_dir)
+                s_features = self.convert_examples_to_features(examples, self.s_tokenizer, task=self.args.task_name,
+                                                          max_length=self.args.max_seq_length,
+                                                          label_list=processor.get_labels(),
+                                                          output_mode=glue_output_modes[self.args.task_name])
+                if self.args.local_rank in [-1, 0]:
+                    logger.info("Saving student features into cached file %s", s_cached_features_file)
+                    torch.save(s_features, s_cached_features_file)
+            # s_dataset = convert_features_to_dataset(s_features, is_training=(mode == 'train'))
+        dataset = self.convert_features_to_dataset(features, s_features, is_training=(mode == 'train'))
+        if self.args.local_rank == 0 and mode != "dev":
+            torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+
+        if return_examples:
+            return dataset, s_dataset, features, s_features, examples
+        return dataset
+
+    def convert_examples_to_dataset(self, examples):
+        return ExampleDataset(examples)
+
+    def convert_features_to_bacth(self, features, s_features=None):
+        s_all_input_ids = None
+        s_all_attention_masks = None
+        s_all_token_type_ids = None
+        all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+        all_attention_masks = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
+        all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
+        if s_features:
+            s_all_input_ids = torch.tensor([f.input_ids for f in s_features], dtype=torch.long)
+            s_all_attention_masks = torch.tensor([f.attention_mask for f in s_features], dtype=torch.long)
+            s_all_token_type_ids = torch.tensor([f.token_type_ids for f in s_features], dtype=torch.long)
+        all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
+        if s_features:
+            return {'teacher': {'input_ids': all_input_ids,
+                                'attention_mask': all_attention_masks,
+                                'token_type_ids': all_token_type_ids,
+                                'labels': all_labels}, "student": {'input_ids': s_all_input_ids,
+                                                               'attention_mask': s_all_attention_masks,
+                                                               'token_type_ids': s_all_token_type_ids,
+                                                               'labels': all_labels}}
+        else:
+            return {'input_ids': all_input_ids,
+                    'attention_mask': all_attention_masks,
+                    'token_type_ids': all_token_type_ids,
+                    'labels': all_labels}
+
+
+    def convert_features_to_dataset(self,features, s_features=None, is_training=True):
+        # Convert to Tensors and build dataset
+        s_all_input_ids = None
+        s_all_attention_masks = None
+        s_all_token_type_ids = None
+        all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+        all_attention_masks = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
+        all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
+        if s_features:
+            s_all_input_ids = torch.tensor([f.input_ids for f in s_features], dtype=torch.long)
+            s_all_attention_masks = torch.tensor([f.attention_mask for f in s_features], dtype=torch.long)
+            s_all_token_type_ids = torch.tensor([f.token_type_ids for f in s_features], dtype=torch.long)
+        all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
+        return MyDataset(all_input_ids, all_attention_masks, all_token_type_ids, all_labels, s_all_input_ids,
+                         s_all_attention_masks, s_all_token_type_ids)
+        # if is_training:
+        #     return MyDataset(all_input_ids, all_attention_masks, all_token_type_ids, all_labels)
+        # else:
+        #     return TensorDataset(all_input_ids, all_attention_masks, all_token_type_ids, all_labels)
+
+    def convert_examples_to_features(
+            self,
+            examples: Union[List[InputExample], "tf.data.Dataset"],
+            label_list=None,
+            output_mode=None,
+            disable=False,
+    ):
+        """
+        Loads a data file into a list of ``InputFeatures``
+        Args:
+            examples: List of ``InputExamples`` or ``tf.data.Dataset`` containing the examples.
+            tokenizer: Instance of a tokenizer that will tokenize the examples
+            max_length: Maximum example length. Defaults to the tokenizer's max_len
+            task: GLUE task
+            label_list: List of labels. Can be obtained from the processor using the ``processor.get_labels()`` method
+            output_mode: String indicating the output mode. Either ``regression`` or ``classification``
+        Returns:
+            If the ``examples`` input is a ``tf.data.Dataset``, will return a ``tf.data.Dataset`` containing the
+            task-specific features. If the input is a list of ``InputExamples``, will return a list of task-specific
+            ``InputFeatures`` which can be fed to the model.
+        """
+        return self._glue_convert_examples_to_features(
+            examples, self.tokenizer, label_list=label_list, output_mode=output_mode, disable=disable
+        ), self._glue_convert_examples_to_features(
+            examples, self.s_tokenizer, label_list=label_list, output_mode=output_mode, disable=disable
+        ) if self.s_tokenizer else None
+
+    def _glue_convert_examples_to_features(
+            self,
+            examples: List[InputExample],
+            tokenizer: PreTrainedTokenizer,
+            label_list=None,
+            output_mode=None,
+            disable=False,
+    ):
+        if self.max_length is None:
+            max_length = tokenizer.model_max_length
+
+        if self.task is not None:
+            processor = glue_processors[self.task]()
+            if label_list is None:
+                label_list = processor.get_labels()
+                # logger.info(f"Using label list {label_list} for task {self.task}")
+            if output_mode is None:
+                output_mode = glue_output_modes[self.task]
+                # logger.info(f"Using output mode {output_mode} for task {self.task}")
+
+        label_map = {label: i for i, label in enumerate(label_list)}
+
+        def label_from_example(example: InputExample) -> Union[int, float, None]:
+            if example.label is None:
+                return None
+            if output_mode == "classification":
+                return label_map[example.label]
+            elif output_mode == "regression":
+                return float(example.label)
+            raise KeyError(output_mode)
+
+        labels = [label_from_example(example) for example in examples]
+
+        batch_encoding = tokenizer(
+            [(example.text_a, example.text_b) for example in examples],
+            max_length=self.max_length,
+            padding="max_length",
+            truncation=True,
+            return_token_type_ids=True
+        )
+
+        features = []
+        for i in tqdm(range(len(examples)),disable=disable):
+            inputs = {k: batch_encoding[k][i] for k in batch_encoding}
+
+            feature = InputFeatures(**inputs, label=labels[i])
+            features.append(feature)
+
+        # for i, example in enumerate(examples[:5]):
+        #     logger.info("*** Example ***")
+        #     logger.info(f"guid: {example.guid}")
+        #     logger.info(f"features: {features[i]}")
+
+        return features
+
+
 def load_and_cache_examples(args, tokenizer, mode, return_examples=False, s_tokenizer=None):
     s_dataset = None
     s_features = None
@@ -346,7 +401,7 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples=False, s_toke
 
     processor = glue_processors[args.task_name]()
     examples = processor.get_dev_examples(args.data_dir) if mode == "dev" else processor.get_train_examples(args.data_dir)
-    if args.repeated_aug:
+    if args.repeated_aug and mode == 'train':
         return convert_examples_to_dataset(examples), None, None, None, examples
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
@@ -382,11 +437,7 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples=False, s_toke
 
 
 def convert_examples_to_dataset(examples):
-    all_guids = [i.guid for i in examples]
-    all_text_a = [i.text_a for i in examples]
-    all_text_b = [i.text_b for i in examples]
-    all_labels = [i.label for i in examples]
-    return ExampleDataset(all_guids, all_text_a, all_text_b, all_labels)
+    return ExampleDataset(examples)
 
 
 def convert_features_to_dataset(features, s_features=None, is_training=True):
@@ -999,9 +1050,9 @@ def glue_compute_metrics(task_name, preds, labels):
     elif task_name == "qqp":
         return acc_and_f1(preds, labels)
     elif task_name == "mnli":
-        return {"mnli/acc": simple_accuracy(preds, labels), "acc":simple_accuracy(preds, labels)}
+        return {"mnli/acc": simple_accuracy(preds, labels)}
     elif task_name == "mnli-mm":
-        return {"mnli-mm/acc": simple_accuracy(preds, labels), "acc":simple_accuracy(preds, labels)}
+        return {"mnli-mm/acc": simple_accuracy(preds, labels)}
     elif task_name == "qnli":
         return {"acc": simple_accuracy(preds, labels)}
     elif task_name == "rte":

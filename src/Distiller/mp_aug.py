@@ -4,16 +4,16 @@ from tqdm import tqdm
 from torch.utils.data import ConcatDataset
 import time
 
-def example_iter(examples):
+def example_iter(examples, batch_size):
     i = 0
     while i < len(examples):
-        if (i + 32) >= len(examples):
+        if (i + batch_size) >= len(examples):
             # yield [j.context_text for j in examples[i:]],i
             yield examples[i:]
         else:
             # yield [j.context_text for j in examples[i:i+32]], i
-            yield examples[i:i + 32]
-        i += 32
+            yield examples[i:i + batch_size]
+        i += batch_size
 
 
 def augment_data(iter_sample, augmenter, task_type):
@@ -50,8 +50,8 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
         )
         aug_examples = list(
             tqdm(
-                p.map(annotate_, example_iter(examples)),
-                total=int(len(examples) / 32) + 1,
+                p.map(annotate_, example_iter(examples, args.per_gpu_train_batch_size)),
+                total=int(len(examples) / args.per_gpu_train_batch_size) + 1,
                 desc="Data augmentation",
                 disable=False,
             )

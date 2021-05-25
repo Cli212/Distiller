@@ -12,7 +12,7 @@ from ray.tune.schedulers import ASHAScheduler
 
 from Distiller.configs import parse
 from Distiller.autoaug import AutoAugmenter
-from Distiller.utils import Logger, cal_layer_mapping, uploadDirectory
+from Distiller.utils import Logger, cal_layer_mapping, uploadDirectory, glue_criterion
 from Distiller.mp_aug import aug_process
 from Distiller.transformers import AutoConfig, AutoTokenizer
 from Distiller.transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering
@@ -294,34 +294,36 @@ def remote_fn(config, checkpoint_dir=None, args=None):
     def predict_callback(model, step):
         if args.eval and args.local_rank in [-1, 0]:
             evaluation_result = evaluate_func(args, model, s_tokenizer if s_tokenizer else t_tokenizer, prefix=step)
-            logger.info("***** Eval results *****")
-            logger.info(json.dumps(evaluation_result, indent=2) + '\n')
-            # global best_evaluation
-            # if evaluation_result['acc'] > best_evaluation:
-            #     best_evaluation = evaluation_result['acc']
-            # evaluation_result['best_result'] = best_evaluation
             global best_evaluation
-            if evaluation_result['acc'] > best_evaluation:
-                best_evaluation = evaluation_result['acc']
+            if evaluation_result[glue_criterion(args.task_name)[0]] > best_evaluation:
+                best_evaluation = evaluation_result[glue_criterion(args.task_name)[0]]
                 logger.info("Saving best model checkpoint to %s", os.path.join(args.output_dir, 'best_model'))
                 # Save a trained model, configuration and tokenizer using `save_pretrained()`.
                 # They can then be reloaded using `from_pretrained()`
-                model_to_save = model.module.module if hasattr(model.module,
-                                                               "module") else model.module  # Take care of distributed/parallel training
+                model_to_save = model.module.module if hasattr(model,
+                                                               "module") else model  # Take care of distributed/parallel training
                 model_to_save.save_pretrained(os.path.join(args.output_dir, 'best_model'))
                 with open(os.path.join(args.output_dir, 'best_model/best_results.txt'), "w") as writer:
                     writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
+            evaluation_result['best_result'] = best_evaluation
+            logger.info("***** Eval results *****")
+            logger.info(json.dumps(evaluation_result, indent=2) + '\n')
             output_eval_file = os.path.join(args.output_dir, f"{step}_eval_results.txt")
             logger.info(f"Write evaluation result to {output_eval_file}...")
             with open(output_eval_file, "a") as writer:
                 writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
-            tune.report(accuracy=evaluation_result['acc'])
-            # if "exact" in evaluation_result.keys():
-            #     return evaluation_result['exact'], evaluation_result['f1']
-            # else:
-            #     return evaluation_result
+            if 'acc' in evaluation_result.keys():
+                tune.report(score=evaluation_result['acc'],accuracy=evaluation_result['acc'])
+            if 'mcc' in  evaluation_result.keys():
+                tune.report(score=evaluation_result['mcc'], mcc=evaluation_result['mcc'])
+            if 'f1' in evaluation_result.keys():
+                tune.report(f1=evaluation_result['f1'], acc_and_f1=evaluation_result['acc_and_f1'])
+            if 'spearmanr' in evaluation_result.keys():
+                tune.report(score=evaluation_result['spearmanr'], spearmanr=evaluation_result['spearmanr'])
+            if 'm_mm_acc' in evaluation_result.keys():
+                tune.report(score=evaluation_result['m_mm_acc'], mnli_acc=evaluation_result['mnli/acc'],mnli_mm_acc=evaluation_result['mnli-mm/acc'])
             model.train()
-            return list(evaluation_result.values())[0]
+            return evaluation_result
         else:
             return None
 
@@ -393,9 +395,9 @@ def remote_fn(config, checkpoint_dir=None, args=None):
             arg_dict = vars(args)
             arg_dict['device'] = str(arg_dict['device'])
             json.dump(arg_dict, f)
-        uploadDirectory(args.output_dir)
         model = model_class.from_pretrained(args.output_dir)  # , force_download=True)
         model.to(args.device)
+        uploadDirectory(args.output_dir)
         # Good practice: save your training arguments together with the trained model
 
     # Evaluation
@@ -438,9 +440,6 @@ def remote_fn(config, checkpoint_dir=None, args=None):
 
 
 def main(args, gpus_per_trial=4):
-    # for i in ['mse','ce']:
-    #     for j in ['skip','last','EMD']:
-    #         for k in ['ce', 'mse', 'cos', 'pkd', '']
     search_space = {
         "intermediate_strategy": tune.choice(["skip", "last", "EMD"]),
         "kd_loss_type": tune.choice(["ce", "mse"]),

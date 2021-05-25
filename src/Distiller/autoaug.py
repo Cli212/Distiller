@@ -3,6 +3,7 @@ from nlpaug.augmenter import word as naw
 from nlpaug import flow as naf
 from nlpaug.util.audio.loader import AudioLoader
 from nlpaug.util import Action
+import random
 import numpy as np
 import json
 
@@ -30,7 +31,7 @@ class AutoAugmenter:
         return cls(aug_args)
 
     @classmethod
-    def init_pipeline(cls, p=[0,0,1,0]):
+    def init_pipeline(cls, w=None):
         config_list = [{
           "aug_type": "contextual",
           "model_type": "distilbert",
@@ -50,14 +51,22 @@ class AutoAugmenter:
         "action": "swap",
         "aug_min": 3,
         "aug_max": 10
-    },None
-        ]
-        selected = []
+    }]
+        selected_list = []
         aug_args = []
-        for i in np.random.choice(4,3,p=p):
-            if i not in selected:
-                selected.append(i)
-                aug_args.append(config_list[i])
+        if w:
+            for i,d in enumerate(w):
+                if d != 0:
+                    aug_args.append(config_list[i])
+        else:
+            for i in range(3):
+                while True:
+                    aug_config = random.choice(config_list)
+                    if aug_config['aug_type'] not in selected_list:
+                        selected_list.append(aug_config['aug_type'])
+                        break
+                if random.random()>0.5:
+                    aug_args.append(aug_config)
         return cls(aug_args)
 
 

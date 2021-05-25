@@ -81,6 +81,8 @@ class TrainingConfig(Config):
                  mixup=False,
                  task_type="squad2",
                  q=None,
+                 augmenter=None,
+                 processor=None
                  ):
         super(TrainingConfig, self).__init__()
 
@@ -95,6 +97,8 @@ class TrainingConfig(Config):
         self.fp16_opt_level = fp16_opt_level
         self.data_parallel = data_parallel
         self.q = q
+        self.augmenter = augmenter
+        self.processor = processor
         self.local_rank = local_rank
         self.mixup = mixup
         self.task_type = task_type
