@@ -194,14 +194,13 @@ def evaluate_glue(args, model, tokenizer, prefix="",write_prediction=False):
         label_list = []
 
         for step, batch in enumerate(eval_dataloader):
-            model.eval()
             # labels = batch['labels']
             # batch = tuple(t.to(args.device) for t in batch)
             batch = {key: value.to(args.device) for key, value in batch.items()}
             with torch.no_grad():
                 outputs = model(**batch)
             # outputs = model(**batch)
-            predictions = outputs.logits.detach().cpu()[:,0]
+            predictions = outputs.logits.detach().cpu().argmax(dim=-1)
             label_list.extend(batch['labels'].cpu().tolist())
             preds.extend(predictions.tolist())
 
