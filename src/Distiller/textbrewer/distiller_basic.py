@@ -1,6 +1,7 @@
 from .distiller_utils import *
 from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
+from torch.multiprocessing import cpu_count, Pool
 import queue
 class BasicDistiller(AbstractDistiller):
     """
@@ -38,7 +39,8 @@ class BasicDistiller(AbstractDistiller):
         if callback is not None:
             logger.info("Running callback function...")
             evaluation_result = callback(model=self.model_S, step=global_step)
-            self.tb_writer.add_scalar('scalar/metric', evaluation_result, global_step)
+            for k, v in evaluation_result.items():
+                self.tb_writer.add_scalar(f'scalar/metric/{k}', v, global_step)
             self.model_S.train()
 
 
@@ -229,6 +231,27 @@ class BasicDistiller(AbstractDistiller):
                 dataloader = self.logits_cache
             logger.info(f"Length of current epoch in forward batch: {len(dataloader)}")
             for step, batch in tqdm(enumerate(dataloader), disable=tqdm_disable):
+                if self.t_config.augmenter:
+                    # threads = min(args.thread, cpu_count())
+                    # from functools import partial
+                    # with Pool(threads) as p:
+                    #     # global examples
+                    #     # examples = self.examples
+                    #     annotate_ = partial(
+                    #         augment_data,
+                    #         augmenter=self.t_config.augmenter,
+                    #         processor=self.t_config.processor
+                    #     )
+                    #     batch = list(
+                    #         tqdm(
+                    #             p.map(annotate_, batch),
+                    #             disable=True,
+                    #         )
+                    #     )
+                    augment_data(batch, self.t_config.augmenter)
+                    features, s_features = self.t_config.processor.convert_examples_to_features(batch, disable=True)
+                    batch = self.t_config.processor.convert_features_to_bacth(features, s_features)
+
                 if self.d_config.is_caching_logits is False and batch_postprocessor is not None:
                         batch = batch_postprocessor(batch)
                 if self.t_config.fp16:
@@ -412,3 +435,14 @@ class BasicDistiller(AbstractDistiller):
             results_T = post_adaptor(self.adaptor_T(batch,results_T))
 
             self.logits_cache.append([batch, [logits.to('cpu') for logits in results_T['logits']]])
+
+def augment_data(batch, augmenter):
+    new_batch = batch.copy()
+    for ii, dd in enumerate(augmenter.augment([i.text_a for i in new_batch])):
+        new_batch[ii].text_a = dd
+    if hasattr(new_batch[0], "text_b") and new_batch[0].text_b:
+        for ii, dd in enumerate(augmenter.augment([i.text_b for i in new_batch])):
+            new_batch[ii].text_b = dd
+    batch.extend(new_batch)
+    del new_batch
+    return batch

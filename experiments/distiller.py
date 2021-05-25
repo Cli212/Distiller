@@ -7,7 +7,7 @@ import random
 import numpy as np
 from Distiller.configs import parse
 from Distiller.autoaug import AutoAugmenter
-from Distiller.utils import Logger, cal_layer_mapping, uploadDirectory
+from Distiller.utils import Logger, cal_layer_mapping, uploadDirectory, glue_criterion
 from Distiller.mp_aug import aug_process
 from Distiller.transformers import AutoConfig, AutoTokenizer
 from Distiller.transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering
@@ -36,7 +36,7 @@ def set_seed(args):
 # class CustomDataLoader(DataLoader):
 
 
-def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=None, matches=None, predict_callback=None, q=None):
+def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=None, matches=None, predict_callback=None, q=None, processor=None):
     """ Train the model """
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
@@ -44,9 +44,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     # mix_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
     # train_dataloader = CustomDataLoader(train_dataset, examples, args=args, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn, tokenizer=tokenizer, augmenter=augmenter)
     # train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
-    # def collate_fn(batch):
-    #     return [({i:k[0] for i,k in piece.items()}) for piece in batch], [({i:k[0] for i,k in piece.items()}) for piece in batch]
-    if augmenter:
+    if augmenter and not args.repeated_aug:
         if args.local_rank not in [-1, 0]:
             torch.distributed.barrier()
         QUEUE_LIMIT = 600
@@ -68,7 +66,13 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     # mix_dataloader = DataLoader(train_dataset, sampler=mix_sampler,
     #                             batch_size=args.train_batch_size) if args.mixup else None
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
-    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
+    if args.repeated_aug:
+        def collate_fn(batch):
+            return batch
+        train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
+    else:
+        train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
+
     if args.max_steps > 0:
         t_total = args.max_steps
         args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
@@ -193,7 +197,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
         train_config = TrainingConfig(gradient_accumulation_steps=args.gradient_accumulation_steps, device=args.device,
                                       log_dir=os.path.join(args.output_dir, "log"), output_dir=args.output_dir,
                                       fp16=args.fp16, mixup=args.mixup, local_rank=args.local_rank,
-                                      task_type=args.task_type, q=q)
+                                      task_type=args.task_type, q=q, augmenter=augmenter, processor=processor)
         if args.task_type in ["squad", "squad2"]:
             args.task_name = args.task_type
             from Distiller.adapters import BertForQAAdaptor as adaptor_func
@@ -279,11 +283,9 @@ def main(args):
     def predict_callback(model, step):
         if args.eval and args.local_rank in [-1, 0]:
             evaluation_result = evaluate_func(args, model, s_tokenizer if s_tokenizer else t_tokenizer, prefix=step)
-            logger.info("***** Eval results *****")
-            logger.info(json.dumps(evaluation_result, indent=2) + '\n')
             global best_evaluation
-            if evaluation_result['acc'] > best_evaluation:
-                best_evaluation = evaluation_result['acc']
+            if evaluation_result[glue_criterion(args.task_name)[0]] > best_evaluation:
+                best_evaluation = evaluation_result[glue_criterion(args.task_name)[0]]
                 logger.info("Saving best model checkpoint to %s", os.path.join(args.output_dir, 'best_model'))
                 # Save a trained model, configuration and tokenizer using `save_pretrained()`.
                 # They can then be reloaded using `from_pretrained()`
@@ -293,6 +295,8 @@ def main(args):
                 with open(os.path.join(args.output_dir, 'best_model/best_results.txt'), "w") as writer:
                     writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
             evaluation_result['best_result'] = best_evaluation
+            logger.info("***** Eval results *****")
+            logger.info(json.dumps(evaluation_result, indent=2) + '\n')
             output_eval_file = os.path.join(args.output_dir, f"{step}_eval_results.txt")
             logger.info(f"Write evaluation result to {output_eval_file}...")
             with open(output_eval_file, "a") as writer:
@@ -302,7 +306,7 @@ def main(args):
             # else:
             #     return evaluation_result
             model.train()
-            return list(evaluation_result.values())[0]
+            return evaluation_result
         else:
             return None
     ## Training
@@ -313,7 +317,13 @@ def main(args):
         if args.local_rank not in [-1, 0]:
             torch.distributed.barrier()
         matches = cal_layer_mapping(args, t_config, s_config)
-        train_dataset, s_dataset, features, s_features, examples = load_and_cache_examples(args, t_tokenizer, mode="train",
+        processor = Processor(args, t_tokenizer, task=args.task_name, max_length=args.max_seq_length, s_tokenizer=s_tokenizer if s_tokenizer else None)
+        if args.repeated_aug:
+            train_dataset, s_dataset, features, s_features, examples = processor.load_and_cache_examples(
+                                                                                           mode="train",
+                                                                                           return_examples=True)
+        else:
+            train_dataset, s_dataset, features, s_features, examples = load_and_cache_examples(args, t_tokenizer, mode="train",
                                                                 return_examples=True, s_tokenizer=s_tokenizer)
         # if args.augmenter_config_path:
         #     augmenter = AutoAugmenter.from_config(args.augmenter_config_path, "cpu" if args.n_gpu == 0 else "gpu")
@@ -322,16 +332,16 @@ def main(args):
         #     process = Process(target=aug_process,
         #                       args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
         #     process.start()
-        if args.aug_type:
-            augmenter = AutoAugmenter.from_config(args.aug_type)
-            q = Queue()
-            process = Process(target=aug_process,
-                              args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
-            process.start()
-            # process.join()
+        # if args.aug_type:
+        #     augmenter = AutoAugmenter.from_config(args.aug_type)
+        #     q = Queue()
+        #     process = Process(target=aug_process,
+        #                       args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
+        #     process.start()
+        #     # process.join()
         if args.aug_pipeline:
             augmenter = AutoAugmenter.init_pipeline()
-            if len(augmenter):
+            if len(augmenter) and not args.repeated_aug:
                 args.augs = augmenter.aug_names
                 q = Queue()
                 process = Process(target=aug_process,
@@ -342,7 +352,7 @@ def main(args):
                 # process.join()
         if args.local_rank == 0:
             torch.distributed.barrier()
-        train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q)
+        train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q, processor=processor)
         # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
         # p.start()
         # if args.S_model_name_or_path != args.T_model_name_or_path:
@@ -399,8 +409,6 @@ def main(args):
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
             evaluation_result = evaluate_func(args, model, s_tokenizer if s_tokenizer else t_tokenizer, prefix=global_step,write_prediction=True)
-            global best_evaluation
-            evaluation_result['best_result'] = best_evaluation
             logger.info("***** Eval results *****")
             logger.info(json.dumps(evaluation_result, indent=2) + '\n')
 
@@ -413,7 +421,7 @@ def main(args):
 
 if __name__ == '__main__':
     args = parse()
-    set_start_method('fork')
+    set_start_method('spawn')
     if args.S_model_name_or_path is None:
         args.S_model_name_or_path = args.T_model_name_or_path
     if args.task_type in ["squad","squad2"]:
@@ -423,7 +431,7 @@ if __name__ == '__main__':
         from Distiller.adapters import BertForQAAdaptor as adaptor_func
     elif args.task_type == "glue":
         from Distiller.evaluate import evaluate_glue as evaluate_func
-        from Distiller.glue_preprocess import load_and_cache_examples
+        from Distiller.glue_preprocess import load_and_cache_examples, Processor
         from Distiller.adapters import BertForGLUEAdptor as adaptor_func
     logger = Logger(f"{args.output_dir}/all.log", level="debug").logger
     # logger = logging.getLogger(__name__)

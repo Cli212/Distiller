@@ -268,7 +268,7 @@ def main(args):
             process.start()
             # process.join()
         if args.aug_pipeline:
-            augmenter = AutoAugmenter.init_pipeline()
+            augmenter = AutoAugmenter.init_pipeline(w=[1,0,1])
             if len(augmenter):
                 args.augs = augmenter.aug_names
                 q = Queue()
@@ -343,6 +343,8 @@ def main(args):
 
 
 if __name__ == '__main__':
+    import redis
+    r = redis.Redis()
     args = parse()
     set_start_method('spawn')
     if args.S_model_name_or_path is None:

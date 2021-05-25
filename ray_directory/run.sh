@@ -1,9 +1,9 @@
 
 #set hyperparameters
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
-TEACHER_DIR=howey/electra-base-qnli
+TEACHER_DIR=howey/electra-base-cola
 STUDENT_DIR=huawei-noah/TinyBERT_General_4L_312D
-DATA_ROOT_DIR=~/Distillation_QA_benchmark/datasets/glue_data/QNLI
+DATA_ROOT_DIR=~/Distillation_QA_benchmark/datasets/glue_data/CoLA
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
@@ -23,7 +23,7 @@ length=128
 torch_seed=9580
 hard_label_weight=0.0
 kd_loss_weight=1.0
-task_name=qnli
+task_name=cola
 task_type=glue
 NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_alpha${alpha}_h${hard_label_weight}_k${kd_loss_weight}_${kd_loss_type}
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
