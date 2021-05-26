@@ -443,7 +443,7 @@ def main(args, gpus_per_trial=4):
     search_space = {
         "intermediate_strategy": tune.choice(["skip", "last", "EMD"]),
         "kd_loss_type": tune.choice(["ce", "mse"]),
-        "intermediate_loss_type": tune.choice(["ce", "mse", "cos", "pkd","mi_0.0","mi_0.1","mi_0.5","mi_0.7","mi_1.0"])}
+        "intermediate_loss_type": tune.choice(["ce", "mse", "cos", "pkd","mi_0.0","mi_0.1","mi_0.5","mi_0.9","mi_1.0"])}
     # search_space = {
     #     "alpha": tune.grid_search([0.0, 0.1, 0.5, 0.9, 1.0]),
     #     "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),

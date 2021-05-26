@@ -16,7 +16,7 @@ import queue
 from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from Distiller.transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
-from torch.multiprocessing import Queue, Process, set_start_method
+from torch.multiprocessing import Queue, Process, set_start_method, spawn
 
 # logger = logging.getLogger(__name__)
 task_dict = {'squad2': AutoModelForQuestionAnswering,
@@ -44,7 +44,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     # mix_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
     # train_dataloader = CustomDataLoader(train_dataset, examples, args=args, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn, tokenizer=tokenizer, augmenter=augmenter)
     # train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
-    if augmenter and not args.repeated_aug:
+    if args.aug_pipeline and not args.repeated_aug:
         if args.local_rank not in [-1, 0]:
             torch.distributed.barrier()
         QUEUE_LIMIT = 600
@@ -343,11 +343,11 @@ def main(args):
         if args.aug_pipeline:
             augmenter = AutoAugmenter.init_pipeline(w=[1,0,1])
             if len(augmenter) and not args.repeated_aug:
-                args.augs = augmenter.aug_names
+                # args.augs = augmenter.aug_names
                 # generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer,32)
                 q = Queue()
-                process = Process(target=aug_process,
-                                  args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
+                q.put(augmenter)
+                process = Process(target=aug_process, args=(q, examples, train_dataset, args, t_tokenizer, s_tokenizer))
 
                 # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
                 process.start()

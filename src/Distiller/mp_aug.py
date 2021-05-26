@@ -1,8 +1,9 @@
 import torch
-from torch.multiprocessing import cpu_count, Pool, Queue
+from torch.multiprocessing import cpu_count, Pool, Queue, Manager
 from tqdm import tqdm
 from torch.utils.data import ConcatDataset
 import time
+from .autoaug import AutoAugmenter
 
 def example_iter(examples, batch_size):
     i = 0
@@ -38,6 +39,8 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
         from .squad_preprocess import convert_features_to_dataset, convert_examples_to_features
     else:
         raise NotImplementedError
+    # m = Manager()
+    # lock = m.Lock()
     threads = min(args.thread, cpu_count())
     from functools import partial
     with Pool(threads) as p:
@@ -82,7 +85,8 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
     new_dataset = ConcatDataset([original_dataset, dataset])
     return new_dataset
 
-def aug_process(queue:Queue, examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None):
+def aug_process(queue:Queue, examples, original_dataset, args, tokenizer, s_tokenizer=None):
+    augmenter = queue.get()
     while True:
         if queue.empty():
             new_dataset = generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer)
