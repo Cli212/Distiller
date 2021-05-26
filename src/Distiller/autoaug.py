@@ -5,13 +5,14 @@ from nlpaug.util.audio.loader import AudioLoader
 from nlpaug.util import Action
 import random
 import numpy as np
+from .back_translation import BackTranslationAugmenter
 import json
 
 class AutoAugmenter:
     def __init__(self, aug_args):
         augmenter_table = {"contextual": naw.ContextualWordEmbsAug,
                            "random": naw.RandomWordAug,
-                           "back_translation": naw.BackTranslationAug}
+                           "back_translation": BackTranslationAugmenter}
         self.augs = []
         self.aug_names = []
         for i in aug_args:
@@ -42,10 +43,11 @@ class AutoAugmenter:
           "device": "cpu"
             },{
             "aug_type": "back_translation",
-            "from_model_name": "transformer.wmt18.en-de",
-            "from_model_checkpt": "wmt18.model1.pt",
-            "to_model_name": "transformer.wmt19.de-en",
-            "to_model_checkpt": "model1.pt"
+            "from_model_name": "Helsinki-NLP/opus-mt-en-ROMANCE",
+            "from_model_checkpt": "model.pt",
+            "to_model_name": "Helsinki-NLP/opus-mt-ROMANCE-en",
+            "to_model_checkpt": "model.pt",
+            "device": "cpu"
         },{
         "aug_type": "random",
         "action": "swap",

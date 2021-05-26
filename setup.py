@@ -35,6 +35,7 @@ setup(
         "pyemd",
         "sklearn",
         "fairseq",
+        'sentencepiece',
         "fastBPE",
         "boto3",
         "nlpaug",

@@ -397,7 +397,7 @@ def remote_fn(config, checkpoint_dir=None, args=None):
             json.dump(arg_dict, f)
         model = model_class.from_pretrained(args.output_dir)  # , force_download=True)
         model.to(args.device)
-        uploadDirectory(args.output_dir)
+        # uploadDirectory(args.output_dir)
         # Good practice: save your training arguments together with the trained model
 
     # Evaluation
@@ -489,7 +489,7 @@ def main(args, gpus_per_trial=4):
         progress_reporter=reporter,
         num_samples=35,
         queue_trials=True)
-    with open('/home/ubuntu/ray_results.json','w') as f:
+    with open('/home/ray/ray_results.json','w') as f:
         json.dump(result, f)
     best_trial = result.get_best_trial("accuracy", "max", "last")
     print("Best trial config: {}".format(best_trial.config))

@@ -231,7 +231,7 @@ class BasicDistiller(AbstractDistiller):
                 dataloader = self.logits_cache
             logger.info(f"Length of current epoch in forward batch: {len(dataloader)}")
             for step, batch in tqdm(enumerate(dataloader), disable=tqdm_disable):
-                if self.t_config.augmenter:
+                if self.t_config.processor:
                     # threads = min(args.thread, cpu_count())
                     # from functools import partial
                     # with Pool(threads) as p:

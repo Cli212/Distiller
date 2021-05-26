@@ -31,7 +31,7 @@ def augment_data(iter_sample, augmenter, task_type):
 
 from functools import wraps
 
-def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None):
+def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None, batch_size=16):
     if args.task_type == "glue":
         from .glue_preprocess import convert_features_to_dataset, convert_examples_to_features
     elif args.task_type in ["squad", "squad2"]:
@@ -50,12 +50,20 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
         )
         aug_examples = list(
             tqdm(
-                p.map(annotate_, example_iter(examples, args.per_gpu_train_batch_size)),
-                total=int(len(examples) / args.per_gpu_train_batch_size) + 1,
+                p.map(annotate_, example_iter(examples, batch_size)),
+                total=int(len(examples) / batch_size) + 1,
                 desc="Data augmentation",
                 disable=False,
             )
         )
+    # annotate_ = partial(
+    #     augment_data,
+    #     augmenter=augmenter,
+    #     task_type=args.task_type
+    # )
+    # aug_examples = []
+    # for example in tqdm(example_iter(examples, batch_size), total=int(len(examples) / batch_size) + 1):
+    #     aug_examples.extend(annotate_(example))
     new_examples = []
     for i in aug_examples:
         new_examples.extend(i)

@@ -8,7 +8,7 @@ import numpy as np
 from Distiller.configs import parse
 from Distiller.autoaug import AutoAugmenter
 from Distiller.utils import Logger, cal_layer_mapping, uploadDirectory, glue_criterion
-from Distiller.mp_aug import aug_process
+from Distiller.mp_aug import aug_process, generate_aug_data
 from Distiller.transformers import AutoConfig, AutoTokenizer
 from Distiller.transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering
 from Distiller.textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller, EMDDistiller
@@ -317,8 +317,9 @@ def main(args):
         if args.local_rank not in [-1, 0]:
             torch.distributed.barrier()
         matches = cal_layer_mapping(args, t_config, s_config)
-        processor = Processor(args, t_tokenizer, task=args.task_name, max_length=args.max_seq_length, s_tokenizer=s_tokenizer if s_tokenizer else None)
         if args.repeated_aug:
+            processor = Processor(args, t_tokenizer, task=args.task_name, max_length=args.max_seq_length,
+                                  s_tokenizer=s_tokenizer if s_tokenizer else None)
             train_dataset, s_dataset, features, s_features, examples = processor.load_and_cache_examples(
                                                                                            mode="train",
                                                                                            return_examples=True)
@@ -340,9 +341,10 @@ def main(args):
         #     process.start()
         #     # process.join()
         if args.aug_pipeline:
-            augmenter = AutoAugmenter.init_pipeline()
+            augmenter = AutoAugmenter.init_pipeline(w=[1,0,1])
             if len(augmenter) and not args.repeated_aug:
                 args.augs = augmenter.aug_names
+                # generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer,32)
                 q = Queue()
                 process = Process(target=aug_process,
                                   args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
@@ -352,7 +354,7 @@ def main(args):
                 # process.join()
         if args.local_rank == 0:
             torch.distributed.barrier()
-        train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q, processor=processor)
+        train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q, processor=processor if args.repeated_aug else None)
         # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
         # p.start()
         # if args.S_model_name_or_path != args.T_model_name_or_path:
