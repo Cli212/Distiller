@@ -347,10 +347,10 @@ def main(args):
                 # generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer,32)
                 q = Queue()
                 q.put(augmenter)
-                process = Process(target=aug_process, args=(q, examples, train_dataset, args, t_tokenizer, s_tokenizer))
+                # process = spawn(aug_process, args=(q, examples, train_dataset, args, t_tokenizer, s_tokenizer),join=False)
 
-                # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
-                process.start()
+                train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
+                # process.start()
                 # process.join()
         if args.local_rank == 0:
             torch.distributed.barrier()

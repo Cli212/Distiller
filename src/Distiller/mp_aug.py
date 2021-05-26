@@ -43,30 +43,31 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
     # lock = m.Lock()
     threads = min(args.thread, cpu_count())
     from functools import partial
-    with Pool(threads) as p:
-        # global examples
-        # examples = self.examples
-        annotate_ = partial(
-            augment_data,
-            augmenter=augmenter,
-            task_type=args.task_type
-        )
-        aug_examples = list(
-            tqdm(
-                p.map(annotate_, example_iter(examples, batch_size)),
-                total=int(len(examples) / batch_size) + 1,
-                desc="Data augmentation",
-                disable=False,
-            )
-        )
-    # annotate_ = partial(
-    #     augment_data,
-    #     augmenter=augmenter,
-    #     task_type=args.task_type
-    # )
-    # aug_examples = []
-    # for example in tqdm(example_iter(examples, batch_size), total=int(len(examples) / batch_size) + 1):
-    #     aug_examples.extend(annotate_(example))
+    # with Pool(threads) as p:
+    #     # global examples
+    #     # examples = self.examples
+    #     # augmenter.augs[0].model.model = augmenter.augs[0].model.model.share_memory()
+    #     annotate_ = partial(
+    #         augment_data,
+    #         augmenter=augmenter,
+    #         task_type=args.task_type
+    #     )
+    #     aug_examples = list(
+    #         tqdm(
+    #             p.map(annotate_, example_iter(examples, batch_size)),
+    #             total=int(len(examples) / batch_size) + 1,
+    #             desc="Data augmentation",
+    #             disable=False,
+    #         )
+    #     )
+    annotate_ = partial(
+        augment_data,
+        augmenter=augmenter,
+        task_type=args.task_type
+    )
+    aug_examples = []
+    for example in tqdm(example_iter(examples, batch_size), total=int(len(examples) / batch_size) + 1):
+        aug_examples.extend(annotate_(example))
     new_examples = []
     for i in aug_examples:
         new_examples.extend(i)
@@ -85,7 +86,7 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
     new_dataset = ConcatDataset([original_dataset, dataset])
     return new_dataset
 
-def aug_process(queue:Queue, examples, original_dataset, args, tokenizer, s_tokenizer=None):
+def aug_process(rank, queue:Queue, examples, original_dataset, args, tokenizer, s_tokenizer=None):
     augmenter = queue.get()
     while True:
         if queue.empty():
