@@ -32,7 +32,7 @@ def augment_data(iter_sample, augmenter, task_type):
 
 from functools import wraps
 
-def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None, batch_size=16):
+def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None, batch_size=32):
     if args.task_type == "glue":
         from .glue_preprocess import convert_features_to_dataset, convert_examples_to_features
     elif args.task_type in ["squad", "squad2"]:
@@ -65,13 +65,13 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
         augmenter=augmenter,
         task_type=args.task_type
     )
-    aug_examples = []
-    for example in tqdm(example_iter(examples, batch_size), total=int(len(examples) / batch_size) + 1):
-        aug_examples.extend(annotate_(example))
     new_examples = []
-    for i in aug_examples:
-        new_examples.extend(i)
-    del aug_examples
+    for example in tqdm(example_iter(examples, batch_size), total=int(len(examples) / batch_size) + 1, desc="Data Augmentation"):
+        new_examples.extend(annotate_(example))
+    # new_examples = []
+    # for i in aug_examples:
+    #     new_examples.extend(i)
+    # del aug_examples
     features = convert_examples_to_features(new_examples, tokenizer, args.max_seq_length,
                                             task=args.task_name
                                             )
@@ -86,14 +86,13 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
     new_dataset = ConcatDataset([original_dataset, dataset])
     return new_dataset
 
-def aug_process(rank, queue:Queue, examples, original_dataset, args, tokenizer, s_tokenizer=None):
-    augmenter = queue.get()
+def aug_process(queue:Queue, examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None):
     while True:
         if queue.empty():
             new_dataset = generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer)
             queue.put(new_dataset)
         else:
-            time.sleep(300)
+            time.sleep(100)
             continue
 
         # s_dataset = convert_features_to_dataset(s_features, is_training=True)
