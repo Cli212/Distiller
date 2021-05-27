@@ -45,11 +45,11 @@ class AutoAugmenter:
             "aug_type": "back_translation",
             "from_model_name": "Helsinki-NLP/opus-mt-en-ROMANCE",
             "to_model_name": "Helsinki-NLP/opus-mt-ROMANCE-en",
-            "device": "cuda"
+            "device": "cpu"
         },{
         "aug_type": "random",
         "action": "swap",
-        "aug_min": 3,
+        "aug_min": 1,
         "aug_max": 10
     }]
         selected_list = []
