@@ -189,8 +189,8 @@ class Processor:
         s_dataset = None
         s_features = None
         s_cached_features_file = None
-        if self.args.local_rank not in [-1, 0] and mode != "dev":
-            torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+        # if self.args.local_rank not in [-1, 0] and mode != "dev":
+        #     torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
         # Load data features from cache or dataset file
         cached_features_file = os.path.join(self.args.data_dir, "cached_{}_{}_{}_{}".format(mode, self.args.task_name,
@@ -239,9 +239,19 @@ class Processor:
                     torch.save(s_features, s_cached_features_file)
             # s_dataset = convert_features_to_dataset(s_features, is_training=(mode == 'train'))
         dataset = self.convert_features_to_dataset(features, s_features, is_training=(mode == 'train'))
-        if self.args.local_rank == 0 and mode != "dev":
-            torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-
+        # torch.save(dataset,'dataset.bin')
+        # torch.save(s_dataset, 's_dataset.bin')
+        # torch.save(features, 'features.bin')
+        # torch.save(s_features, 's_features.bin')
+        # torch.save(examples, 'examples.bin')
+        # if self.args.local_rank == 0 and mode != "dev":
+        #     torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+        # if self.args.local_rank not in [-1,0] and mode != "dev":
+        #     dataset = torch.load('dataset.bin')
+        #     s_dataset = torch.load('s_dataset.bin')
+        #     features = torch.load('features.bin')
+        #     s_features = torch.load('s_features.bin')
+        #     examples = torch.load('examples.bin')
         if return_examples:
             return dataset, s_dataset, features, s_features, examples
         return dataset
@@ -383,8 +393,8 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples=False, s_toke
     s_dataset = None
     s_features = None
     s_cached_features_file = None
-    if args.local_rank not in [-1, 0] and mode != "dev":
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+    # if args.local_rank not in [-1, 0] and mode != "dev":
+    #     torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Load data features from cache or dataset file
     cached_features_file = os.path.join(args.data_dir, "cached_{}_{}_{}_{}".format(mode, args.task_name,
@@ -401,8 +411,8 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples=False, s_toke
 
     processor = glue_processors[args.task_name]()
     examples = processor.get_dev_examples(args.data_dir) if mode == "dev" else processor.get_train_examples(args.data_dir)
-    if args.repeated_aug and mode == 'train':
-        return convert_examples_to_dataset(examples), None, None, None, examples
+    # if args.repeated_aug>1 and mode == 'train':
+    #     return convert_examples_to_dataset(examples), None, None, None, examples
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
@@ -428,9 +438,19 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples=False, s_toke
                 torch.save(s_features, s_cached_features_file)
         # s_dataset = convert_features_to_dataset(s_features, is_training=(mode == 'train'))
     dataset = convert_features_to_dataset(features, s_features, is_training=(mode == 'train'))
-    if args.local_rank == 0 and mode != "dev":
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-
+    # torch.save(dataset, 'dataset.bin')
+    # torch.save(s_dataset, 's_dataset.bin')
+    # torch.save(features, 'features.bin')
+    # torch.save(s_features, 's_features.bin')
+    # torch.save(examples, 'examples.bin')
+    # if args.local_rank == 0 and mode != "dev":
+    #     torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+    # if args.local_rank not in [-1,0] and mode != "dev":
+    #     dataset = torch.load('dataset.bin')
+    #     s_dataset = torch.load('s_dataset.bin')
+    #     features = torch.load('features.bin')
+    #     s_features = torch.load('s_features.bin')
+    #     examples = torch.load('examples.bin')
     if return_examples:
         return dataset, s_dataset, features, s_features, examples
     return dataset

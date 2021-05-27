@@ -82,7 +82,8 @@ class TrainingConfig(Config):
                  task_type="squad2",
                  q=None,
                  augmenter=None,
-                 processor=None
+                 processor=None,
+                 repeated_aug=0,
                  ):
         super(TrainingConfig, self).__init__()
 
@@ -99,6 +100,7 @@ class TrainingConfig(Config):
         self.q = q
         self.augmenter = augmenter
         self.processor = processor
+        self.repeated_aug = repeated_aug
         self.local_rank = local_rank
         self.mixup = mixup
         self.task_type = task_type

@@ -92,7 +92,7 @@ def aug_process(queue:Queue, examples, original_dataset, augmenter, args, tokeni
             new_dataset = generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer)
             queue.put(new_dataset)
         else:
-            time.sleep(100)
+            time.sleep(10)
             continue
 
         # s_dataset = convert_features_to_dataset(s_features, is_training=True)

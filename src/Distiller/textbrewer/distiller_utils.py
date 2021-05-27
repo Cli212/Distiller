@@ -254,7 +254,10 @@ def mixup_assist(batch, model, random_index, lmbd, local_rank, task_type, device
         new_mixup_batch["labels"] = new_batch['labels']
         new_mixup_batch["mixup_labels"] = mixup_labels
     if local_rank != -1:
-        embeddings = model.module.module.base_model.embeddings.word_embeddings
+        if hasattr(model.module,'module'):
+            embeddings = model.module.module.base_model.embeddings.word_embeddings
+        else:
+            embeddings = model.module.base_model.embeddings.word_embeddings
     else:
         if hasattr(model,'module'):
             embeddings = model.module.base_model.embeddings.word_embeddings
@@ -265,7 +268,10 @@ def mixup_assist(batch, model, random_index, lmbd, local_rank, task_type, device
     new_mixup_batch["inputs_embeds"] = lmbd * input_embeddings + (1 - lmbd) * embeddings(mix_ids)
     for key in new_batch.keys():
         new_batch[key] = torch.cat((new_batch[key], new_mixup_batch[key]), 0)
-    new_batch["mixup_value"] = lmbd
+    if hasattr(model, 'device_ids'):
+        new_batch["mixup_value"] = lmbd.repeat(len(model.device_ids))
+    else:
+        new_batch["mixup_value"] = lmbd
     new_batch.pop("input_ids")
     del new_mixup_batch
     return new_batch

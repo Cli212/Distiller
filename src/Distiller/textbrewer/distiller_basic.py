@@ -2,6 +2,7 @@ from .distiller_utils import *
 from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from torch.multiprocessing import cpu_count, Pool
+import torch
 import queue
 class BasicDistiller(AbstractDistiller):
     """
@@ -27,16 +28,18 @@ class BasicDistiller(AbstractDistiller):
         super(BasicDistiller, self).__init__(train_config, distill_config, model_T, model_S, adaptor_T, adaptor_S)
 
     def save_and_callback(self,global_step, step, epoch, callback):
-        if self.rank != 0:
-            torch.distributed.barrier()    # save and eval with single process
-        else:
-            logger.info(f"Saving at global step {global_step}, epoch step {step + 1} epoch {epoch+1}")
-            coreModel = self.model_S.module if hasattr(self.model_S, "module") else self.model_S
-            state_dict = coreModel.state_dict()
-            # torch.save(state_dict, os.path.join(self.t_config.output_dir, f"gs{global_step}.pkl"))
-            if self.local_rank == 0:
-                torch.distributed.barrier()
-        if callback is not None:
+        # if self.rank != 0:
+        #     torch.distributed.barrier()    # save and eval with single process
+        # else:
+        #     logger.info(f"Saving at global step {global_step}, epoch step {step + 1} epoch {epoch+1}")
+        #     coreModel = self.model_S.module if hasattr(self.model_S, "module") else self.model_S
+        #     state_dict = coreModel.state_dict()
+        #     # torch.save(state_dict, os.path.join(self.t_config.output_dir, f"gs{global_step}.pkl"))
+        #     if self.local_rank == 0:
+        #         torch.distributed.barrier()
+
+
+        if callback is not None and self.rank == 0:
             logger.info("Running callback function...")
             evaluation_result = callback(model=self.model_S, step=global_step)
             for k, v in evaluation_result.items():
@@ -206,16 +209,24 @@ class BasicDistiller(AbstractDistiller):
         for current_epoch in tqdm(range(int(num_epochs)), disable=tqdm_disable):
             if self.t_config.q and current_epoch%5 == 0 and current_epoch != 0:
                 train_dataset = None
-                QUEUE_LIMIT = 600
-                count = 0
-                while count < QUEUE_LIMIT:
-                    try:
-                        count += 1
-                        train_dataset = self.t_config.q.get(timeout=120)
-                        logger.info("Update augmented data")
-                        break
-                    except queue.Empty:
-                        logger.info("Waiting for data augmentation process to return data")
+                if self.local_rank not in [-1, 0]:
+                    torch.distributed.barrier()
+                else:
+                    QUEUE_LIMIT = 600
+                    count = 0
+                    while count < QUEUE_LIMIT:
+                        try:
+                            count += 1
+                            train_dataset = self.t_config.q.get(timeout=60)
+                            logger.info("Update augmented data")
+                            torch.save(train_dataset, 'train_dataset.bin')
+                            break
+                        except queue.Empty:
+                            logger.info("Waiting for data augmentation process to return data")
+                    if self.local_rank == 0:
+                        torch.distributed.barrier()
+                if self.local_rank not in [-1, 0]:
+                    train_dataset = torch.load('train_dataset.bin')
                 if train_dataset:
                     train_sampler = RandomSampler(train_dataset) if self.t_config.local_rank == -1 \
                         else DistributedSampler(train_dataset)
@@ -231,27 +242,21 @@ class BasicDistiller(AbstractDistiller):
                 dataloader = self.logits_cache
             logger.info(f"Length of current epoch in forward batch: {len(dataloader)}")
             for step, batch in tqdm(enumerate(dataloader), disable=tqdm_disable):
-                if self.t_config.processor:
-                    # threads = min(args.thread, cpu_count())
-                    # from functools import partial
-                    # with Pool(threads) as p:
-                    #     # global examples
-                    #     # examples = self.examples
-                    #     annotate_ = partial(
-                    #         augment_data,
-                    #         augmenter=self.t_config.augmenter,
-                    #         processor=self.t_config.processor
-                    #     )
-                    #     batch = list(
-                    #         tqdm(
-                    #             p.map(annotate_, batch),
-                    #             disable=True,
-                    #         )
-                    #     )
-                    augment_data(batch, self.t_config.augmenter)
+                if self.t_config.repeated_aug>1:
+                    # if self.local_rank not in [-1,0]:
+                    #     torch.distributed.barrier()
+                    # else:
+                    #     batch = augment_data(batch, self.t_config.augmenter, self.t_config.repeated_aug)
+                    #     features, s_features = self.t_config.processor.convert_examples_to_features(batch, disable=True)
+                    #     batch = self.t_config.processor.convert_features_to_bacth(features, s_features)
+                    #     torch.save(batch,'batch.bin')
+                    #     if self.local_rank == 0:
+                    #         torch.distributed.barrier()
+                    # if self.local_rank not in [-1,0]:
+                    #     batch = torch.load('batch.bin')
+                    batch = augment_data(batch, self.t_config.augmenter, self.t_config.repeated_aug)
                     features, s_features = self.t_config.processor.convert_examples_to_features(batch, disable=True)
                     batch = self.t_config.processor.convert_features_to_bacth(features, s_features)
-
                 if self.d_config.is_caching_logits is False and batch_postprocessor is not None:
                         batch = batch_postprocessor(batch)
                 if self.t_config.fp16:
@@ -436,13 +441,15 @@ class BasicDistiller(AbstractDistiller):
 
             self.logits_cache.append([batch, [logits.to('cpu') for logits in results_T['logits']]])
 
-def augment_data(batch, augmenter):
+def augment_data(batch, augmenter, repeated_aug=1):
     new_batch = batch.copy()
-    for ii, dd in enumerate(augmenter.augment([i.text_a for i in new_batch])):
-        new_batch[ii].text_a = dd
-    if hasattr(new_batch[0], "text_b") and new_batch[0].text_b:
-        for ii, dd in enumerate(augmenter.augment([i.text_b for i in new_batch])):
-            new_batch[ii].text_b = dd
-    batch.extend(new_batch)
+    for i in range(repeated_aug-1):
+        tmp_batch = new_batch.copy()
+        for ii, dd in enumerate(augmenter.augment([i.text_a for i in tmp_batch])):
+            tmp_batch[ii].text_a = dd
+        if hasattr(tmp_batch[0], "text_b") and tmp_batch[0].text_b:
+            for ii, dd in enumerate(augmenter.augment([i.text_b for i in tmp_batch])):
+                tmp_batch[ii].text_b = dd
+        batch.extend(tmp_batch)
     del new_batch
     return batch

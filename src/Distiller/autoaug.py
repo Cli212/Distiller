@@ -39,15 +39,13 @@ class AutoAugmenter:
           "top_k": 100,
           "aug_min": 10,
           "aug_max": 25,
-          "aug_p": 0.5,
+          "aug_p": 0.9,
           "device": "cuda"
             },{
             "aug_type": "back_translation",
             "from_model_name": "Helsinki-NLP/opus-mt-en-ROMANCE",
-            "from_model_checkpt": "model.pt",
             "to_model_name": "Helsinki-NLP/opus-mt-ROMANCE-en",
-            "to_model_checkpt": "model.pt",
-            "device": "cpu"
+            "device": "cuda"
         },{
         "aug_type": "random",
         "action": "swap",
@@ -57,9 +55,8 @@ class AutoAugmenter:
         selected_list = []
         aug_args = []
         if w:
-            for i,d in enumerate(w):
-                if d != 0:
-                    aug_args.append(config_list[i])
+            for i in w:
+                aug_args.append(config_list[i])
         else:
             for i in range(3):
                 while True:

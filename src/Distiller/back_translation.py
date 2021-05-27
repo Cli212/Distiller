@@ -1,7 +1,7 @@
 from transformers import MarianMTModel, MarianTokenizer, FSMTForConditionalGeneration, FSMTTokenizer
 
 class BackTranslationAugmenter:
-    def __init__(self, from_model_name, to_model_name, from_model_checkpt=None, to_model_checkpt=None, device='cpu'):
+    def __init__(self, from_model_name, to_model_name, device='cpu'):
         self.from_tokenizer = MarianTokenizer.from_pretrained(from_model_name)
         self.from_model = MarianMTModel.from_pretrained(from_model_name)
         self.to_tokenizer = MarianTokenizer.from_pretrained(to_model_name)

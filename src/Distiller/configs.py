@@ -69,7 +69,7 @@ def parse():
     parser.add_argument("--kd_loss_type", default="ce", choices=["ce", "mse"])
     parser.add_argument("--weight_decay", default=0.1, type=float,
                         help="Weight decay if we apply some.")
-    parser.add_argument("--repeated_aug", default=False, action="store_true")
+    parser.add_argument("--repeated_aug", default=1, type=int)
     parser.add_argument("--do_lower_case", default=False, action="store_true")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float,
                         help="Epsilon for Adam optimizer.")

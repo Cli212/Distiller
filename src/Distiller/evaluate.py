@@ -144,7 +144,6 @@ def evaluate_glue(args, model, tokenizer, prefix="",write_prediction=False):
     from .glue_preprocess import load_and_cache_examples
     dataset, s_dataset, features, s_features, examples = load_and_cache_examples(args, tokenizer, mode="dev",
                                                                                  return_examples=True)
-
     if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
         os.makedirs(args.output_dir)
 

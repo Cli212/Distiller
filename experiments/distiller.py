@@ -44,20 +44,24 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     # mix_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
     # train_dataloader = CustomDataLoader(train_dataset, examples, args=args, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn, tokenizer=tokenizer, augmenter=augmenter)
     # train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
-    if args.aug_pipeline and not args.repeated_aug:
+    if args.aug_pipeline and args.repeated_aug <= 1:
         if args.local_rank not in [-1, 0]:
             torch.distributed.barrier()
-        QUEUE_LIMIT = 600
-        count = 0
-        while count<QUEUE_LIMIT:
-            try:
-                count+=1
-                train_dataset = q.get(timeout=60)
-                break
-            except queue.Empty:
-                logger.info("Waiting for data augmentation process to return data")
-        if args.local_rank == 0:
-            torch.distributed.barrier()
+        else:
+            QUEUE_LIMIT = 600
+            count = 0
+            while count<QUEUE_LIMIT:
+                try:
+                    count+=1
+                    train_dataset = q.get(timeout=60)
+                    torch.save(train_dataset,'train_dataset.bin')
+                    break
+                except queue.Empty:
+                    logger.info("Waiting for data augmentation process to return data")
+            if args.local_rank == 0:
+                torch.distributed.barrier()
+        if args.local_rank not in [-1,0]:
+            train_dataset = torch.load('train_dataset.bin')
         # train_dataloader = DataProvider(train_dataset, examples, args, tokenizer, augmenter,s_tokenizer,s_dataset)
 
     # else:
@@ -66,12 +70,12 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     # mix_dataloader = DataLoader(train_dataset, sampler=mix_sampler,
     #                             batch_size=args.train_batch_size) if args.mixup else None
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
-    if args.repeated_aug:
+    if args.repeated_aug>1:
         def collate_fn(batch):
             return batch
         train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
     else:
-        train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
+        train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size,drop_last=True)
 
     if args.max_steps > 0:
         t_total = args.max_steps
@@ -115,18 +119,18 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
         actual_batch_size *= 2
     if args.mixup:
         actual_batch_size *= 2
-
-    # Train!
-    logger.info("***** Running training *****")
-    logger.info("  Num examples = %d", len(train_dataset))
-    logger.info("  Num Epochs = %d", args.num_train_epochs)
-    logger.info("  Instantaneous batch size per GPU = %d", actual_batch_size)
-    logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d",
-                actual_batch_size * args.gradient_accumulation_steps * (
-                    torch.distributed.get_world_size() if args.local_rank != -1 else 1))
-    logger.info("  Actual train batch size (w. mixup & data augmentation) = %d", actual_batch_size)
-    logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
-    logger.info("  Total optimization steps = %d", t_total)
+    if args.local_rank in [-1,0]:
+        # Train!
+        logger.info("***** Running training *****")
+        logger.info("  Num examples = %d", len(train_dataset))
+        logger.info("  Num Epochs = %d", args.num_train_epochs)
+        logger.info("  Instantaneous batch size per GPU = %d", actual_batch_size)
+        logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d",
+                    actual_batch_size * args.gradient_accumulation_steps * (
+                        torch.distributed.get_world_size() if args.local_rank != -1 else 1))
+        logger.info("  Actual train batch size (w. mixup & data augmentation) = %d", actual_batch_size)
+        logger.info("  Gradient Accumulation steps = %d", args.gradient_accumulation_steps)
+        logger.info("  Total optimization steps = %d", t_total)
     if args.train:
         critic = None
         baseline_fn = None
@@ -197,7 +201,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
         train_config = TrainingConfig(gradient_accumulation_steps=args.gradient_accumulation_steps, device=args.device,
                                       log_dir=os.path.join(args.output_dir, "log"), output_dir=args.output_dir,
                                       fp16=args.fp16, mixup=args.mixup, local_rank=args.local_rank,
-                                      task_type=args.task_type, q=q, augmenter=augmenter, processor=processor)
+                                      task_type=args.task_type, q=q, augmenter=augmenter, processor=processor, repeated_aug=args.repeated_aug)
         if args.task_type in ["squad", "squad2"]:
             args.task_name = args.task_type
             from Distiller.adapters import BertForQAAdaptor as adaptor_func
@@ -244,10 +248,6 @@ def main(args):
 
     # Set seed
     set_seed(args)
-    ## load pretrained models and tokenizers
-    if args.local_rank not in [-1,0]:
-        torch.distributed.barrier()
-
     t_config = AutoConfig.from_pretrained(args.T_config_file if args.T_config_file else args.T_model_name_or_path)
     s_config = AutoConfig.from_pretrained(args.S_config_file if args.S_config_file else args.S_model_name_or_path)
     args.model_type = s_config.model_type
@@ -256,6 +256,8 @@ def main(args):
     t_config.output_attentions = True
     s_config.output_hidden_states = True
     s_config.output_attentions = True
+    model_class = task_dict.get(args.task_type)
+    ## load pretrained models and tokenizers
     t_tokenizer = AutoTokenizer.from_pretrained(args.T_model_name_or_path,
                                                 use_fast=False,
                                                 config=t_config,
@@ -263,9 +265,6 @@ def main(args):
     s_tokenizer = AutoTokenizer.from_pretrained(args.S_model_name_or_path,
                                                 use_fast=False,
                                                 config=s_config) if args.S_model_name_or_path != args.T_model_name_or_path else None
-    ## Initialize augmenter
-
-    model_class = task_dict.get(args.task_type)
     t_model = model_class.from_pretrained(args.T_model_name_or_path, config=t_config)
     ## If the student borrow layers from teachers, it must borrow complete layers. Their hidden size and attention size
     # must be the same
@@ -273,12 +272,40 @@ def main(args):
         s_model = model_class.from_config(s_config)
     else:
         s_model = model_class.from_pretrained(args.S_model_name_or_path, config=s_config)
-    if args.local_rank == 0:
-        torch.distributed.barrier()
-
-    logger.info("Training/evaluation parameters %s", args)
     s_model.to(args.device)
     t_model.to(args.device)
+    # if args.local_rank not in [-1, 0]:
+    #     torch.distributed.barrier()
+    # else:
+    #     print(f"{args.local_rank} Not in barrier")
+    #     t_tokenizer = AutoTokenizer.from_pretrained(args.T_model_name_or_path,
+    #                                                 use_fast=False,
+    #                                                 config=t_config,
+    #                                                 )
+    #     s_tokenizer = AutoTokenizer.from_pretrained(args.S_model_name_or_path,
+    #                                                 use_fast=False,
+    #                                                 config=s_config) if args.S_model_name_or_path != args.T_model_name_or_path else None
+    #     torch.save(t_tokenizer,'t_tokenizer.bin')
+    #     torch.save(s_tokenizer, 's_tokenizer.bin')
+    #
+    #     t_model = model_class.from_pretrained(args.T_model_name_or_path, config=t_config)
+    #     ## If the student borrow layers from teachers, it must borrow complete layers. Their hidden size and attention size
+    #     # must be the same
+    #     if args.random_student:
+    #         s_model = model_class.from_config(s_config)
+    #     else:
+    #         s_model = model_class.from_pretrained(args.S_model_name_or_path, config=s_config)
+    #     torch.save(t_model, 't_model.bin')
+    #     torch.save(s_model, 's_model.bin')
+    #     if args.local_rank == 0:
+    #         torch.distributed.barrier()
+    # if args.local_rank not in [-1, 0]:
+    #     t_tokenizer = torch.load('t_tokenizer.bin')
+    #     s_tokenizer = torch.load('s_tokenizer.bin')
+    #     t_model = torch.load('t_model.bin')
+    #     s_model = torch.load('s_model.bin')
+    if args.local_rank in [-1,0]:
+        logger.info("Training/evaluation parameters %s", args)
 
     def predict_callback(model, step):
         if args.eval and args.local_rank in [-1, 0]:
@@ -289,8 +316,8 @@ def main(args):
                 logger.info("Saving best model checkpoint to %s", os.path.join(args.output_dir, 'best_model'))
                 # Save a trained model, configuration and tokenizer using `save_pretrained()`.
                 # They can then be reloaded using `from_pretrained()`
-                model_to_save = model.module.module if hasattr(model,
-                                                               "module") else model  # Take care of distributed/parallel training
+                model_to_save = model.module.module if hasattr(model.module,
+                                                               "module") else model.module  # Take care of distributed/parallel training
                 model_to_save.save_pretrained(os.path.join(args.output_dir, 'best_model'))
                 with open(os.path.join(args.output_dir, 'best_model/best_results.txt'), "w") as writer:
                     writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
@@ -314,10 +341,7 @@ def main(args):
         # examples = read_examples_from_file(args.data_dir, mode="train", task_type=args.task_type)
         augmenter = None
         q = None
-        if args.local_rank not in [-1, 0]:
-            torch.distributed.barrier()
-        matches = cal_layer_mapping(args, t_config, s_config)
-        if args.repeated_aug:
+        if args.repeated_aug > 1:
             processor = Processor(args, t_tokenizer, task=args.task_name, max_length=args.max_seq_length,
                                   s_tokenizer=s_tokenizer if s_tokenizer else None)
             train_dataset, s_dataset, features, s_features, examples = processor.load_and_cache_examples(
@@ -340,21 +364,27 @@ def main(args):
         #                       args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
         #     process.start()
         #     # process.join()
-        if args.aug_pipeline:
-            augmenter = AutoAugmenter.init_pipeline(w=[1,0,1])
-            if len(augmenter) and not args.repeated_aug:
-                # args.augs = augmenter.aug_names
-                # generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer,32)
-                q = Queue()
-                # q.put(augmenter)
-                process = Process(target=aug_process, args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
+        matches = cal_layer_mapping(args, t_config, s_config)
+        if args.aug_pipeline and args.repeated_aug <= 1:
+            q = Queue()
+            if args.local_rank not in [-1, 0]:
+                torch.distributed.barrier()
+            else:
+                augmenter = AutoAugmenter.init_pipeline(w=[0,2])
+                if len(augmenter) and args.repeated_aug <= 1:
+                    # args.augs = augmenter.aug_names
+                    # generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer,32)
+                    # q.put(augmenter)
+                    process = Process(target=aug_process, args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
 
-                # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
-                process.start()
-                # process.join()
-        if args.local_rank == 0:
-            torch.distributed.barrier()
-        train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q, processor=processor if args.repeated_aug else None)
+                    # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
+                    process.start()
+                    # process.join()
+                if args.local_rank == 0:
+                    torch.distributed.barrier()
+        else:
+            augmenter = AutoAugmenter.init_pipeline(w=[0])
+        train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q, processor=processor if args.repeated_aug > 1 else None)
         # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
         # p.start()
         # if args.S_model_name_or_path != args.T_model_name_or_path:
@@ -419,6 +449,8 @@ def main(args):
             with open(output_eval_file, "a") as writer:
                 writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
     return
+
+
 
 
 if __name__ == '__main__':
