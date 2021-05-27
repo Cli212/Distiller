@@ -40,7 +40,7 @@ class AutoAugmenter:
           "aug_min": 10,
           "aug_max": 25,
           "aug_p": 0.9,
-          "device": "cuda"
+          "device": "cpu"
             },{
             "aug_type": "back_translation",
             "from_model_name": "Helsinki-NLP/opus-mt-en-ROMANCE",
