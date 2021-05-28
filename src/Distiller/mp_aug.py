@@ -89,7 +89,7 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
     else:
         return original_dataset
 
-def aug_process(queue:Queue, examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None):
+def aug_process(rank, queue:Queue, examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None):
     while True:
         if queue.empty():
             new_dataset = generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer)

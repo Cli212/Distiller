@@ -85,6 +85,7 @@ def parse():
     parser.add_argument("--fp16", action="store_true")
     parser.add_argument("--thread", default=8, type=int)
     parser.add_argument("--overwrite_cache", default=False, action="store_true")
+    parser.add_argument("--ddp", action="store_true", default=False)
     parser.add_argument("--local_rank", default=-1, type=int, help="local_rank for distributed training on gpus")
 
     args = parser.parse_args()

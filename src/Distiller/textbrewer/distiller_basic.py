@@ -451,5 +451,6 @@ def augment_data(batch, augmenter, repeated_aug=1):
             for ii, dd in enumerate(augmenter.augment([i.text_b for i in tmp_batch])):
                 tmp_batch[ii].text_b = dd
         batch.extend(tmp_batch)
+        del tmp_batch
     del new_batch
     return batch

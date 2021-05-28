@@ -375,10 +375,10 @@ def main(args):
                     # args.augs = augmenter.aug_names
                     # generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer,32)
                     # q.put(augmenter)
-                    process = Process(target=aug_process, args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
+                    process = torch.multiprocessing.spawn(aug_process, args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer), join=False)
 
                     # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
-                    process.start()
+                    # process.start()
                     # process.join()
                 if args.local_rank == 0:
                     torch.distributed.barrier()

@@ -22,7 +22,8 @@ from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from Distiller.transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
 from torch.multiprocessing import Queue, Process, set_start_method
-from ray.tune.integration.torch import DistributedTrainableCreator
+# from ray.tune.integration.torch import DistributedTrainableCreator
+from ray.util.sgd.integration.torch import DistributedTrainableCreator
 
 
 logger = logging.getLogger(__name__)
@@ -352,6 +353,19 @@ def remote_fn(config, checkpoint_dir=None, args=None):
             #     return evaluation_result['exact'], evaluation_result['f1']
             # else:
             #     return evaluation_result
+            with open(output_eval_file, "a") as writer:
+                writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
+            if 'acc' in evaluation_result.keys():
+                tune.report(score=evaluation_result['acc'], accuracy=evaluation_result['acc'])
+            if 'mcc' in evaluation_result.keys():
+                tune.report(score=evaluation_result['mcc'], mcc=evaluation_result['mcc'])
+            if 'f1' in evaluation_result.keys():
+                tune.report(f1=evaluation_result['f1'], acc_and_f1=evaluation_result['acc_and_f1'])
+            if 'spearmanr' in evaluation_result.keys():
+                tune.report(score=evaluation_result['spearmanr'], spearmanr=evaluation_result['spearmanr'])
+            if 'm_mm_acc' in evaluation_result.keys():
+                tune.report(score=evaluation_result['m_mm_acc'], mnli_acc=evaluation_result['mnli/acc'],
+                            mnli_mm_acc=evaluation_result['mnli-mm/acc'])
             model.train()
             return evaluation_result
         else:
@@ -507,13 +521,14 @@ def main(args, gpus_per_trial=4):
 
     reporter = CLIReporter(
         # parameter_columns=["l1", "l2", "lr", "batch_size"],
-        metric_columns=["accuracy"])
+        metric_columns=["score"])
     from functools import partial
-    # distributed_train_cifar = DistributedTrainableCreator(
-    #     partial(train_fn, args=args),
-    #     num_gpus_per_worker=10,
-    #     num_cpus_per_worker=8
-    # )
+    if args.ddp:
+        train_fn = DistributedTrainableCreator(
+            partial(remote_fn, args=args),
+            num_gpus_per_worker=2,
+            num_cpus_per_worker=32
+        )
     # distributed_remote_fn = DistributedTrainableCreator(
     #     partial(remote_fn, args=args),
     #     num_workers=4,
@@ -528,16 +543,17 @@ def main(args, gpus_per_trial=4):
     #     scheduler=scheduler,
     #     progress_reporter=reporter,
     #     queue_trials=True)
+    else:
+        train_fn = partial(remote_fn, args=args)
     result = tune.run(
-        partial(remote_fn, args=args),
-        resources_per_trial={
+        train_fn,
+        resources_per_trial=None if args.ddp else {
             "cpu": 32,
             "gpu": gpus_per_trial
         },
         config=search_space,
         progress_reporter=reporter,
-        num_samples=30,
-        queue_trials=True)
+        num_samples=30)
     with open('/home/ray/ray_results.json','w') as f:
         json.dump(result, f)
     best_trial = result.get_best_trial("accuracy", "max", "last")

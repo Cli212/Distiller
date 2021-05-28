@@ -6,6 +6,8 @@ class BackTranslationAugmenter:
         self.from_model = MarianMTModel.from_pretrained(from_model_name)
         self.to_tokenizer = MarianTokenizer.from_pretrained(to_model_name)
         self.to_model = MarianMTModel.from_pretrained(to_model_name)
+        self.to_model.eval()
+        self.from_model.eval()
         self.device = device
         if device == 'cuda':
             self.from_model.cuda()
@@ -19,11 +21,8 @@ class BackTranslationAugmenter:
 
         # Tokenize (text to tokens)
         tokens = tokenizer.prepare_seq2seq_batch(original_texts, return_tensors='pt')
-        tokens.to(self.device)
-        # Translate
-
         # Decode (tokens to text)
-        translated_texts = tokenizer.batch_decode(model.generate(**tokens), skip_special_tokens=True)
+        translated_texts = tokenizer.batch_decode(model.generate(**tokens.to(self.device)), skip_special_tokens=True)
 
         return translated_texts
 
