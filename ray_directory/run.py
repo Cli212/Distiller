@@ -356,15 +356,15 @@ def remote_fn(config, checkpoint_dir=None, args=None):
             #     return evaluation_result
             with open(output_eval_file, "a") as writer:
                 writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
-            if 'acc' in evaluation_result.keys():
-                tune.report(score=evaluation_result['acc'], accuracy=evaluation_result['acc'])
-            if 'mcc' in evaluation_result.keys():
-                tune.report(score=evaluation_result['mcc'], mcc=evaluation_result['mcc'])
             if 'f1' in evaluation_result.keys():
-                tune.report(f1=evaluation_result['f1'], acc_and_f1=evaluation_result['acc_and_f1'])
-            if 'spearmanr' in evaluation_result.keys():
+                tune.report(score=evaluation_result['acc'],f1=evaluation_result['f1'], acc_and_f1=evaluation_result['acc_and_f1'])
+            elif 'acc' in evaluation_result.keys():
+                tune.report(score=evaluation_result['acc'], accuracy=evaluation_result['acc'])
+            elif 'mcc' in evaluation_result.keys():
+                tune.report(score=evaluation_result['mcc'], mcc=evaluation_result['mcc'])
+            elif 'spearmanr' in evaluation_result.keys():
                 tune.report(score=evaluation_result['spearmanr'], spearmanr=evaluation_result['spearmanr'])
-            if 'm_mm_acc' in evaluation_result.keys():
+            elif 'm_mm_acc' in evaluation_result.keys():
                 tune.report(score=evaluation_result['m_mm_acc'], mnli_acc=evaluation_result['mnli/acc'],
                             mnli_mm_acc=evaluation_result['mnli-mm/acc'])
             model.train()
@@ -501,15 +501,16 @@ def remote_fn(config, checkpoint_dir=None, args=None):
 def main(args, gpus_per_trial=4):
     w_list = [[0], [1], [2], [0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1], [0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0],
               [2, 0, 1], [2, 1, 0]]
-    search_space = {
-        "mixup": tune.choice([True,False]),
-        "repeated_aug": tune.choice([1,4]),
-        "w": tune.choice(w_list)
-    }
     # search_space = {
-    #     "intermediate_strategy": tune.choice(["skip", "last", "EMD"]),
-    #     "kd_loss_type": tune.choice(["ce", "mse"]),
-    #     "intermediate_loss_type": tune.choice(["ce", "mse", "cos", "pkd","mi_0.0","mi_0.1","mi_0.5","mi_0.9","mi_1.0"])}
+    #     "mixup": tune.choice([True,False]),
+    #     "repeated_aug": tune.choice([1,4]),
+    #     "w": tune.choice(w_list)
+    # }
+    search_space = {
+        "intermediate_strategy": tune.choice(["skip", "last", "emd"]),
+        "kd_loss_type": tune.choice(["ce", "mse"]),
+        "intermediate_loss_type": tune.choice(["ce", "mse", "cos", "pkd","mi_0.0","mi_0.1","mi_0.5","mi_0.9","mi_1.0"]),
+        "mixup": tune.choice([True, False])}
     # search_space = {
     #     "alpha": tune.grid_search([0.0, 0.1, 0.5, 0.9, 1.0]),
     #     "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),
