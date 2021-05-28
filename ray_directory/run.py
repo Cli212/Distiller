@@ -482,8 +482,8 @@ def remote_fn(config, checkpoint_dir=None, args=None):
 
 
 def main(args, gpus_per_trial=4):
-    w_list = [[0], [1], [2], [0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 3], [1, 2, 3], [1, 3, 2], [2, 1, 3], [2, 3, 1],
-              [3, 1, 2], [3, 2, 1]]
+    w_list = [[0], [1], [2], [0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1], [0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0],
+              [2, 0, 1], [2, 1, 0]]
     search_space = {
         "mixup": tune.choice([True,False]),
         "repeated_aug": tune.choice([1,4]),
