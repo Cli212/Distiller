@@ -557,7 +557,7 @@ def main(args, gpus_per_trial=4):
         },
         config=search_space,
         progress_reporter=reporter,
-        num_samples=30)
+        num_samples=40)
     with open('/home/ray/ray_results.json','w') as f:
         json.dump(result, f)
     best_trial = result.get_best_trial("accuracy", "max", "last")
