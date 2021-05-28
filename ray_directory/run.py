@@ -56,12 +56,13 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
         if args.local_rank not in [-1, 0]:
             torch.distributed.barrier()
         else:
-            QUEUE_LIMIT = 600
+            QUEUE_LIMIT = 60
             count = 0
+            logger.info("Waiting for data augmentation process to return data")
             while count<QUEUE_LIMIT:
                 try:
                     count+=1
-                    train_dataset = q.get(timeout=60)
+                    train_dataset = q.get(timeout=300)
                     torch.save(train_dataset,'train_dataset.bin')
                     break
                 except queue.Empty:
@@ -412,11 +413,12 @@ def remote_fn(config, checkpoint_dir=None, args=None):
                     # args.augs = augmenter.aug_names
                     # generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer,32)
                     # q.put(augmenter)
-                    process = Process(target=aug_process,
-                                      args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
-
+                    # process = Process(target=aug_process,
+                    #                   args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
+                    process = torch.multiprocessing.spawn(aug_process, args=(
+                    q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer), join=False)
                     # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
-                    process.start()
+                    # process.start()
                     # process.join()
                 if args.local_rank == 0:
                     torch.distributed.barrier()

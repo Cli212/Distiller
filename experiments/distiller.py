@@ -48,13 +48,14 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
         if args.local_rank not in [-1, 0]:
             torch.distributed.barrier()
         else:
-            QUEUE_LIMIT = 600
+            QUEUE_LIMIT = 60
             count = 0
-            while count<QUEUE_LIMIT:
+            logger.info("Waiting for data augmentation process to return data")
+            while count < QUEUE_LIMIT:
                 try:
-                    count+=1
-                    train_dataset = q.get(timeout=60)
-                    torch.save(train_dataset,'train_dataset.bin')
+                    count += 1
+                    train_dataset = q.get(timeout=300)
+                    torch.save(train_dataset, 'train_dataset.bin')
                     break
                 except queue.Empty:
                     logger.info("Waiting for data augmentation process to return data")
