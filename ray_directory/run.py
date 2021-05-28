@@ -22,8 +22,8 @@ from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from Distiller.transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
 from torch.multiprocessing import Queue, Process, set_start_method
-# from ray.tune.integration.torch import DistributedTrainableCreator
-from ray.util.sgd.integration.torch import DistributedTrainableCreator
+from ray.tune.integration.torch import DistributedTrainableCreator
+# from ray.util.sgd.integration.torch import DistributedTrainableCreator
 
 
 logger = logging.getLogger(__name__)
