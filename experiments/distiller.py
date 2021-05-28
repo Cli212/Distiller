@@ -371,7 +371,7 @@ def main(args):
             if args.local_rank not in [-1, 0]:
                 torch.distributed.barrier()
             else:
-                augmenter = AutoAugmenter.init_pipeline(w=[0,1])
+                augmenter = AutoAugmenter.init_pipeline(w=[2])
                 if len(augmenter) and args.repeated_aug <= 1:
                     # args.augs = augmenter.aug_names
                     # generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer,32)
@@ -388,6 +388,7 @@ def main(args):
         else:
             pass
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q, processor=processor if args.repeated_aug > 1 else None)
+        process.processes[0].terminate()
         # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
         # p.start()
         # if args.S_model_name_or_path != args.T_model_name_or_path:
