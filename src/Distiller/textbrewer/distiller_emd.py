@@ -55,7 +55,7 @@ class EMDDistiller(BasicDistiller):
         self.emd_feature = emd['feature']
         self.emd_loss_type = emd['loss']
         self.emd_loss_weight = emd['weight']
-        if self.emd_feature != 'hidden' or self.emd_loss_type != 'hidden_mse':
+        if self.emd_feature != 'hidden' or self.emd_loss_type not in ['hidden_mse', 'mi']:
             raise NotImplementedError
 
         self.feature_weight_S = np.ones(self.layer_num_S - 1) / (self.layer_num_S - 1)  # excluding the embedding layer

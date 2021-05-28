@@ -428,7 +428,8 @@ def remote_fn(config, checkpoint_dir=None, args=None):
             pass
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback,
               q=q, processor=processor if args.repeated_aug > 1 else None)
-        process.processes[0].terminate()
+        if args.aug_pipeline and args.repeated_aug <= 1:
+            process.processes[0].terminate()
         # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
         # p.start()
         # if args.S_model_name_or_path != args.T_model_name_or_path:
