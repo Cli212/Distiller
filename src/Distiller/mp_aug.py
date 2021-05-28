@@ -60,31 +60,34 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
     #             disable=False,
     #         )
     #     )
-    annotate_ = partial(
-        augment_data,
-        augmenter=augmenter,
-        task_type=args.task_type
-    )
-    new_examples = []
-    for example in tqdm(example_iter(examples, batch_size), total=int(len(examples) / batch_size) + 1, desc="Data Augmentation"):
-        new_examples.extend(annotate_(example))
-    # new_examples = []
-    # for i in aug_examples:
-    #     new_examples.extend(i)
-    # del aug_examples
-    features = convert_examples_to_features(new_examples, tokenizer, args.max_seq_length,
-                                            task=args.task_name
-                                            )
-    s_features = None
-    if s_tokenizer:
-        s_features = convert_examples_to_features(new_examples, s_tokenizer,
-                                                  args.max_seq_length,
-                                                  task=args.task_name
-                                                  )
+    if len(augmenter)>0:
+        annotate_ = partial(
+            augment_data,
+            augmenter=augmenter,
+            task_type=args.task_type
+        )
+        new_examples = []
+        for example in tqdm(example_iter(examples, batch_size), total=int(len(examples) / batch_size) + 1, desc="Data Augmentation"):
+            new_examples.extend(annotate_(example))
+        # new_examples = []
+        # for i in aug_examples:
+        #     new_examples.extend(i)
+        # del aug_examples
+        features = convert_examples_to_features(new_examples, tokenizer, args.max_seq_length,
+                                                task=args.task_name
+                                                )
+        s_features = None
+        if s_tokenizer:
+            s_features = convert_examples_to_features(new_examples, s_tokenizer,
+                                                      args.max_seq_length,
+                                                      task=args.task_name
+                                                      )
 
-    dataset = convert_features_to_dataset(features, s_features)
-    new_dataset = ConcatDataset([original_dataset, dataset])
-    return new_dataset
+        dataset = convert_features_to_dataset(features, s_features)
+        new_dataset = ConcatDataset([original_dataset, dataset])
+        return new_dataset
+    else:
+        return original_dataset
 
 def aug_process(queue:Queue, examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None):
     while True:

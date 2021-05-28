@@ -237,6 +237,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
 
 
 def remote_fn(config, checkpoint_dir=None, args=None):
+    set_start_method('spawn')
     # Set ray tune hyper parameters
     w=[]
     for c in config.items():
@@ -247,237 +248,237 @@ def remote_fn(config, checkpoint_dir=None, args=None):
             w = c[1]
         else:
             args.__setattr__(c[0], c[1])
-    # best_evaluation = 0.0
-    # for k,v in config.items():
-    #     args.k = v
-        # Setup CUDA, GPU & distributed training
-        if args.local_rank == -1 or args.no_cuda:
-            device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-            args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
-        else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-            torch.cuda.set_device(args.local_rank)
-            device = torch.device("cuda", args.local_rank)
-            torch.distributed.init_process_group(backend="nccl")
-            args.n_gpu = 1
-        args.device = device
-        # Setup logging
-        logging.basicConfig(format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
-                            datefmt="%m/%d/%Y %H:%M:%S",
-                            level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
-        logger.warning("Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
-                       args.local_rank, device, args.n_gpu, bool(args.local_rank != -1), args.fp16)
+    globals()['best_evaluation'] = 0.0
+    # Setup CUDA, GPU & distributed training
+    if args.local_rank == -1 or args.no_cuda:
+        device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+        args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
+    else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
+        torch.cuda.set_device(args.local_rank)
+        device = torch.device("cuda", args.local_rank)
+        torch.distributed.init_process_group(backend="nccl")
+        args.n_gpu = 1
+    args.device = device
+    # Setup logging
+    logging.basicConfig(format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+                        datefmt="%m/%d/%Y %H:%M:%S",
+                        level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
+    logger.warning("Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
+                   args.local_rank, device, args.n_gpu, bool(args.local_rank != -1), args.fp16)
 
-        # Set seed
-        set_seed(args)
-        t_config = AutoConfig.from_pretrained(args.T_config_file if args.T_config_file else args.T_model_name_or_path)
-        s_config = AutoConfig.from_pretrained(args.S_config_file if args.S_config_file else args.S_model_name_or_path)
-        args.model_type = s_config.model_type
-        s_config.num_labels = t_config.num_labels
-        t_config.output_hidden_states = True
-        t_config.output_attentions = True
-        s_config.output_hidden_states = True
-        s_config.output_attentions = True
-        model_class = task_dict.get(args.task_type)
-        ## load pretrained models and tokenizers
-        t_tokenizer = AutoTokenizer.from_pretrained(args.T_model_name_or_path,
-                                                    use_fast=False,
-                                                    config=t_config,
-                                                    )
-        s_tokenizer = AutoTokenizer.from_pretrained(args.S_model_name_or_path,
-                                                    use_fast=False,
-                                                    config=s_config) if args.S_model_name_or_path != args.T_model_name_or_path else None
-        t_model = model_class.from_pretrained(args.T_model_name_or_path, config=t_config)
-        ## If the student borrow layers from teachers, it must borrow complete layers. Their hidden size and attention size
-        # must be the same
-        if args.random_student:
-            s_model = model_class.from_config(s_config)
-        else:
-            s_model = model_class.from_pretrained(args.S_model_name_or_path, config=s_config)
-        s_model.to(args.device)
-        t_model.to(args.device)
-        # if args.local_rank not in [-1, 0]:
-        #     torch.distributed.barrier()
-        # else:
-        #     print(f"{args.local_rank} Not in barrier")
-        #     t_tokenizer = AutoTokenizer.from_pretrained(args.T_model_name_or_path,
-        #                                                 use_fast=False,
-        #                                                 config=t_config,
-        #                                                 )
-        #     s_tokenizer = AutoTokenizer.from_pretrained(args.S_model_name_or_path,
-        #                                                 use_fast=False,
-        #                                                 config=s_config) if args.S_model_name_or_path != args.T_model_name_or_path else None
-        #     torch.save(t_tokenizer,'t_tokenizer.bin')
-        #     torch.save(s_tokenizer, 's_tokenizer.bin')
-        #
-        #     t_model = model_class.from_pretrained(args.T_model_name_or_path, config=t_config)
-        #     ## If the student borrow layers from teachers, it must borrow complete layers. Their hidden size and attention size
-        #     # must be the same
-        #     if args.random_student:
-        #         s_model = model_class.from_config(s_config)
-        #     else:
-        #         s_model = model_class.from_pretrained(args.S_model_name_or_path, config=s_config)
-        #     torch.save(t_model, 't_model.bin')
-        #     torch.save(s_model, 's_model.bin')
-        #     if args.local_rank == 0:
-        #         torch.distributed.barrier()
-        # if args.local_rank not in [-1, 0]:
-        #     t_tokenizer = torch.load('t_tokenizer.bin')
-        #     s_tokenizer = torch.load('s_tokenizer.bin')
-        #     t_model = torch.load('t_model.bin')
-        #     s_model = torch.load('s_model.bin')
-        if args.local_rank in [-1, 0]:
-            logger.info("Training/evaluation parameters %s", args)
+    # Set seed
+    set_seed(args)
+    t_config = AutoConfig.from_pretrained(args.T_config_file if args.T_config_file else args.T_model_name_or_path)
+    s_config = AutoConfig.from_pretrained(args.S_config_file if args.S_config_file else args.S_model_name_or_path)
+    args.model_type = s_config.model_type
+    s_config.num_labels = t_config.num_labels
+    t_config.output_hidden_states = True
+    t_config.output_attentions = True
+    s_config.output_hidden_states = True
+    s_config.output_attentions = True
+    model_class = task_dict.get(args.task_type)
+    ## load pretrained models and tokenizers
+    t_tokenizer = AutoTokenizer.from_pretrained(args.T_model_name_or_path,
+                                                use_fast=False,
+                                                config=t_config,
+                                                )
+    s_tokenizer = AutoTokenizer.from_pretrained(args.S_model_name_or_path,
+                                                use_fast=False,
+                                                config=s_config) if args.S_model_name_or_path != args.T_model_name_or_path else None
+    t_model = model_class.from_pretrained(args.T_model_name_or_path, config=t_config)
+    ## If the student borrow layers from teachers, it must borrow complete layers. Their hidden size and attention size
+    # must be the same
+    if args.random_student:
+        s_model = model_class.from_config(s_config)
+    else:
+        s_model = model_class.from_pretrained(args.S_model_name_or_path, config=s_config)
+    s_model.to(args.device)
+    t_model.to(args.device)
+    # if args.local_rank not in [-1, 0]:
+    #     torch.distributed.barrier()
+    # else:
+    #     print(f"{args.local_rank} Not in barrier")
+    #     t_tokenizer = AutoTokenizer.from_pretrained(args.T_model_name_or_path,
+    #                                                 use_fast=False,
+    #                                                 config=t_config,
+    #                                                 )
+    #     s_tokenizer = AutoTokenizer.from_pretrained(args.S_model_name_or_path,
+    #                                                 use_fast=False,
+    #                                                 config=s_config) if args.S_model_name_or_path != args.T_model_name_or_path else None
+    #     torch.save(t_tokenizer,'t_tokenizer.bin')
+    #     torch.save(s_tokenizer, 's_tokenizer.bin')
+    #
+    #     t_model = model_class.from_pretrained(args.T_model_name_or_path, config=t_config)
+    #     ## If the student borrow layers from teachers, it must borrow complete layers. Their hidden size and attention size
+    #     # must be the same
+    #     if args.random_student:
+    #         s_model = model_class.from_config(s_config)
+    #     else:
+    #         s_model = model_class.from_pretrained(args.S_model_name_or_path, config=s_config)
+    #     torch.save(t_model, 't_model.bin')
+    #     torch.save(s_model, 's_model.bin')
+    #     if args.local_rank == 0:
+    #         torch.distributed.barrier()
+    # if args.local_rank not in [-1, 0]:
+    #     t_tokenizer = torch.load('t_tokenizer.bin')
+    #     s_tokenizer = torch.load('s_tokenizer.bin')
+    #     t_model = torch.load('t_model.bin')
+    #     s_model = torch.load('s_model.bin')
+    if args.local_rank in [-1, 0]:
+        logger.info("Training/evaluation parameters %s", args)
 
-        def predict_callback(model, step):
-            if args.eval and args.local_rank in [-1, 0]:
-                evaluation_result = evaluate_func(args, model, s_tokenizer if s_tokenizer else t_tokenizer, prefix=step)
-                global best_evaluation
-                if evaluation_result[glue_criterion(args.task_name)[0]] > best_evaluation:
-                    best_evaluation = evaluation_result[glue_criterion(args.task_name)[0]]
-                    logger.info("Saving best model checkpoint to %s", os.path.join(args.output_dir, 'best_model'))
-                    # Save a trained model, configuration and tokenizer using `save_pretrained()`.
-                    # They can then be reloaded using `from_pretrained()`
-                    model_to_save = model.module.module if hasattr(model.module,
-                                                                   "module") else model.module  # Take care of distributed/parallel training
-                    model_to_save.save_pretrained(os.path.join(args.output_dir, 'best_model'))
-                    with open(os.path.join(args.output_dir, 'best_model/best_results.txt'), "w") as writer:
-                        writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
-                evaluation_result['best_result'] = best_evaluation
-                logger.info("***** Eval results *****")
-                logger.info(json.dumps(evaluation_result, indent=2) + '\n')
-                output_eval_file = os.path.join(args.output_dir, f"{step}_eval_results.txt")
-                logger.info(f"Write evaluation result to {output_eval_file}...")
-                with open(output_eval_file, "a") as writer:
+    def predict_callback(model, step):
+        if args.eval and args.local_rank in [-1, 0]:
+            evaluation_result = evaluate_func(args, model, s_tokenizer if s_tokenizer else t_tokenizer, prefix=step)
+            global best_evaluation
+            if evaluation_result[glue_criterion(args.task_name)[0]] > best_evaluation:
+                best_evaluation = evaluation_result[glue_criterion(args.task_name)[0]]
+                logger.info("Saving best model checkpoint to %s", os.path.join(args.output_dir, 'best_model'))
+                # Save a trained model, configuration and tokenizer using `save_pretrained()`.
+                # They can then be reloaded using `from_pretrained()`
+                model_to_save = model.module.module if hasattr(model.module,
+                                                               "module") else model.module  # Take care of distributed/parallel training
+                model_to_save.save_pretrained(os.path.join(args.output_dir, 'best_model'))
+                with open(os.path.join(args.output_dir, 'best_model/best_results.txt'), "w") as writer:
                     writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
-                # if "exact" in evaluation_result.keys():
-                #     return evaluation_result['exact'], evaluation_result['f1']
-                # else:
-                #     return evaluation_result
-                model.train()
-                return evaluation_result
-            else:
-                return None
+            evaluation_result['best_result'] = best_evaluation
+            logger.info("***** Eval results *****")
+            logger.info(json.dumps(evaluation_result, indent=2) + '\n')
+            output_eval_file = os.path.join(args.output_dir, f"{step}_eval_results.txt")
+            logger.info(f"Write evaluation result to {output_eval_file}...")
+            with open(output_eval_file, "a") as writer:
+                writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
+            # if "exact" in evaluation_result.keys():
+            #     return evaluation_result['exact'], evaluation_result['f1']
+            # else:
+            #     return evaluation_result
+            model.train()
+            return evaluation_result
+        else:
+            return None
 
-        ## Training
-        if args.train:
-            # examples = read_examples_from_file(args.data_dir, mode="train", task_type=args.task_type)
-            augmenter = None
-            q = None
-            if args.repeated_aug > 1:
-                processor = Processor(args, t_tokenizer, task=args.task_name, max_length=args.max_seq_length,
-                                      s_tokenizer=s_tokenizer if s_tokenizer else None)
-                train_dataset, s_dataset, features, s_features, examples = processor.load_and_cache_examples(
-                    mode="train",
-                    return_examples=True)
-            else:
-                train_dataset, s_dataset, features, s_features, examples = load_and_cache_examples(args, t_tokenizer,
-                                                                                                   mode="train",
-                                                                                                   return_examples=True,
-                                                                                                   s_tokenizer=s_tokenizer)
-            # if args.augmenter_config_path:
-            #     augmenter = AutoAugmenter.from_config(args.augmenter_config_path, "cpu" if args.n_gpu == 0 else "gpu")
-            #     # global q
-            #     q = Queue()
-            #     process = Process(target=aug_process,
-            #                       args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
-            #     process.start()
-            # if args.aug_type:
-            #     augmenter = AutoAugmenter.from_config(args.aug_type)
-            #     q = Queue()
-            #     process = Process(target=aug_process,
-            #                       args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
-            #     process.start()
-            #     # process.join()
-            matches = cal_layer_mapping(args, t_config, s_config)
-            if args.aug_pipeline and args.repeated_aug <= 1:
-                q = Queue()
-                if args.local_rank not in [-1, 0]:
-                    torch.distributed.barrier()
-                else:
-                    augmenter = AutoAugmenter.init_pipeline(w=w)
-                    if len(augmenter) and args.repeated_aug <= 1:
-                        # args.augs = augmenter.aug_names
-                        # generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer,32)
-                        # q.put(augmenter)
-                        process = Process(target=aug_process,
-                                          args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
-
-                        # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
-                        process.start()
-                        # process.join()
-                    if args.local_rank == 0:
-                        torch.distributed.barrier()
+    ## Training
+    if args.train:
+        # examples = read_examples_from_file(args.data_dir, mode="train", task_type=args.task_type)
+        augmenter = None
+        q = None
+        if args.repeated_aug > 1:
+            processor = Processor(args, t_tokenizer, task=args.task_name, max_length=args.max_seq_length,
+                                  s_tokenizer=s_tokenizer if s_tokenizer else None)
+            train_dataset, s_dataset, features, s_features, examples = processor.load_and_cache_examples(
+                mode="train",
+                return_examples=True)
+        else:
+            train_dataset, s_dataset, features, s_features, examples = load_and_cache_examples(args, t_tokenizer,
+                                                                                               mode="train",
+                                                                                               return_examples=True,
+                                                                                               s_tokenizer=s_tokenizer)
+        # if args.augmenter_config_path:
+        #     augmenter = AutoAugmenter.from_config(args.augmenter_config_path, "cpu" if args.n_gpu == 0 else "gpu")
+        #     # global q
+        #     q = Queue()
+        #     process = Process(target=aug_process,
+        #                       args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
+        #     process.start()
+        # if args.aug_type:
+        #     augmenter = AutoAugmenter.from_config(args.aug_type)
+        #     q = Queue()
+        #     process = Process(target=aug_process,
+        #                       args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
+        #     process.start()
+        #     # process.join()
+        matches = cal_layer_mapping(args, t_config, s_config)
+        if args.aug_pipeline and args.repeated_aug <= 1:
+            q = Queue()
+            if args.local_rank not in [-1, 0]:
+                torch.distributed.barrier()
             else:
                 augmenter = AutoAugmenter.init_pipeline(w=w)
-            train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback,
-                  q=q, processor=processor if args.repeated_aug > 1 else None)
-            # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
-            # p.start()
-            # if args.S_model_name_or_path != args.T_model_name_or_path:
-            #     s_train_dataset = load_and_cache_examples(args, s_tokenizer, mode="train", model_name_or_path=args.S_model_name_or_path, examples=examples)
-            # train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback,s_tokenizer, s_dataset)
+                if len(augmenter) and args.repeated_aug <= 1:
+                    # args.augs = augmenter.aug_names
+                    # generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer,32)
+                    # q.put(augmenter)
+                    process = Process(target=aug_process,
+                                      args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
 
-        # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
-        if args.train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
-            # Create output directory if needed
-            if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
-                os.makedirs(args.output_dir)
+                    # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
+                    process.start()
+                    # process.join()
+                if args.local_rank == 0:
+                    torch.distributed.barrier()
+        elif args.aug_pipeline and args.repeated_aug>1:
+            augmenter = AutoAugmenter.init_pipeline(w=w)
+        else:
+            pass
+        train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback,
+              q=q, processor=processor if args.repeated_aug > 1 else None)
+        # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
+        # p.start()
+        # if args.S_model_name_or_path != args.T_model_name_or_path:
+        #     s_train_dataset = load_and_cache_examples(args, s_tokenizer, mode="train", model_name_or_path=args.S_model_name_or_path, examples=examples)
+        # train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback,s_tokenizer, s_dataset)
 
-            logger.info("Saving model checkpoint to %s", args.output_dir)
-            # Save a trained model, configuration and tokenizer using `save_pretrained()`.
-            # They can then be reloaded using `from_pretrained()`
-            model_to_save = s_model.module if hasattr(s_model,
-                                                      "module") else s_model  # Take care of distributed/parallel training
-            model_to_save.save_pretrained(args.output_dir)
-            if s_tokenizer:
-                s_tokenizer.save_pretrained(args.output_dir)
-            else:
-                t_tokenizer.save_pretrained(args.output_dir)
-            torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
-            with open(os.path.join(args.output_dir, "training_args.json"), 'w') as f:
-                arg_dict = vars(args)
-                arg_dict['device'] = str(arg_dict['device'])
-                json.dump(arg_dict, f)
-            uploadDirectory(args.output_dir)
-            model = model_class.from_pretrained(args.output_dir)  # , force_download=True)
-            model.to(args.device)
-            # Good practice: save your training arguments together with the trained model
+    # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
+    if args.train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
+        # Create output directory if needed
+        if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
+            os.makedirs(args.output_dir)
 
-        # Evaluation
-        results = {}
-        if args.eval and args.local_rank in [-1, 0]:
-            if args.train:
-                logger.info("Loading checkpoints saved during training for evaluation")
-                checkpoints = [args.output_dir]
-                if args.eval_all_checkpoints:
-                    checkpoints = list(
-                        os.path.dirname(c)
-                        for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
-                    )
+        logger.info("Saving model checkpoint to %s", args.output_dir)
+        # Save a trained model, configuration and tokenizer using `save_pretrained()`.
+        # They can then be reloaded using `from_pretrained()`
+        model_to_save = s_model.module if hasattr(s_model,
+                                                  "module") else s_model  # Take care of distributed/parallel training
+        model_to_save.save_pretrained(args.output_dir)
+        if s_tokenizer:
+            s_tokenizer.save_pretrained(args.output_dir)
+        else:
+            t_tokenizer.save_pretrained(args.output_dir)
+        torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
+        with open(os.path.join(args.output_dir, "training_args.json"), 'w') as f:
+            arg_dict = vars(args)
+            arg_dict['device'] = str(arg_dict['device'])
+            json.dump(arg_dict, f)
+        uploadDirectory(args.output_dir)
+        model = model_class.from_pretrained(args.output_dir)  # , force_download=True)
+        model.to(args.device)
+        # Good practice: save your training arguments together with the trained model
 
-            else:
-                logger.info("Loading checkpoint %s for evaluation", args.S_model_name_or_path)
-                checkpoints = [args.S_model_name_or_path]
-
+    # Evaluation
+    results = {}
+    if args.eval and args.local_rank in [-1, 0]:
+        if args.train:
+            logger.info("Loading checkpoints saved during training for evaluation")
+            checkpoints = [args.output_dir]
             if args.eval_all_checkpoints:
-                checkpoints = list(os.path.dirname(c) for c in
-                                   sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True)))
-                logging.getLogger("pytorch_transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
-            logger.info("Evaluate the following checkpoints: %s", checkpoints)
-            for checkpoint in checkpoints:
-                global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
-                model = model_class.from_pretrained(checkpoint)
-                model.to(args.device)
-                evaluation_result = evaluate_func(args, model, s_tokenizer if s_tokenizer else t_tokenizer,
-                                                  prefix=global_step, write_prediction=True)
-                logger.info("***** Eval results *****")
-                logger.info(json.dumps(evaluation_result, indent=2) + '\n')
+                checkpoints = list(
+                    os.path.dirname(c)
+                    for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
+                )
 
-                output_eval_file = os.path.join(args.output_dir, "final_eval_results.txt")
-                logger.info(f"Write evaluation result to {output_eval_file}...")
-                with open(output_eval_file, "a") as writer:
-                    writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
-        return
+        else:
+            logger.info("Loading checkpoint %s for evaluation", args.S_model_name_or_path)
+            checkpoints = [args.S_model_name_or_path]
+
+        if args.eval_all_checkpoints:
+            checkpoints = list(os.path.dirname(c) for c in
+                               sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True)))
+            logging.getLogger("pytorch_transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
+        logger.info("Evaluate the following checkpoints: %s", checkpoints)
+        for checkpoint in checkpoints:
+            global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
+            model = model_class.from_pretrained(checkpoint)
+            model.to(args.device)
+            evaluation_result = evaluate_func(args, model, s_tokenizer if s_tokenizer else t_tokenizer,
+                                              prefix=global_step, write_prediction=True)
+            logger.info("***** Eval results *****")
+            logger.info(json.dumps(evaluation_result, indent=2) + '\n')
+
+            output_eval_file = os.path.join(args.output_dir, "final_eval_results.txt")
+            logger.info(f"Write evaluation result to {output_eval_file}...")
+            with open(output_eval_file, "a") as writer:
+                writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
+    return
 
 
 def main(args, gpus_per_trial=4):

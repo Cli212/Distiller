@@ -40,12 +40,12 @@ class AutoAugmenter:
           "aug_min": 10,
           "aug_max": 25,
           "aug_p": 0.9,
-          "device": "cpu"
+          "device": "cuda"
             },{
             "aug_type": "back_translation",
             "from_model_name": "Helsinki-NLP/opus-mt-en-ROMANCE",
             "to_model_name": "Helsinki-NLP/opus-mt-ROMANCE-en",
-            "device": "cpu"
+            "device": "cuda"
         },{
         "aug_type": "random",
         "action": "swap",
@@ -54,7 +54,7 @@ class AutoAugmenter:
     }]
         selected_list = []
         aug_args = []
-        if w:
+        if w is not None:
             for i in w:
                 aug_args.append(config_list[i])
         else:
