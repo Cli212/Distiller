@@ -10,10 +10,10 @@ OUTPUT_ROOT_DIR=output-student
 accu=1
 ep=20
 lr=5
-alpha=0.7
+alpha=0.5
 #augmenter_config_path=augmenter_config.json
-intermediate_strategy=emd
-intermediate_loss_type=mse
+intermediate_strategy=skip
+intermediate_loss_type=mi
 intermediate_features=hidden
 kd_loss_type=ce
 ## if you use mixup or augmenter, then the actual batch size will be batch_size * 2
