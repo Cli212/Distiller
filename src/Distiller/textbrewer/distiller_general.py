@@ -2,6 +2,13 @@
 from .distiller_utils import *
 from .distiller_basic import BasicDistiller
 from .emd import transformer_loss
+
+
+def cross_entropy(input, target):
+    logsoftmax = nn.LogSoftmax(dim=-1)
+    return torch.mean(torch.sum(- target * logsoftmax(input), 1))
+
+
 class GeneralDistiller(BasicDistiller):
     """
     Supports intermediate features matching. **Recommended for single-teacher single-task distillation**.
@@ -167,6 +174,7 @@ class GeneralDistiller(BasicDistiller):
                 total_loss += match_weight * match_loss(hook_S,hook_T,inputs_mask_S,inputs_mask_T)
             self.custom_matches_cache['hook_outputs_T'] = []
             self.custom_matches_cache['hook_outputs_S'] = []
+        # if self.d_config.soft_label_weight > 0.0:
 
         if 'losses' in results_S:
             total_hl_loss = 0

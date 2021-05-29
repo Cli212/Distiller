@@ -178,6 +178,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
             distill_config = DistillationConfig(
                 temperature=args.temperature,
                 hard_label_weight=args.hard_label_weight,
+                soft_label_weight=args.soft_label_weight,
                 kd_loss_weight=args.kd_loss_weight,
                 kd_loss_type=args.kd_loss_type,
                 critic=critic,
@@ -194,6 +195,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                 temperature=args.temperature,
                 intermediate_matches=matches,
                 hard_label_weight=args.hard_label_weight,
+                soft_label_weight=args.soft_label_weight,
                 kd_loss_weight=args.kd_loss_weight,
                 kd_loss_type=args.kd_loss_type,
                 critic=critic,
@@ -376,7 +378,7 @@ def main(args):
                     # args.augs = augmenter.aug_names
                     # generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer,32)
                     # q.put(augmenter)
-                    process = torch.multiprocessing.spawn(aug_process, args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer), join=False)
+                    process = torch.multiprocessing.spawn(aug_process, args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer, t_model if args.soft_label_weight>0 else None), join=False)
 
                     # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
                     # process.start()

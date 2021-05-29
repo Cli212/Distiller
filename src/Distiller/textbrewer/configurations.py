@@ -223,7 +223,8 @@ class DistillationConfig(Config):
     """
     def __init__(self,temperature=4,
                       temperature_scheduler = 'none',
-                      hard_label_weight=1,
+                      hard_label_weight=0.0,
+                      soft_label_weight=0.0,
                       hard_label_weight_scheduler = 'none',
                       kd_loss_type='ce',
                       kd_loss_weight=1,
@@ -248,6 +249,7 @@ class DistillationConfig(Config):
             self.temperature_scheduler = TEMPERATURE_SCHEDULER[temperature_scheduler]
 
         self.hard_label_weight = hard_label_weight
+        self.soft_label_weight = soft_label_weight
         self.hard_label_weight_scheduler = None
         if hard_label_weight_scheduler != 'none':
             assert hard_label_weight_scheduler in WEIGHT_SCHEDULER, \
