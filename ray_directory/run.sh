@@ -58,6 +58,8 @@ python run.py \
     --temperature ${temperature} \
     --alpha ${alpha} \
     --hard_label_weight ${hard_label_weight} \
+    --soft_label_weight 1.0 \
+    --num_reaug 2 \
     --kd_loss_weight ${kd_loss_weight} \
     --kd_loss_type ${kd_loss_type}
 

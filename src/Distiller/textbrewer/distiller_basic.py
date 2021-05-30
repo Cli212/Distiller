@@ -442,21 +442,22 @@ class BasicDistiller(AbstractDistiller):
             self.logits_cache.append([batch, [logits.to('cpu') for logits in results_T['logits']]])
 
     def augment_data(self, batch):
+        finetuning_task = self.model_T.module.config.finetuning_task if hasattr(self.model_T, "module") else self.model_T.config.finetuning_task
         new_batch = []
         labels = []
         for i in range(self.t_config.repeated_aug-1):
-            tmp_batch = new_batch.copy()
+            tmp_batch = batch.copy()
             for ii, dd in enumerate(self.t_config.augmenter.augment([i.text_a for i in tmp_batch])):
                 tmp_batch[ii].text_a = dd
             if hasattr(tmp_batch[0], "text_b") and tmp_batch[0].text_b:
                 for ii, dd in enumerate(self.t_config.augmenter.augment([i.text_b for i in tmp_batch])):
                     tmp_batch[ii].text_b = dd
             if self.d_config.soft_label_weight>0.0:
-                labels.extend([int(i.labels) for i in tmp_batch])
+                labels.extend([int(i.label) for i in tmp_batch])
             new_batch.extend(tmp_batch)
             del tmp_batch
         if self.d_config.soft_label_weight>0.0:
-            labels = torch.LongTensor(labels).to(self.model_T.device)
+            labels = torch.LongTensor(labels).to(self.model_T.module.device if hasattr(self.model_T,"module") else self.model_T.device)
             inputs = self.t_config.tokenizer(
                 [(example.text_a, example.text_b) for example in new_batch],
                 max_length=self.t_config.max_seq_length,
@@ -465,10 +466,10 @@ class BasicDistiller(AbstractDistiller):
                 return_token_type_ids=True,
                 return_tensors="pt"
             )
-            inputs = {key: value.to(self.model_T.device) for key, value in inputs.items()}
+            inputs = {key: value.to(self.model_T.module.device if hasattr(self.model_T,"module") else self.model_T.device) for key, value in inputs.items()}
             outputs = self.model_T(**inputs, labels=labels)
             predictions = outputs.logits.detach().cpu()
-            if self.model_T.config.finetuning_task != "stsb":
+            if finetuning_task != "stsb":
                 predictions = predictions.argmax(dim=-1)
             else:
                 predictions = predictions[:, 0]
