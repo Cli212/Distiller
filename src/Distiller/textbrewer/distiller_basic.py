@@ -207,7 +207,7 @@ class BasicDistiller(AbstractDistiller):
                 self.cache_logits(batch, args, batch_postprocessor)
 
         for current_epoch in tqdm(range(int(num_epochs)), disable=tqdm_disable):
-            if self.t_config.q and current_epoch%5 == 0 and current_epoch != 0:
+            if self.t_config.q and current_epoch%self.t_config.num_reaug == 0 and current_epoch != 0:
                 train_dataset = None
                 if self.local_rank not in [-1, 0]:
                     torch.distributed.barrier()
@@ -254,7 +254,7 @@ class BasicDistiller(AbstractDistiller):
                     #         torch.distributed.barrier()
                     # if self.local_rank not in [-1,0]:
                     #     batch = torch.load('batch.bin')
-                    batch = augment_data(batch, self.t_config.augmenter, self.t_config.repeated_aug)
+                    batch = self.augment_data(batch)
                     features, s_features = self.t_config.processor.convert_examples_to_features(batch, disable=True)
                     batch = self.t_config.processor.convert_features_to_bacth(features, s_features)
                 if self.d_config.is_caching_logits is False and batch_postprocessor is not None:
@@ -441,16 +441,39 @@ class BasicDistiller(AbstractDistiller):
 
             self.logits_cache.append([batch, [logits.to('cpu') for logits in results_T['logits']]])
 
-def augment_data(batch, augmenter, repeated_aug=1):
-    new_batch = batch.copy()
-    for i in range(repeated_aug-1):
-        tmp_batch = new_batch.copy()
-        for ii, dd in enumerate(augmenter.augment([i.text_a for i in tmp_batch])):
-            tmp_batch[ii].text_a = dd
-        if hasattr(tmp_batch[0], "text_b") and tmp_batch[0].text_b:
-            for ii, dd in enumerate(augmenter.augment([i.text_b for i in tmp_batch])):
-                tmp_batch[ii].text_b = dd
-        batch.extend(tmp_batch)
-        del tmp_batch
-    del new_batch
-    return batch
+    def augment_data(self, batch):
+        new_batch = []
+        labels = []
+        for i in range(self.t_config.repeated_aug-1):
+            tmp_batch = new_batch.copy()
+            for ii, dd in enumerate(self.t_config.augmenter.augment([i.text_a for i in tmp_batch])):
+                tmp_batch[ii].text_a = dd
+            if hasattr(tmp_batch[0], "text_b") and tmp_batch[0].text_b:
+                for ii, dd in enumerate(self.t_config.augmenter.augment([i.text_b for i in tmp_batch])):
+                    tmp_batch[ii].text_b = dd
+            if self.d_config.soft_label_weight>0.0:
+                labels.extend([int(i.labels) for i in tmp_batch])
+            new_batch.extend(tmp_batch)
+            del tmp_batch
+        if self.d_config.soft_label_weight>0.0:
+            labels = torch.LongTensor(labels).to(self.model_T.device)
+            inputs = self.t_config.tokenizer(
+                [(example.text_a, example.text_b) for example in new_batch],
+                max_length=self.t_config.max_seq_length,
+                padding="max_length",
+                truncation=True,
+                return_token_type_ids=True,
+                return_tensors="pt"
+            )
+            inputs = {key: value.to(self.model_T.device) for key, value in inputs.items()}
+            outputs = self.model_T(**inputs, labels=labels)
+            predictions = outputs.logits.detach().cpu()
+            if self.model_T.config.finetuning_task != "stsb":
+                predictions = predictions.argmax(dim=-1)
+            else:
+                predictions = predictions[:, 0]
+            for i, d in enumerate(predictions.tolist()):
+                new_batch[i].label = str(d)
+        batch.extend(new_batch)
+        del new_batch
+        return batch

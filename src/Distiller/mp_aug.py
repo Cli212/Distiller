@@ -17,7 +17,7 @@ def example_iter(examples, batch_size):
         i += batch_size
 
 
-def augment_data(iter_sample, augmenter, task_type, tokenizer=None, model=None):
+def augment_data(iter_sample, augmenter, task_type, max_length=512, tokenizer=None, model=None):
     result = iter_sample.copy()
     if task_type in ['squad', 'squad2']:
         for ii, dd in enumerate(augmenter.augment([i.context_text for i in iter_sample])):
@@ -29,25 +29,24 @@ def augment_data(iter_sample, augmenter, task_type, tokenizer=None, model=None):
             for ii, dd in enumerate(augmenter.augment([i.text_b for i in iter_sample])):
                 result[ii].text_b = dd
         if tokenizer and model:
-            labels = [i.label for i in result]
+            labels = torch.LongTensor([int(i.label) for i in result]).to(model.device)
             inputs = tokenizer(
                 [(example.text_a, example.text_b) for example in result],
-                max_length=tokenizer.model_max_length,
+                max_length=max_length,
                 padding="max_length",
                 truncation=True,
                 return_token_type_ids=True,
                 return_tensors="pt"
             )
+            inputs = {key: value.to(model.device) for key, value in inputs.items()}
             outputs = model(**inputs, labels=labels)
             predictions = outputs.logits.detach().cpu()
-            if model.config.task_name != "stsb":
+            if model.config.finetuning_task != "stsb":
                 predictions = predictions.argmax(dim=-1)
             else:
                 predictions = predictions[:, 0]
-            for i,d in enumerate(predictions):
-                result[i] = d
-
-
+            for i,d in enumerate(predictions.tolist()):
+                result[i].label = str(d)
     return result
 
 from functools import wraps
@@ -86,6 +85,7 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
                 augment_data,
                 augmenter=augmenter,
                 task_type=args.task_type,
+                max_length=args.max_seq_length,
                 tokenizer=tokenizer,
                 model=model
             )
@@ -93,7 +93,8 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
             annotate_ = partial(
                 augment_data,
                 augmenter=augmenter,
-                task_type=args.task_type
+                task_type=args.task_type,
+                max_length=args.max_seq_length
             )
         new_examples = []
         for example in tqdm(example_iter(examples, batch_size), total=int(len(examples) / batch_size) + 1, desc="Data Augmentation"):

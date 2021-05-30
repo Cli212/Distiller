@@ -84,6 +84,9 @@ class TrainingConfig(Config):
                  augmenter=None,
                  processor=None,
                  repeated_aug=0,
+                 num_reaug=3,
+                 tokenizer=None,
+                 max_seq_length=128,
                  ):
         super(TrainingConfig, self).__init__()
 
@@ -104,6 +107,9 @@ class TrainingConfig(Config):
         self.local_rank = local_rank
         self.mixup = mixup
         self.task_type = task_type
+        self.num_reaug = num_reaug
+        self.tokenizer = tokenizer
+        self.max_seq_length = max_seq_length
         if self.local_rank == -1 or torch.distributed.get_rank() == 0:
             if not os.path.exists(self.output_dir):
                 os.makedirs(self.output_dir)

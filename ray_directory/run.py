@@ -212,7 +212,9 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
         train_config = TrainingConfig(gradient_accumulation_steps=args.gradient_accumulation_steps, device=args.device,
                                       log_dir=os.path.join(args.output_dir, "log"), output_dir=args.output_dir,
                                       fp16=args.fp16, mixup=args.mixup, local_rank=args.local_rank,
-                                      task_type=args.task_type, q=q, augmenter=augmenter, processor=processor, repeated_aug=args.repeated_aug)
+                                      task_type=args.task_type, q=q, augmenter=augmenter, processor=processor,
+                                      repeated_aug=args.repeated_aug, tokenizer=tokenizer, num_reaug=args.num_reaug,
+                                      max_seq_length=args.max_seq_length)
         if args.task_type in ["squad", "squad2"]:
             args.task_name = args.task_type
             from Distiller.adapters import BertForQAAdaptor as adaptor_func
@@ -417,8 +419,7 @@ def remote_fn(config, checkpoint_dir=None, args=None):
                     # q.put(augmenter)
                     # process = Process(target=aug_process,
                     #                   args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
-                    process = torch.multiprocessing.spawn(aug_process, args=(
-                    q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer), join=False)
+                    process = torch.multiprocessing.spawn(aug_process, args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer, t_model if args.soft_label_weight>0 else None), join=False)
                     # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
                     # process.start()
                     # process.join()

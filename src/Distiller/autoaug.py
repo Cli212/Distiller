@@ -35,9 +35,9 @@ class AutoAugmenter:
     def init_pipeline(cls, w=None):
         config_list = [{
           "aug_type": "contextual",
-          "model_type": "distilbert",
+          "model_type": "bert",
           "top_k": 100,
-          "aug_min": 10,
+          "aug_min": 20,
           "aug_max": 25,
           "aug_p": 0.9,
           "device": "cuda"
@@ -49,8 +49,8 @@ class AutoAugmenter:
         },{
         "aug_type": "random",
         "action": "swap",
-        "aug_min": 1,
-        "aug_max": 10
+        "aug_min": 3,
+        "aug_max": 5
     }]
         selected_list = []
         aug_args = []
