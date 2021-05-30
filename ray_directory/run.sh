@@ -59,7 +59,7 @@ python run.py \
     --alpha ${alpha} \
     --hard_label_weight ${hard_label_weight} \
     --soft_label_weight 1.0 \
-    --num_reaug 2 \
+    --num_reaug 3 \
     --kd_loss_weight ${kd_loss_weight} \
     --kd_loss_type ${kd_loss_type}
 
