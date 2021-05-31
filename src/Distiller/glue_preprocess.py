@@ -437,7 +437,7 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples=False, s_toke
                 logger.info("Saving student features into cached file %s", s_cached_features_file)
                 torch.save(s_features, s_cached_features_file)
         # s_dataset = convert_features_to_dataset(s_features, is_training=(mode == 'train'))
-    dataset = convert_features_to_dataset(features, s_features, is_training=(mode == 'train'))
+    dataset = convert_features_to_dataset(features, s_features, is_testing=(mode == 'test'))
     # torch.save(dataset, 'dataset.bin')
     # torch.save(s_dataset, 's_dataset.bin')
     # torch.save(features, 'features.bin')
@@ -460,7 +460,7 @@ def convert_examples_to_dataset(examples):
     return ExampleDataset(examples)
 
 
-def convert_features_to_dataset(features, s_features=None, is_training=True):
+def convert_features_to_dataset(features, s_features=None, is_testing=False):
     # Convert to Tensors and build dataset
     s_all_input_ids = None
     s_all_attention_masks = None
@@ -472,10 +472,10 @@ def convert_features_to_dataset(features, s_features=None, is_training=True):
         s_all_input_ids = torch.tensor([f.input_ids for f in s_features], dtype=torch.long)
         s_all_attention_masks = torch.tensor([f.attention_mask for f in s_features], dtype=torch.long)
         s_all_token_type_ids = torch.tensor([f.token_type_ids for f in s_features], dtype=torch.long)
-    if is_training:
-        all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
+    if is_testing:
+        all_labels = torch.LongTensor([1] * len(features))
     else:
-        all_labels = torch.LongTensor([1]*len(features))
+        all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
     return MyDataset(all_input_ids, all_attention_masks, all_token_type_ids, all_labels, s_all_input_ids, s_all_attention_masks, s_all_token_type_ids)
     # if is_training:
     #     return MyDataset(all_input_ids, all_attention_masks, all_token_type_ids, all_labels)

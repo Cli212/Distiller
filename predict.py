@@ -73,6 +73,9 @@ if __name__ == "__main__":
     parser.add_argument("--max_seq_length", default=128)
     parser.add_argument("--tokenizer_path", default="huawei-noah/TinyBERT_General_4L_312D")
     parser.add_argument("--output_path", default="./predictions/")
+
     args = parser.parse_args()
+    if not os.path.exists(args.output_path):
+        os.makedirs(args.output_path)
     args.output_path = os.path.join(args.output_path, args.model_path.split('/')[-1]+"_"+args.task_name+".csv")
     main(args)

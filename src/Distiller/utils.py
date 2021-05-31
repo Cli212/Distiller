@@ -631,10 +631,10 @@ class mlp_critic(torch.nn.Module):
 def glue_criterion(task_name):
     return {'cola':['mcc'],
             'sst-2':['acc'],
-            'mrpc':['acc','f1','acc_and_f1'],
+            'mrpc':['acc_and_f1','acc','f1'],
             'stsb':['spearmanr','pearson','corr'],
-            'qqp':['acc','f1','acc_and_f1'],
-            'mnli':['m_mm_acc','mnli/acc','mnli-mm/acc'],
+            'qqp':['acc_and_f1','acc','f1'],
+            'mnli':['mnli-mm/acc','m_mm_acc','mnli/acc'],
             'qnli':['acc'],
             'rte':['acc'],
             'wnli':['acc']}[task_name]

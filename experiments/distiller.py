@@ -375,7 +375,7 @@ def main(args):
             if args.local_rank not in [-1, 0]:
                 torch.distributed.barrier()
             else:
-                augmenter = AutoAugmenter.init_pipeline(w=[0,2])
+                augmenter = AutoAugmenter.init_pipeline(w=[0])
                 if len(augmenter) and args.repeated_aug <= 1:
                     # args.augs = augmenter.aug_names
                     # generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer,32)
