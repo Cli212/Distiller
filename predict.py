@@ -9,7 +9,11 @@ from Distiller.transformers import AutoConfig, AutoTokenizer
 from Distiller.transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering
 from torch.utils.data import SequentialSampler, DataLoader
 
-
+{"mnli_dict" : {0:"entailment", 1:"neutral", 2:"contradiction"},
+    "rte": {0:"entailment", 1:"not_entailment"},
+    "qnli":{0:"entailment", 1:"not_entailment"},
+    "sst2":{0:"0", 1:"1"},
+    "cola": {0:"0", 1:"1"}}
 def main(args):
     config = AutoConfig.from_pretrained(args.model_path)
     args.model_type = config.model_type
@@ -24,7 +28,7 @@ def main(args):
     features = convert_examples_to_features(examples, tokenizer, task=args.task_name, max_length=args.max_seq_length,
                                             label_list=processor.get_labels(),
                                             output_mode=glue_output_modes[args.task_name])
-    dataset = convert_features_to_dataset(features, is_training=False)
+    dataset = convert_features_to_dataset(features, is_testing=True)
     eval_sampler = SequentialSampler(dataset)
     eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=32)
     # if args.task_name is not None:

@@ -1,9 +1,9 @@
 
 #set hyperparameters
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
-TEACHER_DIR=howey/bert-base-uncased-mrpc
+TEACHER_DIR=howey/bert-base-uncased-sst2
 STUDENT_DIR=huawei-noah/TinyBERT_General_4L_312D
-DATA_ROOT_DIR=~/Distillation_QA_benchmark/datasets/glue_data/MRPC
+DATA_ROOT_DIR=~/Distillation_QA_benchmark/datasets/glue_data/SST-2
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
@@ -23,7 +23,7 @@ length=128
 torch_seed=9580
 hard_label_weight=0.0
 kd_loss_weight=1.0
-task_name=mrpc
+task_name=sst2
 task_type=glue
 NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_alpha${alpha}_h${hard_label_weight}_k${kd_loss_weight}_${kd_loss_type}
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
@@ -59,8 +59,6 @@ python run.py \
     --alpha ${alpha} \
     --hard_label_weight ${hard_label_weight} \
     --soft_label_weight 1.0 \
-    --num_reaug 3 \
-    --aug_pipeline \
     --kd_loss_weight ${kd_loss_weight} \
     --kd_loss_type ${kd_loss_type}
 
