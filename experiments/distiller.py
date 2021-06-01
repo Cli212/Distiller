@@ -47,7 +47,8 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     if args.aug_pipeline and args.repeated_aug <= 1:
         if args.local_rank not in [-1, 0]:
             torch.distributed.barrier()
-        else:
+        # else:
+        if args.local_rank in [-1,0]:
             QUEUE_LIMIT = 60
             count = 0
             logger.info("Waiting for data augmentation process to return data")
@@ -61,8 +62,11 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                     logger.info("Waiting for data augmentation process to return data")
             if args.local_rank == 0:
                 torch.distributed.barrier()
+        if args.local_rank == 0:
+            torch.distributed.barrier()
         if args.local_rank not in [-1,0]:
             train_dataset = torch.load('train_dataset.bin')
+            torch.distributed.barrier()
         # train_dataloader = DataProvider(train_dataset, examples, args, tokenizer, augmenter,s_tokenizer,s_dataset)
 
     # else:
@@ -76,7 +80,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
             return batch
         train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
     else:
-        train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size,drop_last=True)
+        train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
 
     if args.max_steps > 0:
         t_total = args.max_steps
@@ -110,10 +114,10 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     if args.local_rank != -1:
         s_model = torch.nn.parallel.DistributedDataParallel(s_model, device_ids=[args.local_rank],
                                                           output_device=args.local_rank,
-                                                          find_unused_parameters=True)
+                                                          )
         t_model = torch.nn.parallel.DistributedDataParallel(t_model, device_ids=[args.local_rank],
                                                             output_device=args.local_rank,
-                                                            find_unused_parameters=True)
+                                                            )
     actual_batch_size = args.per_gpu_train_batch_size
     num_train_steps = len(train_dataloader) // args.gradient_accumulation_steps * actual_batch_size
     if augmenter:

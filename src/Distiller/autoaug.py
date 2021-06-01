@@ -36,10 +36,10 @@ class AutoAugmenter:
         config_list = [{
           "aug_type": "contextual",
           "model_type": "bert",
-          "top_k": 100,
-          "aug_min": 20,
-          "aug_max": 25,
-          "aug_p": 0.9,
+          "top_k": 500,
+          "aug_min": 100,
+          "aug_max": 150,
+          "aug_p": 1.0,
           "device": "cuda"
             },{
             "aug_type": "back_translation",

@@ -219,14 +219,17 @@ class BasicDistiller(AbstractDistiller):
                             count += 1
                             train_dataset = self.t_config.q.get(timeout=60)
                             logger.info("Update augmented data")
-                            torch.save(train_dataset, 'train_dataset.bin')
+                            torch.save(train_dataset, f'train_dataset_{current_epoch}.bin')
                             break
                         except queue.Empty:
                             logger.info("Waiting for data augmentation process to return data")
                     if self.local_rank == 0:
                         torch.distributed.barrier()
+                if self.local_rank == 0:
+                    torch.distributed.barrier()
                 if self.local_rank not in [-1, 0]:
-                    train_dataset = torch.load('train_dataset.bin')
+                    train_dataset = torch.load(f'train_dataset_{current_epoch}.bin')
+                    torch.distributed.barrier()
                 if train_dataset:
                     train_sampler = RandomSampler(train_dataset) if self.t_config.local_rank == -1 \
                         else DistributedSampler(train_dataset)

@@ -84,7 +84,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
             return batch
         train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
     else:
-        train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size,drop_last=True)
+        train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
 
     if args.max_steps > 0:
         t_total = args.max_steps
@@ -117,11 +117,11 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
         s_model = torch.nn.parallel.DistributedDataParallel(s_model, device_ids=[args.local_rank],
-                                                          output_device=args.local_rank,
-                                                          find_unused_parameters=True)
+                                                            output_device=args.local_rank,
+                                                            )
         t_model = torch.nn.parallel.DistributedDataParallel(t_model, device_ids=[args.local_rank],
                                                             output_device=args.local_rank,
-                                                            find_unused_parameters=True)
+                                                            )
     actual_batch_size = args.per_gpu_train_batch_size
     num_train_steps = len(train_dataloader) // args.gradient_accumulation_steps * actual_batch_size
     if augmenter:
@@ -505,16 +505,16 @@ def remote_fn(config, checkpoint_dir=None, args=None):
 def main(args, gpus_per_trial=4):
     w_list = [[0], [1], [2], [0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1], [0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0],
               [2, 0, 1], [2, 1, 0]]
-    search_space = {
-        "mixup": tune.choice([True,False]),
-        "repeated_aug": tune.choice([1,4]),
-        "w": tune.choice(w_list)
-    }
     # search_space = {
-    #     "intermediate_strategy": tune.choice(["skip", "last"]),
-    #     "kd_loss_type": tune.choice(["ce", "mse"]),
-    #     "intermediate_loss_type": tune.choice(["ce", "mse", "cos", "pkd","mi_0.0","mi_0.1","mi_0.5","mi_0.9","mi_1.0"]),
-    #     "mixup": tune.choice([True, False])}
+    #     "mixup": tune.choice([True,False]),
+    #     "repeated_aug": tune.choice([1,4]),
+    #     "w": tune.choice(w_list)
+    # }
+    search_space = {
+        "intermediate_strategy": tune.choice(["skip", "last"]),
+        "kd_loss_type": tune.choice(["ce", "mse"]),
+        "intermediate_loss_type": tune.choice(["ce", "mse", "cos", "pkd","mi_0.0","mi_0.1","mi_0.5","mi_0.9","mi_1.0"]),
+        "mixup": tune.choice([True, False])}
     # search_space = {
     #     "alpha": tune.grid_search([0.0, 0.1, 0.5, 0.9, 1.0]),
     #     "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),
@@ -534,7 +534,7 @@ def main(args, gpus_per_trial=4):
     if args.ddp:
         train_fn = DistributedTrainableCreator(
             partial(remote_fn, args=args),
-            num_gpus_per_worker=2,
+            num_gpus_per_worker=4,
             num_cpus_per_worker=32
         )
     # distributed_remote_fn = DistributedTrainableCreator(
@@ -561,7 +561,7 @@ def main(args, gpus_per_trial=4):
         },
         config=search_space,
         progress_reporter=reporter,
-        num_samples=40)
+        num_samples=3)
     with open('/home/ray/ray_results.json','w') as f:
         json.dump(result, f)
     best_trial = result.get_best_trial("accuracy", "max", "last")
