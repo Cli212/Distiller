@@ -510,11 +510,11 @@ def main(args, gpus_per_trial=4):
         "repeated_aug": tune.choice([1,4]),
         "w": tune.choice(w_list)
     }
-    search_space = {
-        "intermediate_strategy": tune.choice(["skip", "last"]),
-        "kd_loss_type": tune.choice(["ce", "mse"]),
-        "intermediate_loss_type": tune.choice(["ce", "mse", "cos", "pkd","mi_0.0","mi_0.1","mi_0.5","mi_0.9","mi_1.0"]),
-        "mixup": tune.choice([True, False])}
+    # search_space = {
+    #     "intermediate_strategy": tune.choice(["skip", "last"]),
+    #     "kd_loss_type": tune.choice(["ce", "mse"]),
+    #     "intermediate_loss_type": tune.choice(["ce", "mse", "cos", "pkd","mi_0.0","mi_0.1","mi_0.5","mi_0.9","mi_1.0"]),
+    #     "mixup": tune.choice([True, False])}
     # search_space = {
     #     "alpha": tune.grid_search([0.0, 0.1, 0.5, 0.9, 1.0]),
     #     "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),
