@@ -57,6 +57,8 @@ python run.py \
     --gradient_accumulation_steps ${accu} \
     --temperature ${temperature} \
     --alpha ${alpha} \
+    --aug_pipeline \
+    --num_reaug 5 \
     --hard_label_weight ${hard_label_weight} \
     --soft_label_weight 1.0 \
     --kd_loss_weight ${kd_loss_weight} \

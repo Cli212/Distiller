@@ -5,7 +5,7 @@ from nlpaug.util.audio.loader import AudioLoader
 from nlpaug.util import Action
 import random
 import numpy as np
-from .back_translation import BackTranslationAugmenter
+from Distiller.back_translation import BackTranslationAugmenter
 import json
 
 class AutoAugmenter:

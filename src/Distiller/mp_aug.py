@@ -3,7 +3,6 @@ from torch.multiprocessing import cpu_count, Pool, Queue, Manager
 from tqdm import tqdm
 from torch.utils.data import ConcatDataset
 import time
-from .autoaug import AutoAugmenter
 
 def example_iter(examples, batch_size):
     i = 0
