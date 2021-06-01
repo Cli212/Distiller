@@ -1,5 +1,6 @@
 from Distiller.glue_preprocess import load_and_cache_examples, Processor
-from Distiller.glue_preprocess import MrpcProcessor
+from Distiller.glue_preprocess import MrpcProcessor, ColaProcessor, MnliProcessor, MnliMismatchedProcessor, Sst2Processor
+from Distiller.glue_preprocess import StsbProcessor, QqpProcessor, QnliProcessor, RteProcessor, WnliProcessor
 from Distiller.glue_preprocess import convert_examples_to_features, convert_features_to_dataset
 import os
 import torch
@@ -9,21 +10,42 @@ from Distiller.transformers import AutoConfig, AutoTokenizer
 from Distiller.transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering
 from torch.utils.data import SequentialSampler, DataLoader
 
-{"mnli_dict" : {0:"entailment", 1:"neutral", 2:"contradiction"},
+task_dict =  {"mnli" : {0:"entailment", 1:"neutral", 2:"contradiction"},
+    "mnli-mm" : {0:"entailment", 1:"neutral", 2:"contradiction"},
     "rte": {0:"entailment", 1:"not_entailment"},
     "qnli":{0:"entailment", 1:"not_entailment"},
-    "sst2":{0:"0", 1:"1"},
-    "cola": {0:"0", 1:"1"}}
+    "mrpc":{0:"0", 1:"1"},
+    "sst-2":{0:"0", 1:"1"},
+    "cola": {0:"0", 1:"1"},
+    "qqp": {0:"0", 1:"1"}}
+
+
+glue_processors = {
+    "cola": ColaProcessor,
+    "mnli": MnliProcessor,
+    "mnli-mm": MnliMismatchedProcessor,
+    "mrpc": MrpcProcessor,
+    "sst-2": Sst2Processor,
+    "stsb": StsbProcessor,
+    "qqp": QqpProcessor,
+    "qnli": QnliProcessor,
+    "rte": RteProcessor,
+    "wnli": WnliProcessor,
+}
 def main(args):
     config = AutoConfig.from_pretrained(args.model_path)
     args.model_type = config.model_type
     ## load pretrained models and tokenizers
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path)
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(args.model_path)
+    except Exception as e:
+        print(e)
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path)
 
     model = AutoModelForSequenceClassification.from_pretrained(args.model_path, config=config)
 
     model.to('cuda')
-    processor = MrpcProcessor()
+    processor = glue_processors[args.task_name]()
     examples = processor.get_test_examples(args.dataset_path)
     features = convert_examples_to_features(examples, tokenizer, task=args.task_name, max_length=args.max_seq_length,
                                             label_list=processor.get_labels(),
@@ -47,10 +69,11 @@ def main(args):
         predictions = outputs.logits.detach().cpu()
         if args.task_name != "stsb":
             predictions = predictions.argmax(dim=-1)
+            preds.extend([task_dict[args.task_name][int(i)] for i in predictions])
         else:
             predictions = predictions[:, 0]
+            preds.extend(predictions.tolist())
         label_list.extend(batch['labels'].cpu().tolist())
-        preds.extend(predictions.tolist())
     pd.DataFrame({'prediction':preds}).to_csv(args.output_path)
 
 
