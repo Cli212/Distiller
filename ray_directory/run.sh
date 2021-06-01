@@ -17,7 +17,7 @@ intermediate_loss_type=mi
 intermediate_features=hidden
 kd_loss_type=ce
 ## if you use mixup or augmenter, then the actual batch size will be batch_size * 2
-batch_size=16
+batch_size=32
 temperature=1
 length=128
 torch_seed=9580
@@ -54,7 +54,6 @@ python run.py \
     --learning_rate ${lr}e-5 \
     --max_grad_norm -1.0 \
     --thread 64 \
-    --ddp \
     --gradient_accumulation_steps ${accu} \
     --temperature ${temperature} \
     --alpha ${alpha} \
