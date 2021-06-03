@@ -256,14 +256,14 @@ def remote_fn(config, checkpoint_dir=None, args=None):
             args.__setattr__(c[0], c[1])
     globals()['best_evaluation'] = 0.0
     # Setup CUDA, GPU & distributed training
-    init_distributed_mode(args)
+    # init_distributed_mode(args)
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-        # torch.cuda.set_device(args.local_rank)
+        torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
-        # torch.distributed.init_process_group(backend="nccl")
+        torch.distributed.init_process_group(backend="nccl")
         args.n_gpu = 1
     args.device = device
     # Setup logging
@@ -519,16 +519,16 @@ def init_distributed_mode(args):
 def main(args, gpus_per_trial=4):
     w_list = [[0], [1], [2], [0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1], [0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0],
               [2, 0, 1], [2, 1, 0]]
-    # search_space = {
-    #     "mixup": tune.choice([True,False]),
-    #     "repeated_aug": tune.choice([1,4]),
-    #     "w": tune.choice(w_list)
-    # }
     search_space = {
-        "intermediate_strategy": tune.choice(["skip", "last"]),
-        "kd_loss_type": tune.choice(["ce", "mse"]),
-        "intermediate_loss_type": tune.choice(["ce", "mse", "cos", "pkd","mi_0.0","mi_0.1","mi_0.5","mi_0.9","mi_1.0"]),
-        "mixup": tune.choice([True, False])}
+        "mixup": tune.choice([True,False]),
+        "repeated_aug": tune.choice([1,4]),
+        "w": tune.choice(w_list)
+    }
+    # search_space = {
+    #     "intermediate_strategy": tune.choice(["skip", "last"]),
+    #     "kd_loss_type": tune.choice(["ce", "mse"]),
+    #     "intermediate_loss_type": tune.choice(["ce", "mse", "cos", "pkd","mi_0.0","mi_0.1","mi_0.5","mi_0.9","mi_1.0"]),
+    #     "mixup": tune.choice([True, False])}
     # search_space = {
     #     "intermediate_strategy": tune.choice(["skip"]),
     #     "kd_loss_type": tune.choice(["ce", "mse"]),

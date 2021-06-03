@@ -1,16 +1,16 @@
 
 #set hyperparameters
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
-TEACHER_DIR=twmkn9/bert-base-uncased-squad2
+TEACHER_DIR=howey/bert-base-uncased-sst2
 STUDENT_DIR=huawei-noah/TinyBERT_General_4L_312D
-DATA_ROOT_DIR=~/Distillation_QA_benchmark/datasets/squad2
+DATA_ROOT_DIR=~/Distillation_QA_benchmark/datasets/glue_data/SST-2
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
 accu=1
 ep=20
 lr=5
-alpha=0.5
+alpha=0.9
 #augmenter_config_path=augmenter_config.json
 intermediate_strategy=skip
 intermediate_loss_type=mi
@@ -23,8 +23,8 @@ length=384
 torch_seed=9580
 hard_label_weight=0.5
 kd_loss_weight=1.0
-task_name=mnli
-task_type=squad2
+task_name=sst-2
+task_type=glue
 NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_alpha${alpha}_h${hard_label_weight}_k${kd_loss_weight}_${kd_loss_type}
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
 
@@ -54,10 +54,10 @@ python run.py \
     --learning_rate ${lr}e-5 \
     --max_grad_norm -1.0 \
     --thread 64 \
-    --ddp \
     --gradient_accumulation_steps ${accu} \
     --temperature ${temperature} \
     --alpha ${alpha} \
+    --aug_pipeline \
     --hard_label_weight ${hard_label_weight} \
     --soft_label_weight 1.0 \
     --kd_loss_weight ${kd_loss_weight} \
