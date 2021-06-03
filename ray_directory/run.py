@@ -256,13 +256,14 @@ def remote_fn(config, checkpoint_dir=None, args=None):
             args.__setattr__(c[0], c[1])
     globals()['best_evaluation'] = 0.0
     # Setup CUDA, GPU & distributed training
+    init_distributed_mode(args)
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-        torch.cuda.set_device(args.local_rank)
+        # torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
-        torch.distributed.init_process_group(backend="nccl")
+        # torch.distributed.init_process_group(backend="nccl")
         args.n_gpu = 1
     args.device = device
     # Setup logging
@@ -510,8 +511,9 @@ def init_distributed_mode(args):
     args.gpu = int(os.environ['LOCAL_RANK'])
     args.distributed = True
     torch.cuda.device(args.gpu)
+    args.device = torch.device("cuda", args.local_rank)
     args.dist_backend = 'nccl'
-    torch.distributed.init_process_group(backend=args.dist_backend, init_method=args.dist_url,world_size=args.world_size, rank=args.local_rank)
+    torch.distributed.init_process_group(backend=args.dist_backend, world_size=args.world_size, rank=args.local_rank)
     # torch.distributed.barrier()
 
 def main(args, gpus_per_trial=4):

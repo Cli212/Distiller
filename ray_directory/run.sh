@@ -21,9 +21,9 @@ batch_size=16
 temperature=1
 length=384
 torch_seed=9580
-hard_label_weight=0.0
+hard_label_weight=0.5
 kd_loss_weight=1.0
-task_name=squad2
+task_name=mnli
 task_type=squad2
 NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_alpha${alpha}_h${hard_label_weight}_k${kd_loss_weight}_${kd_loss_type}
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
@@ -33,7 +33,7 @@ gpu_nums=4
 #export CUDA_VISIBLE_DEVICES=0
 mkdir -p $OUTPUT_DIR
 
-python -m torch.distributed.launch --nproc_per_node=${gpu_nums} run.py \
+python run.py \
     --task_type ${task_type} \
     --task_name ${task_name} \
     --data_dir $DATA_ROOT_DIR \
