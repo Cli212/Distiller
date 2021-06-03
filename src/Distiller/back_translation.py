@@ -26,7 +26,7 @@ class BackTranslationAugmenter:
 
         return translated_texts
 
-    def augment(self, texts, language_src='en', language_dst='fr'):
+    def augment(self, texts, language_src='en', language_dst='fr', num_thread=1):
         """Implements back translation"""
         # Translate from source to target language
         translated = self.translate(texts, self.from_model, self.from_tokenizer, language_dst)

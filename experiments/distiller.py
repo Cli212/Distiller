@@ -16,7 +16,7 @@ import queue
 from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from Distiller.transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
-from torch.multiprocessing import Queue, Process, set_start_method, spawn
+from torch.multiprocessing import Queue, Process, set_start_method, spawn, cpu_count
 
 # logger = logging.getLogger(__name__)
 task_dict = {'squad2': AutoModelForQuestionAnswering,
@@ -165,6 +165,19 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                  "weight_decay": 0.0}
             ]
             optimizer_grouped_parameters.extend(critic_parameters)
+            # # multi-gpu training (should be after apex fp16 initialization)
+            # if args.n_gpu > 1 and args.local_rank == -1:
+            #     baseline_fn = torch.nn.DataParallel(baseline_fn)
+            #     critic = torch.nn.DataParallel(critic)
+            #
+            # # Distributed training (should be after apex fp16 initialization)
+            # if args.local_rank != -1:
+            #     baseline_fn = torch.nn.parallel.DistributedDataParallel(baseline_fn, device_ids=[args.local_rank],
+            #                                                         output_device=args.local_rank,
+            #                                                         )
+            #     critic = torch.nn.parallel.DistributedDataParallel(critic, device_ids=[args.local_rank],
+            #                                                         output_device=args.local_rank,
+            #                                                         )
         optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
 
         def sigmoid_reverse(x):
@@ -238,6 +251,9 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
 
 
 def main(args):
+    # Create output directory if needed
+    if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
+        os.makedirs(args.output_dir)
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
@@ -379,7 +395,7 @@ def main(args):
             if args.local_rank not in [-1, 0]:
                 torch.distributed.barrier()
             else:
-                augmenter = AutoAugmenter.init_pipeline(w=[0])
+                augmenter = AutoAugmenter.init_pipeline(w=[2], threads=min(args.thread, cpu_count()))
                 if len(augmenter) and args.repeated_aug <= 1:
                     # args.augs = augmenter.aug_names
                     # generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer,32)
@@ -392,11 +408,11 @@ def main(args):
                 if args.local_rank == 0:
                     torch.distributed.barrier()
         elif args.aug_pipeline and args.repeated_aug > 1:
-            augmenter = AutoAugmenter.init_pipeline(w=[0,1])
+            augmenter = AutoAugmenter.init_pipeline(w=[0,1], threads=min(args.thread, cpu_count()))
         else:
             pass
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback, q=q, processor=processor if args.repeated_aug > 1 else None)
-        if args.aug_pipeline and args.repeated_aug <= 1:
+        if args.local_rank in [-1, 0] and args.aug_pipeline and args.repeated_aug <= 1:
             process.processes[0].terminate()
         # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
         # p.start()
@@ -406,9 +422,7 @@ def main(args):
 
 # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
     if args.train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
-        # Create output directory if needed
-        if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
-            os.makedirs(args.output_dir)
+
 
         logger.info("Saving model checkpoint to %s", args.output_dir)
         # Save a trained model, configuration and tokenizer using `save_pretrained()`.

@@ -210,7 +210,13 @@ class BasicDistiller(AbstractDistiller):
             if self.t_config.q and current_epoch%self.t_config.num_reaug == 0 and current_epoch != 0:
                 train_dataset = None
                 if self.local_rank not in [-1, 0]:
-                    torch.distributed.barrier()
+                    while True:
+                        try:
+                            train_dataset = torch.load(f'train_dataset_{current_epoch}.bin')
+                            break
+                        except:
+                            continue
+                    # torch.distributed.barrier()
                 else:
                     QUEUE_LIMIT = 600
                     count = 0
@@ -223,13 +229,10 @@ class BasicDistiller(AbstractDistiller):
                             break
                         except queue.Empty:
                             logger.info("Waiting for data augmentation process to return data")
-                    if self.local_rank == 0:
-                        torch.distributed.barrier()
-                if self.local_rank == 0:
-                    torch.distributed.barrier()
-                if self.local_rank not in [-1, 0]:
-                    train_dataset = torch.load(f'train_dataset_{current_epoch}.bin')
-                    torch.distributed.barrier()
+                # if self.local_rank == 0:
+                    # torch.distributed.barrier()
+                # if self.local_rank not in [-1, 0]:
+                    # train_dataset = torch.load(f'train_dataset_{current_epoch}.bin')
                 if train_dataset:
                     train_sampler = RandomSampler(train_dataset) if self.t_config.local_rank == -1 \
                         else DistributedSampler(train_dataset)

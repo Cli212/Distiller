@@ -1834,10 +1834,10 @@ class BertForQuestionAnswering(BertPreTrainedModel):
                 mixup_start_positions.clamp_(0, ignored_index)
                 mixup_end_positions.clamp_(0, ignored_index)
                 start_positions = nn.functional.one_hot(start_positions,
-                                                        num_classes=self.config.max_position_embeddings)
-                end_positions = nn.functional.one_hot(end_positions, num_classes=self.config.max_position_embeddings)
-                mixup_start_positions = nn.functional.one_hot(mixup_start_positions, num_classes=self.config.max_position_embeddings)
-                mixup_end_positions = nn.functional.one_hot(mixup_end_positions, num_classes=self.config.max_position_embeddings)
+                                                        num_classes=ignored_index)
+                end_positions = nn.functional.one_hot(end_positions, num_classes=ignored_index)
+                mixup_start_positions = nn.functional.one_hot(mixup_start_positions, num_classes=ignored_index)
+                mixup_end_positions = nn.functional.one_hot(mixup_end_positions, num_classes=ignored_index)
                 start_positions = mixup_value*start_positions + (1-mixup_value)*mixup_start_positions
                 end_positions = mixup_value * end_positions + (1 - mixup_value) * mixup_end_positions
                 loss_fct = cross_entropy

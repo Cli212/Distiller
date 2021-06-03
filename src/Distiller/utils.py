@@ -637,4 +637,6 @@ def glue_criterion(task_name):
             'mnli':['mnli-mm/acc','m_mm_acc','mnli/acc'],
             'qnli':['acc'],
             'rte':['acc'],
-            'wnli':['acc']}[task_name]
+            'wnli':['acc'],
+            'squad':['exact','f1'],
+            'squad2':['exact','f1']}[task_name]

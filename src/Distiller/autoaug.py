@@ -9,12 +9,13 @@ from Distiller.back_translation import BackTranslationAugmenter
 import json
 
 class AutoAugmenter:
-    def __init__(self, aug_args):
+    def __init__(self, aug_args, threads):
         augmenter_table = {"contextual": naw.ContextualWordEmbsAug,
                            "random": naw.RandomWordAug,
                            "back_translation": BackTranslationAugmenter}
         self.augs = []
         self.aug_names = []
+        self.threads = threads
         for i in aug_args:
             if i:
                 name = i.pop("aug_type")
@@ -32,14 +33,12 @@ class AutoAugmenter:
         return cls(aug_args)
 
     @classmethod
-    def init_pipeline(cls, w=None):
+    def init_pipeline(cls, w=None, threads=1):
         config_list = [{
           "aug_type": "contextual",
-          "model_type": "bert",
-          "top_k": 500,
-          "aug_min": 100,
-          "aug_max": 150,
-          "aug_p": 1.0,
+          "model_type": "distilbert",
+          "top_p": 0.8,
+          "aug_p": 0.3,
           "device": "cuda"
             },{
             "aug_type": "back_translation",
@@ -66,7 +65,7 @@ class AutoAugmenter:
                         break
                 if random.random()>0.5:
                     aug_args.append(aug_config)
-        return cls(aug_args)
+        return cls(aug_args, threads)
 
 
     def augment(self, data):

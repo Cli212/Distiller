@@ -18,7 +18,9 @@ MULTI_SEP_TOKENS_TOKENIZERS_SET = {"roberta", "camembert", "bart", "mpnet"}
 
 
 class MyDataset(Dataset):
-    def __init__(self, all_input_ids, all_attention_masks, all_token_type_ids, all_start_positions, all_end_positions, s_all_input_ids=None, s_all_attention_masks=None, s_all_token_type_ids=None):
+    def __init__(self, all_input_ids, all_attention_masks, all_token_type_ids, all_start_positions, all_end_positions,
+                 s_all_input_ids=None, s_all_attention_masks=None, s_all_token_type_ids=None,s_all_start_positions=None,
+                 s_all_end_positions=None):
         super(MyDataset, self).__init__()
         self.all_input_ids = all_input_ids
         self.all_attention_masks = all_attention_masks
@@ -28,6 +30,8 @@ class MyDataset(Dataset):
         self.s_all_input_ids = s_all_input_ids
         self.s_all_attention_masks = s_all_attention_masks
         self.s_all_token_type_ids = s_all_token_type_ids
+        self.s_all_start_positions = all_start_positions
+        self.s_all_end_positions = all_end_positions
 
     def __getitem__(self, index):
         input_ids = self.all_input_ids[index]
@@ -45,6 +49,8 @@ class MyDataset(Dataset):
             s_input_ids = self.s_all_input_ids[index]
             s_attention_masks = self.s_all_attention_masks[index]
             s_token_type_ids = self.s_all_token_type_ids[index]
+            s_start_positions = self.s_all_start_positions[index]
+            s_end_positions = self.s_all_end_positions[index]
             return {
                 "teacher": {'input_ids': input_ids,
                     'attention_mask': attention_masks,
@@ -54,149 +60,24 @@ class MyDataset(Dataset):
                 "student": {'input_ids': s_input_ids,
                     'attention_mask': s_attention_masks,
                     'token_type_ids': s_token_type_ids,
-                    'start_positions': start_positions,
-                    "end_positions": end_positions}
+                    'start_positions': s_start_positions,
+                    "end_positions": s_end_positions}
             }
 
     def __len__(self):
         return len(self.all_input_ids)
 
 
+class ExampleDataset(Dataset):
+    def __init__(self, examples):
+        super(ExampleDataset, self).__init__()
+        self.examples = examples
 
-# def example_iter(examples):
-#     i = 0
-#     while i < len(examples):
-#         if (i + 32) >= len(examples):
-#             # yield [j.context_text for j in examples[i:]],i
-#             yield examples[i:]
-#         else:
-#             # yield [j.context_text for j in examples[i:i+32]], i
-#             yield examples[i:i + 32]
-#         i += 32
-#
-# def augment_data(iter_sample, augmenter):
-#     result = iter_sample.copy()
-#     for ii, dd in enumerate(augmenter.augment([i.context_text for i in iter_sample])):
-#         result[ii].context_text = dd
-#     return result
-#
-#
-# class DataProvider:
-#     def __init__(self, dataset, examples, args, tokenizer=None, augmenter=None, s_tokenizer=None, s_dataset=None, collate_fn=None):
-#         self.examples = examples
-#         self.dataset = dataset
-#         self.augmenter = augmenter
-#         self.args = args
-#         self.tokenizer = tokenizer
-#         self.s_tokenizer = s_tokenizer
-#         self.s_dataset = s_dataset
-#         self.collate_fn = collate_fn
-#         self.batch_size = args.train_batch_size * 2 if augmenter else args.train_batch_size
-#         self.epoch = 0
-#         self.dataloader = None
-#         self.s_dataloader = None
-#
-#     def build(self):
-#
-#         if self.args.local_rank not in [-1, 0]:
-#             torch.distributed.barrier()
-#         if self.augmenter:
-#             # new_examples = self.examples.copy()
-#             # pbar = tqdm(total=int(len(self.examples) / 32) + 1, desc="Data augmentation")
-#             # for iter_sample in example_iter():
-#             #     text, i = iter_sample
-#             #     for ii, dd in enumerate(self.augmenter.augment(text)):
-#             #         new_examples[i + ii].context_text = dd
-#             #     pbar.update()
-#             threads = min(self.args.thread, cpu_count())
-#             from functools import partial
-#             with Pool(threads) as p:
-#                 # global examples
-#                 # examples = self.examples
-#                 annotate_ = partial(
-#                     augment_data,
-#                     augmenter=self.augmenter
-#                 )
-#                 aug_examples = list(
-#                     tqdm(
-#                         p.imap(annotate_, example_iter(self.examples), chunksize=32),
-#                         total=int(len(self.examples) / 32) + 1,
-#                         desc="Data augmentation",
-#                         disable=False,
-#                     )
-#                 )
-#             new_examples = []
-#             for i in aug_examples:
-#                 new_examples.extend(i)
-#             del aug_examples
-#             features, dataset = convert_examples_to_features(new_examples, self.tokenizer, self.args.max_seq_length,
-#                                                              self.args.doc_stride,
-#                                                              self.args.max_query_length,
-#                                                              is_training=True,
-#                                                              threads=self.args.thread
-#                                                              )
-#             all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-#             all_attention_masks = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
-#             all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
-#             all_start_positions = torch.tensor([f.start_position for f in features], dtype=torch.long)
-#             all_end_positions = torch.tensor([f.end_position for f in features], dtype=torch.long)
-#             dataset = MyDataset(all_input_ids, all_attention_masks, all_token_type_ids, all_start_positions,
-#                                 all_end_positions)
-#             new_dataset = ConcatDataset([self.dataset, dataset])
-#             if self.s_tokenizer:
-#                 s_features, s_dataset = convert_examples_to_features(new_examples, self.s_tokenizer, self.args.max_seq_length,
-#                                                                  self.args.doc_stride,
-#                                                                  self.args.max_query_length,
-#                                                                  is_training=True,
-#                                                                  threads=self.args.thread
-#                                                                  )
-#                 all_input_ids = torch.tensor([f.input_ids for f in s_features], dtype=torch.long)
-#                 all_attention_masks = torch.tensor([f.attention_mask for f in s_features], dtype=torch.long)
-#                 all_token_type_ids = torch.tensor([f.token_type_ids for f in s_features], dtype=torch.long)
-#                 all_start_positions = torch.tensor([f.start_position for f in s_features], dtype=torch.long)
-#                 all_end_positions = torch.tensor([f.end_position for f in s_features], dtype=torch.long)
-#                 s_dataset = MyDataset(all_input_ids, all_attention_masks, all_token_type_ids, all_start_positions,
-#                                     all_end_positions)
-#                 s_new_dataset = ConcatDataset([self.s_dataset, s_dataset])
-#             train_sampler = RandomSampler(new_dataset) if self.args.local_rank == -1 else DistributedSampler(new_dataset)
-#             if self.args.local_rank != -1:
-#                 train_sampler.set_epoch(self.epoch)
-#             self.dataloader = DataLoader(new_dataset, sampler=train_sampler, batch_size=self.batch_size,
-#                                          collate_fn=self.collate_fn, num_workers=self.args.num_workers)
-#             if self.s_tokenizer:
-#                 self.s_dataloader = DataLoader(s_new_dataset, sampler=train_sampler, batch_size=self.batch_size,
-#                                              collate_fn=self.collate_fn, num_workers=self.args.num_workers)
-#         else:
-#             train_sampler = RandomSampler(self.dataset) if self.args.local_rank == -1 else DistributedSampler(
-#                 self.dataset)
-#             if self.args.local_rank != -1:
-#                 train_sampler.set_epoch(self.epoch)
-#             self.dataloader = DataLoader(self.dataset, sampler=train_sampler, batch_size=self.batch_size,
-#                                          collate_fn=self.collate_fn, num_workers=self.args.num_workers)
-#             if self.s_tokenizer:
-#                 self.s_dataloader = DataLoader(self.s_dataset, sampler=train_sampler, batch_size=self.batch_size,
-#                                                collate_fn=self.collate_fn, num_workers=self.args.num_workers)
-#         if self.args.local_rank == 0:
-#             torch.distributed.barrier()
-#
-#     def __len__(self):
-#         if len(self.examples)%self.batch_size == 0:
-#             return int(len(self.examples) / self.batch_size)
-#         return int(len(self.examples) / self.batch_size)+1
-#
-#     def __iter__(self):
-#         ## Lack in handling s_dataloader
-#         if self.epoch % 5 == 0:
-#             self.build()
-#         self.epoch += 1
-#         if self.s_tokenizer:
-#             for i in range(self.__len__()):
-#                 yield {"teacher": next(iter(self.dataloader)), "student": next(iter(self.s_dataloader))}
-#         else:
-#             for i in range(self.__len__()):
-#                 yield next(iter(self.dataloader))
-#             # return self.dataloader.__iter__()
+    def __getitem__(self, index):
+        return self.examples[index]
 
+    def __len__(self):
+        return len(self.examples)
 
 class Example(object):
     """A single training/test example for simple sequence classification."""
@@ -356,8 +237,8 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples=False, s_toke
     s_dataset = None
     s_features = None
     s_cached_features_file = None
-    if args.local_rank not in [-1, 0] and mode != "dev":
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+    # if args.local_rank not in [-1, 0] and mode != "dev":
+    #     torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Load data features from cache or dataset file
     cached_features_file = os.path.join(args.data_dir, "cached_{}_{}_{}_{}".format(mode, args.task_type,
@@ -404,10 +285,10 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples=False, s_toke
             if args.local_rank in [-1, 0]:
                 logger.info("Saving student features into cached file %s", s_cached_features_file)
                 torch.save(s_features, s_cached_features_file)
-    dataset = convert_features_to_dataset(features, s_features, is_training=(mode == 'train'))
+    dataset = convert_features_to_dataset(features, s_features, is_testing=(mode in ['dev', 'test']))
 
-    if args.local_rank == 0 and mode != "dev":
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+    # if args.local_rank == 0 and mode != "dev":
+    #     torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # if mode == "train":
     #     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
@@ -444,7 +325,7 @@ def read_examples_from_file(data_dir, mode, task_type):
         input_data = json.load(reader)["data"]
 
     examples = []
-    for entry in tqdm(input_data):
+    for entry in tqdm(input_data, desc="Loading examples"):
         for paragraph in entry["paragraphs"]:
             paragraph_text = paragraph["context"]
             char_to_word_offset = []
@@ -508,7 +389,6 @@ def convert_examples_to_features(
         padding_strategy="max_length",
         threads=1,
         tqdm_enabled=True,
-        task=None,
 ):
     """
     Converts a list of examples into a list of features that can be directly given as input to a model. It is
@@ -580,13 +460,15 @@ def convert_examples_to_features(
     return features
 
 
-def convert_features_to_dataset(features, s_features=None, is_training=True):
+def convert_features_to_dataset(features, s_features=None, is_testing=False):
     s_all_input_ids = None
     s_all_attention_masks = None
     s_all_token_type_ids = None
     s_all_cls_index = None
     s_all_p_mask = None
     s_all_is_impossible = None
+    s_all_start_positions = None
+    s_all_end_positions = None
     # Convert to Tensors and build dataset
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
     all_attention_masks = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
@@ -602,7 +484,7 @@ def convert_features_to_dataset(features, s_features=None, is_training=True):
         s_all_p_mask = torch.tensor([f.p_mask for f in s_features], dtype=torch.float)
         s_all_is_impossible = torch.tensor([f.is_impossible for f in s_features], dtype=torch.float)
 
-    if not is_training:
+    if is_testing:
         all_feature_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
         dataset = TensorDataset(
             all_input_ids, all_attention_masks, all_token_type_ids, all_feature_index, all_cls_index, all_p_mask
@@ -610,6 +492,9 @@ def convert_features_to_dataset(features, s_features=None, is_training=True):
     else:
         all_start_positions = torch.tensor([f.start_position for f in features], dtype=torch.long)
         all_end_positions = torch.tensor([f.end_position for f in features], dtype=torch.long)
+        if s_features:
+            s_all_start_positions = torch.tensor([f.start_position for f in s_features], dtype=torch.long)
+            s_all_end_positions = torch.tensor([f.end_position for f in s_features], dtype=torch.long)
         dataset = MyDataset(
             all_input_ids,
             all_attention_masks,
@@ -618,7 +503,9 @@ def convert_features_to_dataset(features, s_features=None, is_training=True):
             all_end_positions,
             s_all_input_ids,
             s_all_attention_masks,
-            s_all_token_type_ids
+            s_all_token_type_ids,
+            s_all_start_positions,
+            s_all_end_positions
         )
     return dataset
 

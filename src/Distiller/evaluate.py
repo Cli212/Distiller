@@ -9,6 +9,8 @@ import argparse
 import logging
 from .glue_preprocess import glue_compute_metrics
 logger = logging.getLogger(__name__ )
+
+
 def evaluate_squad(args, model, tokenizer, prefix="",write_prediction=False):
     from squad_preprocess import load_and_cache_examples
     dataset, s_dataset, features, s_features, examples = load_and_cache_examples(args, tokenizer, mode="dev", return_examples=True)

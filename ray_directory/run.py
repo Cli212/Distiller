@@ -360,6 +360,8 @@ def remote_fn(config, checkpoint_dir=None, args=None):
             #     return evaluation_result
             with open(output_eval_file, "a") as writer:
                 writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
+            if 'exact' in evaluation_result.keys():
+                tune.report(score=evaluation_result['exact'],exact=evaluation_result['exact'], f1=evaluation_result['f1'])
             if 'f1' in evaluation_result.keys():
                 tune.report(score=evaluation_result['acc_and_f1'],f1=evaluation_result['f1'], accuracy=evaluation_result['acc'])
             elif 'acc' in evaluation_result.keys():
@@ -412,7 +414,7 @@ def remote_fn(config, checkpoint_dir=None, args=None):
             if args.local_rank not in [-1, 0]:
                 torch.distributed.barrier()
             else:
-                augmenter = AutoAugmenter.init_pipeline(w=w)
+                augmenter = AutoAugmenter.init_pipeline(w=w, threads=args.thread)
                 if len(augmenter) and args.repeated_aug <= 1:
                     # args.augs = augmenter.aug_names
                     # generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer,32)
@@ -426,7 +428,7 @@ def remote_fn(config, checkpoint_dir=None, args=None):
                 if args.local_rank == 0:
                     torch.distributed.barrier()
         elif args.aug_pipeline and args.repeated_aug>1:
-            augmenter = AutoAugmenter.init_pipeline(w=w)
+            augmenter = AutoAugmenter.init_pipeline(w=w, threads=args.thread)
         else:
             pass
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback,
@@ -515,6 +517,13 @@ def main(args, gpus_per_trial=4):
         "kd_loss_type": tune.choice(["ce", "mse"]),
         "intermediate_loss_type": tune.choice(["ce", "mse", "cos", "pkd","mi_0.0","mi_0.1","mi_0.5","mi_0.9","mi_1.0"]),
         "mixup": tune.choice([True, False])}
+    # search_space = {
+    #     "intermediate_strategy": tune.choice(["skip"]),
+    #     "kd_loss_type": tune.choice(["ce", "mse"]),
+    #     "intermediate_loss_type": tune.choice(
+    #         ["mi_0.5", "mi_0.9"]),
+    #     "mixup": tune.choice([True, False]),
+    #     "task": tune.grid_search([""])}
     # search_space = {
     #     "alpha": tune.grid_search([0.0, 0.1, 0.5, 0.9, 1.0]),
     #     "intermediate_strategy": tune.grid_search(["skip", "last", "EMD"]),

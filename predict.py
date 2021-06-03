@@ -75,7 +75,39 @@ def main(args):
             preds.extend(predictions.tolist())
         label_list.extend(batch['labels'].cpu().tolist())
     pd.DataFrame({'prediction':preds}).to_csv(args.output_path)
+    if args.task_name == "mnli":
+        args.task_name = "mnli-mm"
+        processor = glue_processors[args.task_name]()
+        examples = processor.get_test_examples(args.dataset_path)
+        features = convert_examples_to_features(examples, tokenizer, task=args.task_name,
+                                                max_length=args.max_seq_length,
+                                                label_list=processor.get_labels(),
+                                                output_mode=glue_output_modes[args.task_name])
+        dataset = convert_features_to_dataset(features, is_testing=True)
+        eval_sampler = SequentialSampler(dataset)
+        eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=32)
+        # if args.task_name is not None:
+        #     metric = load_metric("glue", args.task_name)
+        preds = []
+        label_list = []
+        model.eval()
+        for step, batch in enumerate(eval_dataloader):
 
+            # labels = batch['labels']
+            # batch = tuple(t.to(args.device) for t in batch)
+            batch = {key: value.to('cuda') for key, value in batch.items()}
+            with torch.no_grad():
+                outputs = model(**batch)
+            # outputs = model(**batch)
+            predictions = outputs.logits.detach().cpu()
+            if args.task_name != "stsb":
+                predictions = predictions.argmax(dim=-1)
+                preds.extend([task_dict[args.task_name][int(i)] for i in predictions])
+            else:
+                predictions = predictions[:, 0]
+                preds.extend(predictions.tolist())
+            label_list.extend(batch['labels'].cpu().tolist())
+        pd.DataFrame({'prediction': preds}).to_csv(args.output_path+"_mm.csv")
 
 glue_output_modes = {
     "cola": "classification",

@@ -19,8 +19,8 @@ def example_iter(examples, batch_size):
 def augment_data(iter_sample, augmenter, task_type, max_length=512, tokenizer=None, model=None):
     result = iter_sample.copy()
     if task_type in ['squad', 'squad2']:
-        for ii, dd in enumerate(augmenter.augment([i.context_text for i in iter_sample])):
-            result[ii].context_text = dd
+        for ii, dd in enumerate(augmenter.augment([i.question_text for i in iter_sample])):
+            result[ii].question_text = dd
     elif task_type == "glue":
         for ii, dd in enumerate(augmenter.augment([i.text_a for i in iter_sample])):
             result[ii].text_a = dd
@@ -28,24 +28,47 @@ def augment_data(iter_sample, augmenter, task_type, max_length=512, tokenizer=No
             for ii, dd in enumerate(augmenter.augment([i.text_b for i in iter_sample])):
                 result[ii].text_b = dd
         if tokenizer and model:
-            labels = torch.LongTensor([int(i.label) for i in result]).to(model.device)
-            inputs = tokenizer(
-                [(example.text_a, example.text_b) for example in result],
-                max_length=max_length,
-                padding="max_length",
-                truncation=True,
-                return_token_type_ids=True,
-                return_tensors="pt"
-            )
-            inputs = {key: value.to(model.device) for key, value in inputs.items()}
-            outputs = model(**inputs, labels=labels)
-            predictions = outputs.logits.detach().cpu()
-            if model.config.finetuning_task != "stsb":
-                predictions = predictions.argmax(dim=-1)
-            else:
-                predictions = predictions[:, 0]
-            for i,d in enumerate(predictions.tolist()):
-                result[i].label = str(d)
+            model.eval()
+            if task_type == "glue":
+                labels = torch.LongTensor([int(i.label) for i in result]).to(model.device)
+                inputs = tokenizer(
+                    [(example.text_a, example.text_b) for example in result],
+                    max_length=max_length,
+                    padding="max_length",
+                    truncation=True,
+                    return_token_type_ids=True,
+                    return_tensors="pt"
+                )
+                inputs = {key: value.to(model.device) for key, value in inputs.items()}
+                with torch.no_grad():
+                    outputs = model(**inputs, labels=labels)
+                predictions = outputs.logits.detach().cpu()
+                if model.config.finetuning_task != "stsb":
+                    predictions = predictions.argmax(dim=-1)
+                else:
+                    predictions = predictions[:, 0]
+                for i,d in enumerate(predictions.tolist()):
+                    result[i].label = str(d)
+            elif task_type in ['squad','squad2']:
+                from Distiller.squad_preprocess import convert_examples_to_features, convert_features_to_dataset
+                features = convert_examples_to_features(result, tokenizer, max_length,
+                                                        doc_stride=128, max_query_length=64 ,is_training=False)
+                batch = tuple(t.to(model.device) for t in features)
+                with torch.no_grad():
+                    inputs = {
+                        "input_ids": batch[0],
+                        "attention_mask": batch[1],
+                        "token_type_ids": batch[2],
+                    }
+
+                    if model.model_type in ["xlm", "roberta", "distilbert", "camembert", "bart", "longformer"]:
+                        del inputs["token_type_ids"]
+                    outputs = model(**inputs)
+                batch_start_logits = outputs.start_logits.detach().cpu().tolist()
+                batch_end_logits = outputs.end_logits.detach().cpu().tolist()
+                for i,d in enumerate(batch_start_logits.tolist()):
+                    result[i].start_position = d
+            model.train()
     return result
 
 from functools import wraps
@@ -102,16 +125,27 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
         # for i in aug_examples:
         #     new_examples.extend(i)
         # del aug_examples
-        features = convert_examples_to_features(new_examples, tokenizer, args.max_seq_length,
-                                                task=args.task_name
-                                                )
+        if args.task_type == "glue":
+            features = convert_examples_to_features(new_examples, tokenizer, args.max_seq_length,
+                                                    task=args.task_name
+                                                    )
+        elif args.task_type in ['squad','squad2']:
+            features = convert_examples_to_features(examples, tokenizer, args.max_seq_length, args.doc_stride,
+                                                    args.max_query_length, is_training=True, threads=args.thread)
+        else:
+            raise NotImplementedError
         s_features = None
         if s_tokenizer:
-            s_features = convert_examples_to_features(new_examples, s_tokenizer,
-                                                      args.max_seq_length,
-                                                      task=args.task_name
-                                                      )
-
+            if args.task_type == "glue":
+                s_features = convert_examples_to_features(new_examples, s_tokenizer,
+                                                          args.max_seq_length,
+                                                          task=args.task_name
+                                                          )
+            elif args.task_type in ['squad','squad2']:
+                s_features = convert_examples_to_features(examples, s_tokenizer, args.max_seq_length, args.doc_stride,
+                                                        args.max_query_length, is_training=True, threads=args.thread)
+            else:
+                raise NotImplementedError
         dataset = convert_features_to_dataset(features, s_features)
         new_dataset = ConcatDataset([original_dataset, dataset])
         return new_dataset

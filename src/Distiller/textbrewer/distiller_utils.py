@@ -239,14 +239,18 @@ def move_to_device(batch, device):
 
 def mixup_assist(batch, model, random_index, lmbd, local_rank, task_type, device):
     mix_ids = batch['input_ids'][random_index]
-    mixup_labels = torch.take(batch['labels'], torch.tensor(random_index).to(device))
+    if task_type in ['squad','squad2']:
+        mixup_start_batch = torch.take(batch['start_positions'], torch.tensor(random_index).to(device))
+        mixup_end_batch = torch.take(batch['end_positions'], torch.tensor(random_index).to(device))
+    else:
+        mixup_labels = torch.take(batch['labels'], torch.tensor(random_index).to(device))
     new_batch = batch.copy()
     new_mixup_batch = batch.copy()
     if task_type in ["squad", "squad2"]:
         new_batch["mixup_start_positions"] = new_batch['start_positions']
         new_batch["mixup_end_positions"] = new_batch['end_positions']
-        new_mixup_batch["mixup_start_positions"] = new_mixup_batch.get("start_positions")
-        new_mixup_batch["mixup_end_positions"] = new_mixup_batch.get("end_positions")
+        new_mixup_batch["mixup_start_positions"] = mixup_start_batch
+        new_mixup_batch["mixup_end_positions"] = mixup_end_batch
         new_mixup_batch["start_positions"] = new_batch['start_positions']
         new_mixup_batch["end_positions"] = new_batch["end_positions"]
     elif task_type in ["glue"]:
