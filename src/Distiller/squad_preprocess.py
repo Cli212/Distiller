@@ -237,9 +237,9 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples=False, s_toke
     s_dataset = None
     s_features = None
     s_cached_features_file = None
-    # if args.local_rank not in [-1, 0] and mode != "dev":
+    # if args.local_rank not in [-1, 0]:
     #     torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-
+    # else:
     # Load data features from cache or dataset file
     cached_features_file = os.path.join(args.data_dir, "cached_{}_{}_{}_{}".format(mode, args.task_type,
                                                                                    list(filter(None,
@@ -286,9 +286,24 @@ def load_and_cache_examples(args, tokenizer, mode, return_examples=False, s_toke
                 logger.info("Saving student features into cached file %s", s_cached_features_file)
                 torch.save(s_features, s_cached_features_file)
     dataset = convert_features_to_dataset(features, s_features, is_testing=(mode in ['dev', 'test']))
+    # torch.save(dataset,f"{mode}_dataset.bin")
+    # torch.save(features, f"{mode}_features.bin")
+    # torch.save(examples, f"{mode}_examples.bin")
+    # if s_tokenizer:
+    #     torch.save(s_dataset, f"s_{mode}_dataset.bin")
+    #     torch.save(s_features, f"s_{mode}_features.bin")
 
-    # if args.local_rank == 0 and mode != "dev":
+    # if args.local_rank == 0:
     #     torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+    # elif args.local_rank == -1:
+    #     pass
+    # else:
+    #     dataset = torch.load(f"{mode}_dataset.bin")
+    #     features = torch.load(f"{mode}_features.bin")
+    #     examples = torch.load(f"{mode}_examples.bin")
+    #     if s_tokenizer:
+    #         s_dataset = torch.load(f"s_{mode}_dataset.bin")
+    #         s_features = torch.load(f"s_{mode}_features.bin")
 
     # if mode == "train":
     #     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)

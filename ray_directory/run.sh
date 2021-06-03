@@ -17,7 +17,7 @@ intermediate_loss_type=mi
 intermediate_features=hidden
 kd_loss_type=ce
 ## if you use mixup or augmenter, then the actual batch size will be batch_size * 2
-batch_size=8
+batch_size=16
 temperature=1
 length=384
 torch_seed=9580
@@ -33,7 +33,7 @@ gpu_nums=4
 #export CUDA_VISIBLE_DEVICES=0
 mkdir -p $OUTPUT_DIR
 
-python run.py \
+python -m torch.distributed.launch --nproc_per_node=${gpu_nums} run.py \
     --task_type ${task_type} \
     --task_name ${task_name} \
     --data_dir $DATA_ROOT_DIR \
@@ -54,6 +54,7 @@ python run.py \
     --learning_rate ${lr}e-5 \
     --max_grad_norm -1.0 \
     --thread 64 \
+    --ddp \
     --gradient_accumulation_steps ${accu} \
     --temperature ${temperature} \
     --alpha ${alpha} \

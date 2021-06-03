@@ -504,6 +504,16 @@ def remote_fn(config, checkpoint_dir=None, args=None):
     return
 
 
+def init_distributed_mode(args):
+    args.local_rank = int(os.environ["RANK"])
+    args.world_size = int(os.environ['WORLD_SIZE'])
+    args.gpu = int(os.environ['LOCAL_RANK'])
+    args.distributed = True
+    torch.cuda.device(args.gpu)
+    args.dist_backend = 'nccl'
+    torch.distributed.init_process_group(backend=args.dist_backend, init_method=args.dist_url,world_size=args.world_size, rank=args.local_rank)
+    # torch.distributed.barrier()
+
 def main(args, gpus_per_trial=4):
     w_list = [[0], [1], [2], [0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1], [0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0],
               [2, 0, 1], [2, 1, 0]]
@@ -544,7 +554,8 @@ def main(args, gpus_per_trial=4):
         train_fn = DistributedTrainableCreator(
             partial(remote_fn, args=args),
             num_gpus_per_worker=4,
-            num_cpus_per_worker=32
+            num_cpus_per_worker=8,
+            backend="nccl",
         )
     # distributed_remote_fn = DistributedTrainableCreator(
     #     partial(remote_fn, args=args),

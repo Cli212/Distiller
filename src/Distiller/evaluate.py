@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__ )
 
 
 def evaluate_squad(args, model, tokenizer, prefix="",write_prediction=False):
-    from squad_preprocess import load_and_cache_examples
+    from .squad_preprocess import load_and_cache_examples
     dataset, s_dataset, features, s_features, examples = load_and_cache_examples(args, tokenizer, mode="dev", return_examples=True)
 
     if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
@@ -24,8 +24,8 @@ def evaluate_squad(args, model, tokenizer, prefix="",write_prediction=False):
     eval_dataloader = DataLoader(dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
     # multi-gpu training (should be after apex fp16 initialization)
-    if args.n_gpu > 1 and not isinstance(model, torch.nn.DataParallel):
-        model = torch.nn.DataParallel(model)
+    # if args.n_gpu > 1 and not isinstance(model, torch.nn.DataParallel):
+    #     model = torch.nn.DataParallel(model)
 
     # Distributed training (should be after apex fp16 initialization)
     # if args.local_rank != -1:
