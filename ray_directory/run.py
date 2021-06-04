@@ -23,6 +23,7 @@ from torch.utils.data.distributed import DistributedSampler
 from Distiller.transformers import AdamW, get_linear_schedule_with_warmup, WEIGHTS_NAME
 from torch.multiprocessing import Queue, Process, set_start_method
 from ray.tune.integration.torch import DistributedTrainableCreator
+from ray.tune.integration.torch import is_distributed_trainable
 # from ray.util.sgd.integration.torch import DistributedTrainableCreator
 
 
@@ -54,7 +55,8 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     # train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
     if args.aug_pipeline and args.repeated_aug <= 1:
         if args.local_rank not in [-1, 0]:
-            torch.distributed.barrier()
+            pass
+        #     torch.distributed.barrier()
         else:
             QUEUE_LIMIT = 60
             count = 0
@@ -67,8 +69,8 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                     break
                 except queue.Empty:
                     logger.info("Waiting for data augmentation process to return data")
-            if args.local_rank == 0:
-                torch.distributed.barrier()
+            # if args.local_rank == 0:
+            #     torch.distributed.barrier()
         if args.local_rank not in [-1,0]:
             train_dataset = torch.load('train_dataset.bin')
         # train_dataloader = DataProvider(train_dataset, examples, args, tokenizer, augmenter,s_tokenizer,s_dataset)
@@ -242,8 +244,13 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
 
 
 
-def remote_fn(config, checkpoint_dir=None, args=None):
+def remote_fn(config, checkpoint_dir=None):
     set_start_method('spawn')
+    args.local_rank = int(os.environ['CUDA_VISIBLE_DEVICES'])
+    if is_distributed_trainable():
+        logger.info("Can distributed")
+    else:
+        logger.info("Can't distributed")
     # Set ray tune hyper parameters
     w=[]
     for c in config.items():
@@ -261,9 +268,9 @@ def remote_fn(config, checkpoint_dir=None, args=None):
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-        torch.cuda.set_device(args.local_rank)
-        device = torch.device("cuda", args.local_rank)
-        torch.distributed.init_process_group(backend="nccl")
+        # torch.cuda.set_device(args.local_rank)
+        device = torch.device("cuda", 0)
+        # torch.distributed.init_process_group(backend="nccl")
         args.n_gpu = 1
     args.device = device
     # Setup logging
@@ -413,7 +420,8 @@ def remote_fn(config, checkpoint_dir=None, args=None):
         if args.aug_pipeline and args.repeated_aug <= 1:
             q = Queue()
             if args.local_rank not in [-1, 0]:
-                torch.distributed.barrier()
+                # torch.distributed.barrier()
+                pass
             else:
                 augmenter = AutoAugmenter.init_pipeline(w=w, threads=args.thread)
                 if len(augmenter) and args.repeated_aug <= 1:
@@ -426,8 +434,8 @@ def remote_fn(config, checkpoint_dir=None, args=None):
                     # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
                     # process.start()
                     # process.join()
-                if args.local_rank == 0:
-                    torch.distributed.barrier()
+                # if args.local_rank == 0:
+                #     torch.distributed.barrier()
         elif args.aug_pipeline and args.repeated_aug>1:
             augmenter = AutoAugmenter.init_pipeline(w=w, threads=args.thread)
         else:
@@ -505,24 +513,13 @@ def remote_fn(config, checkpoint_dir=None, args=None):
     return
 
 
-def init_distributed_mode(args):
-    args.local_rank = int(os.environ["RANK"])
-    args.world_size = int(os.environ['WORLD_SIZE'])
-    args.gpu = int(os.environ['LOCAL_RANK'])
-    args.distributed = True
-    torch.cuda.device(args.gpu)
-    args.device = torch.device("cuda", args.local_rank)
-    args.dist_backend = 'nccl'
-    torch.distributed.init_process_group(backend=args.dist_backend, world_size=args.world_size, rank=args.local_rank)
-    # torch.distributed.barrier()
-
 def main(args, gpus_per_trial=4):
     w_list = [[0], [1], [2], [0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1], [0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0],
               [2, 0, 1], [2, 1, 0]]
     search_space = {
-        "mixup": tune.grid_search([True,False]),
-        "repeated_aug": tune.grid_search([1]),
-        "w": tune.grid_search(w_list)
+        "mixup": tune.choice([True,False]),
+        "repeated_aug": tune.choice([1]),
+        "w": tune.choice(w_list)
     }
     # search_space = {
     #     "intermediate_strategy": tune.choice(["skip", "last"]),
@@ -554,8 +551,9 @@ def main(args, gpus_per_trial=4):
     from functools import partial
     if args.ddp:
         train_fn = DistributedTrainableCreator(
-            partial(remote_fn, args=args),
-            num_gpus_per_worker=4,
+            remote_fn,
+            num_workers=4,
+            num_gpus_per_worker=1,
             num_cpus_per_worker=8,
             backend="nccl",
         )
@@ -574,7 +572,7 @@ def main(args, gpus_per_trial=4):
     #     progress_reporter=reporter,
     #     queue_trials=True)
     else:
-        train_fn = partial(remote_fn, args=args)
+        train_fn = remote_fn
     result = tune.run(
         train_fn,
         resources_per_trial=None if args.ddp else {
@@ -586,13 +584,13 @@ def main(args, gpus_per_trial=4):
         queue_trials=True)
     with open('/home/ray/ray_results.json','w') as f:
         json.dump(result, f)
-    best_trial = result.get_best_trial("accuracy", "max", "last")
+    best_trial = result.get_best_trial("score", "max", "last")
     print("Best trial config: {}".format(best_trial.config))
     # print("Best trial final validation loss: {}".format(
     #     best_trial.last_result["loss"]))
     print("Best trial final validation accuracy: {}".format(
-        best_trial.last_result["accuracy"]))
-    print("Best config: ", best_trial.get_best_config(metric="mean_loss", mode="min"))
+        best_trial.last_result["score"]))
+    print("Best config: ", best_trial.get_best_config(metric="score", mode="max"))
 
     # Get a dataframe for analyzing trial results.
     df = best_trial.results_df
