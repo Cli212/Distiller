@@ -431,7 +431,7 @@ def remote_fn(config, checkpoint_dir=None):
                     # q.put(augmenter)
                     # process = Process(target=aug_process,
                     #                   args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
-                    process = torch.multiprocessing.spawn(aug_process, args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer, t_model if args.soft_label_weight>0 else None), join=False)
+                    process = torch.multiprocessing.spawn(aug_process, args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer), join=False)
                     # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
                     # process.start()
                     # process.join()
