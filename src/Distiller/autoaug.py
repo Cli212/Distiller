@@ -39,12 +39,12 @@ class AutoAugmenter:
           "model_type": "distilbert",
           "top_p": 0.8,
           "aug_p": 0.3,
-          "device": "cuda"
+          "device": "cuda:3"
             },{
             "aug_type": "back_translation",
             "from_model_name": "Helsinki-NLP/opus-mt-en-ROMANCE",
             "to_model_name": "Helsinki-NLP/opus-mt-ROMANCE-en",
-            "device": "cuda"
+            "device": "cuda:2"
         },{
         "aug_type": "random",
         "action": "swap",
@@ -71,7 +71,7 @@ class AutoAugmenter:
     def augment(self, data):
         # result = []
         for aug in self.augs:
-            data = aug.augment(data)
+            data = aug.augment(data, num_thread=self.threads)
         return data
         # return self.aug.augment(data)
 

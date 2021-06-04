@@ -80,6 +80,7 @@ class TrainingConfig(Config):
                  local_rank = -1,
                  mixup=False,
                  task_type="squad2",
+                 task_name="mnli",
                  q=None,
                  augmenter=None,
                  processor=None,
@@ -107,6 +108,7 @@ class TrainingConfig(Config):
         self.local_rank = local_rank
         self.mixup = mixup
         self.task_type = task_type
+        self.task_name = task_name
         self.num_reaug = num_reaug
         self.tokenizer = tokenizer
         self.max_seq_length = max_seq_length

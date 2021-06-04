@@ -73,7 +73,7 @@ def augment_data(iter_sample, augmenter, task_type, max_length=512, tokenizer=No
 
 from functools import wraps
 
-def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None, model=None, batch_size=32):
+def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None, batch_size=16):
     if args.task_type == "glue":
         from .glue_preprocess import convert_features_to_dataset, convert_examples_to_features
     elif args.task_type in ["squad", "squad2"]:
@@ -102,22 +102,27 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
     #         )
     #     )
     if len(augmenter)>0:
-        if model:
-            annotate_ = partial(
-                augment_data,
-                augmenter=augmenter,
-                task_type=args.task_type,
-                max_length=args.max_seq_length,
-                tokenizer=tokenizer,
-                model=model
-            )
-        else:
-            annotate_ = partial(
-                augment_data,
-                augmenter=augmenter,
-                task_type=args.task_type,
-                max_length=args.max_seq_length
-            )
+        # if model:
+        #     annotate_ = partial(
+        #         augment_data,
+        #         augmenter=augmenter,
+        #         task_type=args.task_type,
+        #         max_length=args.max_seq_length,
+        #         tokenizer=tokenizer,
+        #         model=model
+        #     )
+        # else:
+        #     annotate_ = partial(
+        #         augment_data,
+        #         augmenter=augmenter,
+        #         task_type=args.task_type,
+        #         max_length=args.max_seq_length
+        #     )
+        annotate_ = partial(
+            augment_data,
+            augmenter=augmenter,
+            task_type=args.task_type,
+            max_length=args.max_seq_length)
         new_examples = []
         for example in tqdm(example_iter(examples, batch_size), total=int(len(examples) / batch_size) + 1, desc="Data Augmentation"):
             new_examples.extend(annotate_(example))
@@ -152,10 +157,10 @@ def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_
     else:
         return original_dataset
 
-def aug_process(rank, queue:Queue, examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None, model=None):
+def aug_process(rank, queue:Queue, examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None):
     while True:
         if queue.empty():
-            new_dataset = generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer, model)
+            new_dataset = generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer)
             queue.put(new_dataset)
         else:
             time.sleep(10)

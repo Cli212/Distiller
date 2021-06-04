@@ -9,9 +9,8 @@ class BackTranslationAugmenter:
         self.to_model.eval()
         self.from_model.eval()
         self.device = device
-        if device == 'cuda':
-            self.from_model.cuda()
-            self.to_model.cuda()
+        self.from_model.to(device)
+        self.to_model.to(device)
 
     def translate(self, texts, model, tokenizer, language):
         """Translate texts into a target language"""

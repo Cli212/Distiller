@@ -306,6 +306,7 @@ def get_outputs_from_batch(batch, device, model_T, model_S, local_rank, args, mi
                 else:
                     with torch.no_grad():
                         results_T = auto_forward(model_T,teacher_batch,args)
+
             #student outputs
             student_batch = move_to_device(student_batch, device)
             if type(student_batch) is dict:

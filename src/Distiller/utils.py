@@ -616,7 +616,7 @@ def mlp(in_dim, hidden_size, out_dim):
 
 
 class mlp_critic(torch.nn.Module):
-    def __init__(self, t_dim, s_dim=None, hidden_size=64, out_dim=16):
+    def __init__(self, t_dim, s_dim=None, hidden_size=64, out_dim=32):
         super(mlp_critic, self).__init__()
         self._t = mlp(t_dim, hidden_size, out_dim)
         if s_dim:

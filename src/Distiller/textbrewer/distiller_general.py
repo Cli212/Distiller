@@ -77,12 +77,22 @@ class GeneralDistiller(BasicDistiller):
 
 
     def train_on_batch(self, batch, args):
-
+        if self.d_config.soft_label_weight>0.0:
+            if self.t_config.task_type == "glue":
+                if self.t_config.task_name != "stsb":
+                    pre_labels = self.model_T(**batch['teacher']).logits.detach().cpu().argmax(dim=-1)
+                else:
+                    pre_labels = self.model_T(**batch['teacher']).logits.detach().cpu()[:,0]
+                batch['student']['labels'] = pre_labels
+            elif self.t_config.task_type in ["squad","squad2"]:
+                pre_outputs = self.model_T(**batch['teacher'])
+                batch_start_logits = pre_outputs.start_logits.detach().cpu()
+                batch_end_logits = pre_outputs.end_logits.detach().cpu()
+                batch['student']['start_logits'] = batch_start_logits
+                batch['student']['end_logits'] = batch_end_logits
         (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device, self.model_T, self.model_S, self.local_rank,args,self.t_config.mixup,task_type=self.t_config.task_type)
-
         results_T = post_adaptor(self.adaptor_T(teacher_batch,results_T))
-        results_S = post_adaptor(self.adaptor_S(student_batch,results_S))
-
+        results_S = post_adaptor(self.adaptor_S(student_batch, results_S))
         total_loss, losses_dict = self.compute_loss(results_S, results_T)
 
         return total_loss, losses_dict
