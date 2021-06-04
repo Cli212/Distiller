@@ -17,7 +17,7 @@ intermediate_loss_type=mi
 intermediate_features=hidden
 kd_loss_type=ce
 ## if you use mixup or augmenter, then the actual batch size will be batch_size * 2
-batch_size=16
+batch_size=4
 temperature=1
 length=384
 torch_seed=9580

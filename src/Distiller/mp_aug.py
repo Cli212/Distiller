@@ -73,7 +73,7 @@ def augment_data(iter_sample, augmenter, task_type, max_length=512, tokenizer=No
 
 from functools import wraps
 
-def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None, model=None, batch_size=4):
+def generate_aug_data(examples, original_dataset, augmenter, args, tokenizer, s_tokenizer=None, model=None, batch_size=32):
     if args.task_type == "glue":
         from .glue_preprocess import convert_features_to_dataset, convert_examples_to_features
     elif args.task_type in ["squad", "squad2"]:
