@@ -3,7 +3,7 @@
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
 TEACHER_DIR=twmkn9/bert-base-uncased-squad2
 STUDENT_DIR=huawei-noah/TinyBERT_General_4L_312D
-DATA_ROOT_DIR=~/Distillation_QA_benchmark/datasets/squad2
+DATA_ROOT_DIR=../datasets/squadv2
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
