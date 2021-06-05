@@ -1,7 +1,7 @@
 
 #set hyperparameters
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
-TEACHER_DIR=howey/electra-base-mrpc
+TEACHER_DIR=howey/electra-large-mrpc
 STUDENT_DIR=huawei-noah/TinyBERT_General_4L_312D
 DATA_ROOT_DIR=~/Distillation_QA_benchmark/datasets/glue_data/MRPC
 OUTPUT_ROOT_DIR=output-student
