@@ -283,8 +283,6 @@ class BasicDistiller(AbstractDistiller):
                 #     total_loss.backward()
                 if self.t_config.fp16:
                     scaler.scale(total_loss).backward()
-                    # Unscales the gradients of optimizer's assigned params in-place
-                    scaler.unscale_(optimizer)
                 else:
                     total_loss.backward()
 
@@ -301,6 +299,9 @@ class BasicDistiller(AbstractDistiller):
                             torch.nn.utils.clip_grad_norm_(self.d_config.baseline_fn.parameters(), max_grad_norm)
 
                     if self.t_config.fp16:
+                        # scaler.step(optimizer)
+                        # Unscales the gradients of optimizer's assigned params in-place
+                        # scaler.unscale_(optimizer)
                         scaler.step(optimizer)
                         scaler.update()
                     else:
