@@ -1,9 +1,9 @@
 
 #set hyperparameters
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
-TEACHER_DIR=howey/bert-base-uncased-stsb
+TEACHER_DIR=howey/electra-large-mnli
 STUDENT_DIR=huawei-noah/TinyBERT_General_4L_312D
-DATA_ROOT_DIR=~/Distillation_QA_benchmark/datasets/glue_data/STS-B
+DATA_ROOT_DIR=~/Distillation_QA_benchmark/datasets/glue_data/MNLI
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
@@ -17,13 +17,13 @@ intermediate_loss_type=mi
 intermediate_features=hidden
 kd_loss_type=mse
 ## if you use mixup or augmenter, then the actual batch size will be batch_size * 2
-batch_size=16
+batch_size=32
 temperature=1
 length=128
 torch_seed=9580
 hard_label_weight=0.5
 kd_loss_weight=1.0
-task_name=stsb
+task_name=mnli
 task_type=glue
 NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_alpha${alpha}_h${hard_label_weight}_k${kd_loss_weight}_${kd_loss_type}
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
