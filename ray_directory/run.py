@@ -523,10 +523,9 @@ def main(args, gpus_per_trial=4):
     #     "w": tune.grid_search(w_list)
     # }
     search_space = {
-        "intermediate_strategy": tune.choice(["skip", "last"]),
-        "kd_loss_type": tune.choice(["ce", "mse"]),
-        "intermediate_loss_type": tune.choice(["ce", "mse", "cos", "pkd","mi_0.0","mi_0.1","mi_0.5","mi_0.9","mi_1.0"]),
-        "mixup": tune.choice([True, False])}
+        "intermediate_strategy": tune.grid_search(["skip", "last"]),
+        "intermediate_loss_type": tune.grid_search(["ce", "mse", "cos", "pkd","mi_0.0","mi_0.1","mi_0.5","mi_0.9","mi_1.0"]),
+        "mixup": tune.grid_search([True, False])}
     # search_space = {
     #     "intermediate_strategy": tune.choice(["skip"]),
     #     "kd_loss_type": tune.choice(["ce", "mse"]),
