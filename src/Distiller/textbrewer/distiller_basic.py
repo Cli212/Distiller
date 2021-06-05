@@ -218,12 +218,12 @@ class BasicDistiller(AbstractDistiller):
                             continue
                     # torch.distributed.barrier()
                 else:
-                    QUEUE_LIMIT = 600
+                    QUEUE_LIMIT = 100
                     count = 0
                     while count < QUEUE_LIMIT:
                         try:
                             count += 1
-                            train_dataset = self.t_config.q.get(timeout=60)
+                            train_dataset = self.t_config.q.get(timeout=300)
                             logger.info("Update augmented data")
                             torch.save(train_dataset, f'train_dataset_{current_epoch}.bin')
                             break

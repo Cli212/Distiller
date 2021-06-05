@@ -517,16 +517,16 @@ def remote_fn(config, checkpoint_dir=None):
 def main(args, gpus_per_trial=4):
     w_list = [[0], [1], [2], [0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1], [0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0],
               [2, 0, 1], [2, 1, 0]]
-    search_space = {
-        "mixup": tune.grid_search([True,False]),
-        "repeated_aug": tune.grid_search([1]),
-        "w": tune.grid_search(w_list)
-    }
     # search_space = {
-    #     "intermediate_strategy": tune.choice(["skip", "last"]),
-    #     "kd_loss_type": tune.choice(["ce", "mse"]),
-    #     "intermediate_loss_type": tune.choice(["ce", "mse", "cos", "pkd","mi_0.0","mi_0.1","mi_0.5","mi_0.9","mi_1.0"]),
-    #     "mixup": tune.choice([True, False])}
+    #     "mixup": tune.grid_search([True,False]),
+    #     "repeated_aug": tune.grid_search([1]),
+    #     "w": tune.grid_search(w_list)
+    # }
+    search_space = {
+        "intermediate_strategy": tune.choice(["skip", "last"]),
+        "kd_loss_type": tune.choice(["ce", "mse"]),
+        "intermediate_loss_type": tune.choice(["ce", "mse", "cos", "pkd","mi_0.0","mi_0.1","mi_0.5","mi_0.9","mi_1.0"]),
+        "mixup": tune.choice([True, False])}
     # search_space = {
     #     "intermediate_strategy": tune.choice(["skip"]),
     #     "kd_loss_type": tune.choice(["ce", "mse"]),

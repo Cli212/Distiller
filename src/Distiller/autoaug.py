@@ -49,7 +49,7 @@ class AutoAugmenter:
         "aug_type": "random",
         "action": "swap",
         "aug_min": 3,
-        "aug_max": 5
+        "aug_max": 10
     }]
         selected_list = []
         aug_args = []

@@ -1131,6 +1131,8 @@ class RobertaForSequenceClassification(RobertaPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        mixup_labels=None,
+        mixup_value=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1161,11 +1163,21 @@ class RobertaForSequenceClassification(RobertaPreTrainedModel):
         if labels is not None:
             if self.num_labels == 1:
                 #  We are doing regression
+                if mixup_labels is not None:
+                    labels = mixup_value * labels + (1 - mixup_value) * mixup_labels
                 loss_fct = MSELoss()
                 loss = loss_fct(logits.view(-1), labels.view(-1))
             else:
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                if mixup_labels is not None:
+                    labels = nn.functional.one_hot(labels,
+                                                            num_classes=self.num_labels)
+                    mixup_labels = nn.functional.one_hot(mixup_labels,
+                                                                  num_classes=self.num_labels)
+                    labels = mixup_value * labels + (1 - mixup_value) * mixup_labels
+                    loss = cross_entropy(logits, labels)
+                else:
+                    loss_fct = CrossEntropyLoss()
+                    loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -1418,6 +1430,9 @@ class RobertaForQuestionAnswering(RobertaPreTrainedModel):
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
+        mixup_start_positions=None,
+        mixup_end_positions=None,
+        mixup_value=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1464,8 +1479,24 @@ class RobertaForQuestionAnswering(RobertaPreTrainedModel):
             ignored_index = start_logits.size(1)
             start_positions.clamp_(0, ignored_index)
             end_positions.clamp_(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+            if mixup_start_positions is not None and end_positions is not None:
+                # If we are on multi-GPU, split add a dimension
+                if len(mixup_start_positions.size()) > 1:
+                    mixup_start_positions = mixup_start_positions.squeeze(-1)
+                if len(mixup_end_positions.size()) > 1:
+                    mixup_end_positions = mixup_end_positions.squeeze(-1)
+                mixup_start_positions.clamp_(0, ignored_index)
+                mixup_end_positions.clamp_(0, ignored_index)
+                start_positions = nn.functional.one_hot(start_positions,
+                                                        num_classes=ignored_index)
+                end_positions = nn.functional.one_hot(end_positions, num_classes=ignored_index)
+                mixup_start_positions = nn.functional.one_hot(mixup_start_positions, num_classes=ignored_index)
+                mixup_end_positions = nn.functional.one_hot(mixup_end_positions, num_classes=ignored_index)
+                start_positions = mixup_value * start_positions + (1 - mixup_value) * mixup_start_positions
+                end_positions = mixup_value * end_positions + (1 - mixup_value) * mixup_end_positions
+                loss_fct = cross_entropy
+            else:
+                loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
@@ -1497,3 +1528,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
+def cross_entropy(input, target):
+    logsoftmax = nn.LogSoftmax(dim=-1)
+    return torch.mean(torch.sum(- target * logsoftmax(input), 1))
