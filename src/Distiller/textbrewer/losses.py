@@ -287,15 +287,16 @@ def mmd_loss(state_S, state_T, mask=None):
 def mi_loss(state_S, state_T, critic, baseline_fn, alpha):
     if state_T.dim() == 3:
         # cls label states
-        cls_T = state_T[:, 0]  # (batch_size, hidden_dim)
+        # cls_T = state_T[:, 0]  # (batch_size, hidden_dim)
+        cls_T = state_T.view(state_T.shape[0],-1)
         # mean pooling
         # cls_T =
     else:
         cls_T = state_T
     if state_S.dim() == 3:
         # cls label states
-        cls_S = state_S[:, 0]  # (batch_size, hidden_dim)
-        # cls_S =
+        # cls_S = state_S[:, 0]  # (batch_size, hidden_dim)
+        cls_S = state_S.view(state_S.shape[0], -1)
     else:
         cls_S = state_S
     log_baseline = torch.squeeze(baseline_fn(y=cls_T))

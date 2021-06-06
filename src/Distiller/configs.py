@@ -45,6 +45,7 @@ def parse():
     parser.add_argument("--max_seq_length", default=512, type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. Sequences "
                              "longer than this will be truncated, and sequences shorter than this will be padded.")
+    parser.add_argument("--s_max_seq_length",default=128, type=int)
     parser.add_argument("--doc_stride", default=128, type=int,
                         help="When splitting up a long document into chunks, how much stride to take between chunks.")
     parser.add_argument("--max_query_length", default=64, type=int,
