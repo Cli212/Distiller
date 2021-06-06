@@ -378,7 +378,7 @@ def remote_fn(config, checkpoint_dir=None):
             elif 'mcc' in evaluation_result.keys():
                 tune.report(score=evaluation_result['mcc'], mcc=evaluation_result['mcc'])
             elif 'spearmanr' in evaluation_result.keys():
-                tune.report(score=evaluation_result['spearmanr'], spearmanr=evaluation_result['spearmanr'])
+                tune.report(score=evaluation_result['spearmanr'], pearson=evaluation_result['pearson'],corr=evaluation_result['corr'])
             elif 'm_mm_acc' in evaluation_result.keys():
                 tune.report(score=evaluation_result['m_mm_acc'], mnli_acc=evaluation_result['mnli/acc'],
                             mnli_mm_acc=evaluation_result['mnli-mm/acc'])
