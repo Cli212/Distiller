@@ -147,17 +147,25 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
         baseline_fn = None
         if args.intermediate_loss_type == 'mi':
             from Distiller.utils import mlp_critic
-            baseline_fn = mlp_critic(t_model.module.config.hidden_size if hasattr(t_model,
-                                                          "module") else t_model.config.hidden_size, hidden_size=64, out_dim=1)
+            # baseline_fn = mlp_critic(t_model.module.config.hidden_size if hasattr(t_model,
+            #                                               "module") else t_model.config.hidden_size, hidden_size=64, out_dim=1)
+            baseline_fn = mlp_critic(args.max_seq_length * (t_model.module.config.hidden_size if hasattr(t_model,
+                                                                                                         "module") else t_model.config.hidden_size),
+                                     hidden_size=128, out_dim=1)
             # for name, param in baseline_fn.named_parameters():
             #     if 'weight' in name:
             #         torch.nn.init.xavier_uniform(param)
             #     elif 'bias' in name:
             #         torch.nn.init.constant_(param, 0)
             baseline_fn.to(args.device)
-            critic = mlp_critic(t_model.module.config.hidden_size if hasattr(t_model,
-                                                          "module") else t_model.config.hidden_size, s_model.module.config.hidden_size if hasattr(s_model,
-                                                          "module") else s_model.config.hidden_size, 128, 32)
+            # critic = mlp_critic(t_model.module.config.hidden_size if hasattr(t_model,
+            #                                               "module") else t_model.config.hidden_size, s_model.module.config.hidden_size if hasattr(s_model,
+            #                                               "module") else s_model.config.hidden_size, 128, 32)
+            critic = mlp_critic(args.max_seq_length * (t_model.module.config.hidden_size if hasattr(t_model,
+                                                                                                    "module") else t_model.config.hidden_size),
+                                args.max_seq_length * (s_model.module.config.hidden_size if hasattr(s_model,
+                                                                                                    "module") else s_model.config.hidden_size),
+                                256, 32)
             critic.to(args.device)
             critic_no_decay=['bias']
             critic_parameters = [
