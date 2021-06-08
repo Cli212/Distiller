@@ -262,14 +262,36 @@ def remote_fn(config, checkpoint_dir=None):
         logger.info("Can't distributed")
     # Set ray tune hyper parameters
     w=[]
+    # for c in config.items():
+    #     if c[0] == 'intermediate_loss_type' and 'mi' in c[1]:
+    #         args.__setattr__('intermediate_loss_type', c[1].split('_')[0])
+    #         args.__setattr__('alpha', float(c[1].split('_')[1]))
+    #     elif c[0] == "w":
+    #         w = c[1]
+    #     else:
+    #         args.__setattr__(c[0], c[1])
     for c in config.items():
-        if c[0] == 'intermediate_loss_type' and 'mi' in c[1]:
-            args.__setattr__('intermediate_loss_type', c[1].split('_')[0])
-            args.__setattr__('alpha', float(c[1].split('_')[1]))
-        elif c[0] == "w":
-            w = c[1]
+        if c[0] == "s_model":
+            args.__setattr__("S_model_name_or_path", model_dict[c[1]])
+        elif c[0] == "task_name":
+            task_name = c[1]
+            if task_name in ["mnli","qnli","qqp"]:
+                args.__setattr__("kd_loss_type", "mse")
+            args.__setattr__("task_name", task_name)
+            if task_name == 'sst-2':
+                args.__setattr__("T_model_name_or_path", "howey/electra-large-sst2")
+                args.__setattr__("data_dir", "../datasets/glue_data/SST-2")
+            elif task_name == "stsb":
+                args.__setattr__("T_model_name_or_path", "howey/electra-large-stsb")
+                args.__setattr__("data_dir", "../datasets/glue_data/STS-B")
+            elif task_name == "cola":
+                args.__setattr__("T_model_name_or_path", "howey/electra-large-cola")
+                args.__setattr__("data_dir", "../datasets/glue_data/CoLA")
+            else:
+                args.__setattr__("T_model_name_or_path", f"howey/electra-large-{task_name}")
+                args.__setattr__("data_dir", f"../datasets/glue_data/{task_name.upper()}")
         else:
-            args.__setattr__(c[0], c[1])
+            raise NotImplementedError
     globals()['best_evaluation'] = 0.0
     # Setup CUDA, GPU & distributed training
     # init_distributed_mode(args)
@@ -451,6 +473,7 @@ def remote_fn(config, checkpoint_dir=None):
             pass
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback,
               q=q, processor=processor if args.repeated_aug > 1 else None)
+        s_tokenizer.save_pretrained(os.path.join(args.output_dir, 'best_model'))
         if args.aug_pipeline and args.repeated_aug <= 1:
             process.processes[0].terminate()
         # p = Process(target=data_aug_process, args=(augmenter,examples,tokenizer,args))
@@ -521,14 +544,27 @@ def remote_fn(config, checkpoint_dir=None):
                 writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
     return
 
+model_dict = {"BERT_BASE": "google/bert_uncased_L-12_H-768_A-12",
+              "BERT_MEDIUM": "google/bert_uncased_L-8_H-512_A-8",
+              "TinyBERT6":"huawei-noah/TinyBERT_General_6L_768D",
+              "BERT_SMALL":"google/bert_uncased_L-4_H-512_A-8",
+              "TinyBERT4": "huawei-noah/TinyBERT_General_4L_312D",
+              "BERT_MINI": "google/bert_uncased_L-4_H-256_A-4",
+              "BERT_TINY":"google/bert_uncased_L-2_H-128_A-2"}
 
+glue_list = ["sst-2","mrpc","rte","cola","qnli","stsb","mnli","qqp"]
 def main(args, gpus_per_trial=4):
     w_list = [[0], [1], [2], [0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1], [0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0],
               [2, 0, 1], [2, 1, 0]]
+    # search_space = {
+    #     "mixup": tune.grid_search([True,False]),
+    #     "repeated_aug": tune.grid_search([1]),
+    #     "w": tune.grid_search(w_list)
+    # }
+
     search_space = {
-        "mixup": tune.grid_search([True,False]),
-        "repeated_aug": tune.grid_search([1]),
-        "w": tune.grid_search(w_list)
+        "s_model": list(model_dict.keys()),
+        "task_name": glue_list
     }
     # search_space = {
     #     "intermediate_strategy": tune.grid_search(["skip", "last"]),

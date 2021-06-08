@@ -21,7 +21,7 @@ batch_size=8
 temperature=1
 length=128
 torch_seed=9580
-hard_label_weight=0.5
+hard_label_weight=0.0
 kd_loss_weight=1.0
 task_name=rte
 task_type=glue
@@ -54,8 +54,6 @@ python run.py \
     --learning_rate ${lr}e-5 \
     --max_grad_norm -1.0 \
     --thread 64 \
-    --aug_pipeline \
-    --soft_label_weight 1.0 \
     --gradient_accumulation_steps ${accu} \
     --temperature ${temperature} \
     --alpha ${alpha} \
