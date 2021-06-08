@@ -280,16 +280,16 @@ def remote_fn(config, checkpoint_dir=None):
             args.__setattr__("task_name", task_name)
             if task_name == 'sst-2':
                 args.__setattr__("T_model_name_or_path", "howey/electra-large-sst2")
-                args.__setattr__("data_dir", "~/Distillation_QA_benchmark/datasets/glue_data/SST-2")
+                # args.__setattr__("data_dir", "~/Distillation_QA_benchmark/datasets/glue_data/SST-2")
             elif task_name == "stsb":
                 args.__setattr__("T_model_name_or_path", "howey/electra-large-stsb")
-                args.__setattr__("data_dir", "~/Distillation_QA_benchmark/datasets/glue_data/STS-B")
+                # args.__setattr__("data_dir", "~/Distillation_QA_benchmark/datasets/glue_data/STS-B")
             elif task_name == "cola":
                 args.__setattr__("T_model_name_or_path", "howey/electra-large-cola")
-                args.__setattr__("data_dir", "~/Distillation_QA_benchmark/datasets/glue_data/CoLA")
+                # args.__setattr__("data_dir", "~/Distillation_QA_benchmark/datasets/glue_data/CoLA")
             else:
                 args.__setattr__("T_model_name_or_path", f"howey/electra-large-{task_name}")
-                args.__setattr__("data_dir", f"~/Distillation_QA_benchmark/datasets/glue_data/{task_name.upper()}")
+                # args.__setattr__("data_dir", f"~/Distillation_QA_benchmark/datasets/glue_data/{task_name.upper()}")
         else:
             raise NotImplementedError
     globals()['best_evaluation'] = 0.0
@@ -563,8 +563,7 @@ def main(args, gpus_per_trial=4):
     # }
 
     search_space = {
-        "s_model": tune.grid_search(list(model_dict.keys())),
-        "task_name": tune.grid_search(glue_list)
+        "s_model": tune.grid_search(list(model_dict.keys()))
     }
     # search_space = {
     #     "intermediate_strategy": tune.grid_search(["skip", "last"]),
@@ -642,7 +641,7 @@ def main(args, gpus_per_trial=4):
 
 
 if __name__ == '__main__':
-    ray.init(address='auto', _redis_password='5241590000000000')
+    ray.init(address='auto', _redis_password='5241590000000000', ignore_reinit_error=True)
     args = parse()
     # set_start_method('spawn')
     if args.S_model_name_or_path is None:
