@@ -15,7 +15,7 @@ alpha=0.9
 intermediate_strategy=skip
 intermediate_loss_type=mi
 intermediate_features=hidden
-kd_loss_type=ce
+kd_loss_type=mse
 ## if you use mixup or augmenter, then the actual batch size will be batch_size * 2
 batch_size=8
 temperature=1

@@ -219,7 +219,7 @@ class BasicDistiller(AbstractDistiller):
                 if self.local_rank not in [-1, 0]:
                     while True:
                         try:
-                            train_dataset = torch.load(f'train_dataset_{current_epoch}.bin')
+                            train_dataset = torch.load(os.path.join(args.output_dir,f'train_dataset_{current_epoch}.bin'))
                             break
                         except:
                             continue
@@ -232,7 +232,7 @@ class BasicDistiller(AbstractDistiller):
                             count += 1
                             train_dataset = self.t_config.q.get(timeout=300)
                             logger.info("Update augmented data")
-                            torch.save(train_dataset, f'train_dataset_{current_epoch}.bin')
+                            torch.save(train_dataset, os.path.join(args.output_dir,f'train_dataset_{current_epoch}.bin'))
                             break
                         except queue.Empty:
                             logger.info("Waiting for data augmentation process to return data")

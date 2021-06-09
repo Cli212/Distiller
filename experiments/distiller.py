@@ -56,7 +56,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                 try:
                     count += 1
                     train_dataset = q.get(timeout=300)
-                    torch.save(train_dataset, 'train_dataset.bin')
+                    torch.save(train_dataset, os.path.join(args.output_dir,'train_dataset.bin'))
                     break
                 except queue.Empty:
                     logger.info("Waiting for data augmentation process to return data")
@@ -65,7 +65,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
         if args.local_rank == 0:
             torch.distributed.barrier()
         if args.local_rank not in [-1,0]:
-            train_dataset = torch.load('train_dataset.bin')
+            train_dataset = torch.load(os.path.join(args.output_dir,'train_dataset.bin'))
             torch.distributed.barrier()
         # train_dataloader = DataProvider(train_dataset, examples, args, tokenizer, augmenter,s_tokenizer,s_dataset)
 
@@ -141,25 +141,22 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
         baseline_fn = None
         if args.intermediate_loss_type == 'mi':
             from Distiller.utils import mlp_critic
-            # baseline_fn = mlp_critic(args.max_seq_length * (t_model.module.config.hidden_size if hasattr(t_model,
-            #                                               "module") else t_model.config.hidden_size), hidden_size=256, out_dim=1)
             baseline_fn = mlp_critic(args.max_seq_length * (t_model.module.config.hidden_size if hasattr(t_model,
-                                                                                                         "module") else t_model.config.hidden_size),
-                                     hidden_size=128, out_dim=1)
+                                                          "module") else t_model.config.hidden_size), hidden_size=128, out_dim=1)
+            # baseline_fn = mlp_critic(t_model.module.config.hidden_size if hasattr(t_model,"module") else t_model.config.hidden_size,
+            #                          hidden_size=128, out_dim=1)
             # for name, param in baseline_fn.named_parameters():
             #     if 'weight' in name:
             #         torch.nn.init.xavier_uniform(param)
             #     elif 'bias' in name:
             #         torch.nn.init.constant_(param, 0)
             baseline_fn.to(args.device)
-            # critic = mlp_critic(args.max_seq_length * (t_model.module.config.hidden_size if hasattr(t_model,
-            #                                               "module") else t_model.config.hidden_size), args.max_seq_length* (s_model.module.config.hidden_size if hasattr(s_model,
-            #                                               "module") else s_model.config.hidden_size), 512, 64)
             critic = mlp_critic(args.max_seq_length * (t_model.module.config.hidden_size if hasattr(t_model,
-                                                                                                    "module") else t_model.config.hidden_size),
-                                args.max_seq_length * (s_model.module.config.hidden_size if hasattr(s_model,
-                                                                                                    "module") else s_model.config.hidden_size),
-                                256, 32)
+                                                          "module") else t_model.config.hidden_size), args.max_seq_length* (s_model.module.config.hidden_size if hasattr(s_model,
+                                                          "module") else s_model.config.hidden_size), 256, 32)
+            # critic = mlp_critic(t_model.module.config.hidden_size if hasattr(t_model, "module") else t_model.config.hidden_size,
+            #                     s_model.module.config.hidden_size if hasattr(s_model, "module") else s_model.config.hidden_size,
+            #                     256, 32)
             critic.to(args.device)
             critic_no_decay=['bias']
             critic_parameters = [
