@@ -503,3 +503,20 @@ if __name__ == '__main__':
     # logger = logging.getLogger(__name__)
     best_evaluation = 0.0
     main(args)
+
+
+
+# model_dict = {"ELECTRA_LARGE": "howey/electra-large-rte",
+#               "BERT_BASE": "google/bert_uncased_L-12_H-768_A-12",
+#               "BERT_MEDIUM": "google/bert_uncased_L-8_H-512_A-8",
+#               "TinyBERT6":"huawei-noah/TinyBERT_General_6L_768D",
+#               "BERT_SMALL":"google/bert_uncased_L-4_H-512_A-8",
+#               "TinyBERT4": "huawei-noah/TinyBERT_General_4L_312D",
+#               "BERT_MINI": "google/bert_uncased_L-4_H-256_A-4",
+#               "BERT_TINY":"google/bert_uncased_L-2_H-128_A-2"}
+# from transformers import AutoModel, AutoModelForSequenceClassification
+# model_param_dict = {}
+# for i in model_dict.keys():
+#     model = AutoModelForSequenceClassification.from_pretrained(model_dict[i])
+#     param_num = sum(param.numel() for param in model.parameters())
+#     model_param_dict[i] = f"{param_num/1000000}M"
