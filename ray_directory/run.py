@@ -454,7 +454,7 @@ def remote_fn(config, checkpoint_dir=None):
                 # torch.distributed.barrier()
                 pass
             else:
-                augmenter = AutoAugmenter.init_pipeline(w=w, threads=args.thread)
+                augmenter = AutoAugmenter.init_pipeline(w=w, threads=args.thread,aug_p=args.aug_p)
                 if len(augmenter) and args.repeated_aug <= 1:
                     # args.augs = augmenter.aug_names
                     # generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer,32)
@@ -468,7 +468,7 @@ def remote_fn(config, checkpoint_dir=None):
                 # if args.local_rank == 0:
                 #     torch.distributed.barrier()
         elif args.aug_pipeline and args.repeated_aug>1:
-            augmenter = AutoAugmenter.init_pipeline(w=w, threads=args.thread)
+            augmenter = AutoAugmenter.init_pipeline(w=w, threads=args.thread,aug_p=args.aug_p)
         else:
             pass
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback,

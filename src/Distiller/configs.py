@@ -69,6 +69,7 @@ def parse():
     parser.add_argument("--hard_label_weight", default=0.0, type=float, help="weight of hard label loss")
     parser.add_argument("--soft_label_weight", default=0.0, type=float, help="weight of soft label loss")
     parser.add_argument("--num_reaug", default=3, type=int)
+    parser.add_argument("--aug_p", default=0.3, type=float)
     parser.add_argument("--kd_loss_type", default="ce", choices=["ce", "mse"])
     parser.add_argument("--weight_decay", default=0.1, type=float,
                         help="Weight decay if we apply some.")
