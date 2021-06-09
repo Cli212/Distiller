@@ -24,7 +24,8 @@ hard_label_weight=0.5
 kd_loss_weight=1.0
 task_name=rte
 task_type=glue
-NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_alpha${alpha}_h${hard_label_weight}_k${kd_loss_weight}_${kd_loss_type}
+aug_p=0.3
+NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_alpha${alpha}_h${hard_label_weight}_k${kd_loss_weight}_${kd_loss_type}_${aug_p}
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
 
 gpu_nums=4
@@ -54,6 +55,7 @@ python -m torch.distributed.launch --nproc_per_node=${gpu_nums} --master_port=12
     --max_grad_norm -1.0 \
     --thread 64 \
     --aug_pipeline \
+    --aug_p ${aug_p} \
     --soft_label_weight 1.0 \
     --gradient_accumulation_steps ${accu} \
     --temperature ${temperature} \
