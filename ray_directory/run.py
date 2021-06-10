@@ -16,7 +16,7 @@ from Distiller.utils import Logger, cal_layer_mapping, uploadDirectory, glue_cri
 from Distiller.mp_aug import aug_process
 from Distiller.transformers import AutoConfig, AutoTokenizer
 from Distiller.transformers import AutoModelForSequenceClassification, AutoModelForQuestionAnswering
-from Distiller.textbrewer import DistillationConfig, TrainingConfig, GeneralDistiller, EMDDistiller
+from Distiller.textbrewer import DistillationConfig,TrainingConfig,GeneralDistiller, EMDDistiller
 import queue
 from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
@@ -24,7 +24,6 @@ from Distiller.transformers import AdamW, get_linear_schedule_with_warmup, WEIGH
 from torch.multiprocessing import Queue, Process, set_start_method
 from ray.tune.integration.torch import DistributedTrainableCreator
 from ray.tune.integration.torch import is_distributed_trainable
-
 # from ray.util.sgd.integration.torch import DistributedTrainableCreator
 
 
@@ -46,8 +45,7 @@ def set_seed(args):
 # class CustomDataLoader(DataLoader):
 
 
-def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=None, matches=None,
-          predict_callback=None, q=None, processor=None):
+def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=None, matches=None, predict_callback=None, q=None, processor=None):
     """ Train the model """
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
@@ -56,8 +54,8 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     # train_dataloader = CustomDataLoader(train_dataset, examples, args=args, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn, tokenizer=tokenizer, augmenter=augmenter)
     # train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
     if args.aug_pipeline and args.repeated_aug <= 1:
-        # if args.local_rank not in [-1, 0]:
-        #     torch.distributed.barrier()
+        if args.local_rank not in [-1, 0]:
+            torch.distributed.barrier()
         # else:
         if args.local_rank in [-1, 0]:
             QUEUE_LIMIT = 60
@@ -71,18 +69,13 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                     break
                 except queue.Empty:
                     logger.info("Waiting for data augmentation process to return data")
-            # if args.local_rank == 0:
-            #     torch.distributed.barrier()
-        # if args.local_rank == 0:
-        #     torch.distributed.barrier()
-        else:
-            while True:
-                try:
-                    train_dataset = torch.load(os.path.join(args.output_dir, 'train_dataset.bin'))
-                    break
-                except:
-                    continue
-            # torch.distributed.barrier()
+            if args.local_rank == 0:
+                torch.distributed.barrier()
+        if args.local_rank == 0:
+            torch.distributed.barrier()
+        if args.local_rank not in [-1, 0]:
+            train_dataset = torch.load(os.path.join(args.output_dir, 'train_dataset.bin'))
+            torch.distributed.barrier()
         # train_dataloader = DataProvider(train_dataset, examples, args, tokenizer, augmenter,s_tokenizer,s_dataset)
 
     # else:
@@ -91,12 +84,10 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     # mix_dataloader = DataLoader(train_dataset, sampler=mix_sampler,
     #                             batch_size=args.train_batch_size) if args.mixup else None
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
-    if args.repeated_aug > 1:
+    if args.repeated_aug>1:
         def collate_fn(batch):
             return batch
-
-        train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size,
-                                      collate_fn=collate_fn)
+        train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, collate_fn=collate_fn)
     else:
         train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
 
@@ -130,15 +121,19 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
 
     # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
-        s_model = torch.nn.parallel.DistributedDataParallel(s_model)
-        t_model = torch.nn.parallel.DistributedDataParallel(t_model)
+        s_model = torch.nn.parallel.DistributedDataParallel(s_model, device_ids=[args.local_rank],
+                                                            output_device=args.local_rank,
+                                                            )
+        t_model = torch.nn.parallel.DistributedDataParallel(t_model, device_ids=[args.local_rank],
+                                                            output_device=args.local_rank,
+                                                            )
     actual_batch_size = args.per_gpu_train_batch_size
     num_train_steps = len(train_dataloader) // args.gradient_accumulation_steps * actual_batch_size
     if augmenter:
         actual_batch_size *= 2
     if args.mixup:
         actual_batch_size *= 2
-    if args.local_rank in [-1, 0]:
+    if args.local_rank in [-1,0]:
         # Train!
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_dataset))
@@ -175,7 +170,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                                                                                                     "module") else s_model.config.hidden_size),
                                 256, 32)
             critic.to(args.device)
-            critic_no_decay = ['bias']
+            critic_no_decay=['bias']
             critic_parameters = [
                 {"params": [p for n, p in critic.named_parameters() if not any(nd in n for nd in critic_no_decay)],
                  "weight_decay": args.weight_decay},
@@ -195,11 +190,10 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
             """
             if x == 0.0:
                 return -np.inf
-            elif x == 1.0:
+            elif x==1.0:
                 return np.inf
             else:
                 return -np.log(1 / x - 1.)
-
         args.alpha = sigmoid_reverse(args.alpha)
         if args.intermediate_strategy and args.intermediate_strategy.lower() == "emd":
             distill_config = DistillationConfig(
@@ -251,15 +245,14 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
         else:
             distiller = GeneralDistiller(train_config, distill_config, t_model, s_model, adaptor_T, adaptor_S, )
         with distiller:
-            distiller.train(optimizer, scheduler_class=scheduler_class, scheduler_args=scheduler_args,
-                            dataloader=train_dataloader,
-                            num_epochs=args.num_train_epochs, callback=predict_callback,
-                            max_grad_norm=args.max_grad_norm)
+            distiller.train(optimizer, scheduler_class=scheduler_class, scheduler_args=scheduler_args, dataloader=train_dataloader,
+                            num_epochs=args.num_train_epochs, callback=predict_callback,max_grad_norm=args.max_grad_norm)
             # distiller.train(optimizer,train_dataloader,args.num_train_epochs,
             #                 scheduler_class=scheduler_class, scheduler_args=scheduler_args,
             #                 max_grad_norm=1.0, callback=predict_callback, mixup_value=args.mixup_value,
             #                 mix_dataloader=mix_dataloader, local_rank=args.local_rank)
     return
+
 
 
 def remote_fn(config, checkpoint_dir=None):
@@ -272,7 +265,7 @@ def remote_fn(config, checkpoint_dir=None):
     else:
         logger.info("Can't distributed")
     # Set ray tune hyper parameters
-    w = []
+    w=[]
     # for c in config.items():
     #     if c[0] == 'intermediate_loss_type' and 'mi' in c[1]:
     #         args.__setattr__('intermediate_loss_type', c[1].split('_')[0])
@@ -286,7 +279,7 @@ def remote_fn(config, checkpoint_dir=None):
             args.__setattr__("S_model_name_or_path", model_dict[c[1]])
         elif c[0] == "task_name":
             task_name = c[1]
-            if task_name in ["mnli", "qnli", "qqp"]:
+            if task_name in ["mnli","qnli","qqp"]:
                 args.__setattr__("kd_loss_type", "mse")
             args.__setattr__("task_name", task_name)
             if task_name == 'sst-2':
@@ -300,8 +293,7 @@ def remote_fn(config, checkpoint_dir=None):
                 args.__setattr__("data_dir", "/home/ray/Distillation_QA_benchmark/datasets/glue_data/CoLA")
             else:
                 args.__setattr__("T_model_name_or_path", f"howey/electra-large-{task_name}")
-                args.__setattr__("data_dir",
-                                 f"/home/ray/Distillation_QA_benchmark/datasets/glue_data/{task_name.upper()}")
+                args.__setattr__("data_dir", f"/home/ray/Distillation_QA_benchmark/datasets/glue_data/{task_name.upper()}")
         else:
             raise NotImplementedError
     globals()['best_evaluation'] = 0.0
@@ -311,9 +303,9 @@ def remote_fn(config, checkpoint_dir=None):
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-        # torch.cuda.set_device(args.local_rank)
+        torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", 0)
-        # torch.distributed.init_process_group(backend="nccl")
+        #torch.distributed.init_process_group(backend="nccl")
         args.n_gpu = 1
     args.device = device
     # Setup logging
@@ -413,18 +405,15 @@ def remote_fn(config, checkpoint_dir=None):
             with open(output_eval_file, "a") as writer:
                 writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
             if 'exact' in evaluation_result.keys():
-                tune.report(score=evaluation_result['exact'], exact=evaluation_result['exact'],
-                            f1=evaluation_result['f1'])
+                tune.report(score=evaluation_result['exact'],exact=evaluation_result['exact'], f1=evaluation_result['f1'])
             if 'f1' in evaluation_result.keys():
-                tune.report(score=evaluation_result['acc_and_f1'], f1=evaluation_result['f1'],
-                            accuracy=evaluation_result['acc'])
+                tune.report(score=evaluation_result['acc_and_f1'],f1=evaluation_result['f1'], accuracy=evaluation_result['acc'])
             elif 'acc' in evaluation_result.keys():
                 tune.report(score=evaluation_result['acc'], accuracy=evaluation_result['acc'])
             elif 'mcc' in evaluation_result.keys():
                 tune.report(score=evaluation_result['mcc'], mcc=evaluation_result['mcc'])
             elif 'spearmanr' in evaluation_result.keys():
-                tune.report(score=evaluation_result['spearmanr'], pearson=evaluation_result['pearson'],
-                            corr=evaluation_result['corr'])
+                tune.report(score=evaluation_result['spearmanr'], pearson=evaluation_result['pearson'],corr=evaluation_result['corr'])
             elif 'm_mm_acc' in evaluation_result.keys():
                 tune.report(score=evaluation_result['m_mm_acc'], mnli_acc=evaluation_result['mnli/acc'],
                             mnli_mm_acc=evaluation_result['mnli-mm/acc'])
@@ -470,22 +459,21 @@ def remote_fn(config, checkpoint_dir=None):
                 # torch.distributed.barrier()
                 pass
             else:
-                augmenter = AutoAugmenter.init_pipeline(w=w, threads=args.thread, aug_p=args.aug_p)
+                augmenter = AutoAugmenter.init_pipeline(w=w, threads=args.thread,aug_p=args.aug_p)
                 if len(augmenter) and args.repeated_aug <= 1:
                     # args.augs = augmenter.aug_names
                     # generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer,32)
                     # q.put(augmenter)
                     # process = Process(target=aug_process,
                     #                   args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer))
-                    process = torch.multiprocessing.spawn(aug_process, args=(
-                    q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer), join=False)
+                    process = torch.multiprocessing.spawn(aug_process, args=(q, examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer), join=False)
                     # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
                     # process.start()
                     # process.join()
                 # if args.local_rank == 0:
                 #     torch.distributed.barrier()
-        elif args.aug_pipeline and args.repeated_aug > 1:
-            augmenter = AutoAugmenter.init_pipeline(w=w, threads=args.thread, aug_p=args.aug_p)
+        elif args.aug_pipeline and args.repeated_aug>1:
+            augmenter = AutoAugmenter.init_pipeline(w=w, threads=args.thread,aug_p=args.aug_p)
         else:
             pass
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback,
@@ -561,18 +549,16 @@ def remote_fn(config, checkpoint_dir=None):
                 writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
     return
 
-
 model_dict = {"BERT_BASE": "google/bert_uncased_L-12_H-768_A-12",
               "BERT_MEDIUM": "google/bert_uncased_L-8_H-512_A-8",
-              "TinyBERT6": "huawei-noah/TinyBERT_General_6L_768D",
-              "BERT_SMALL": "google/bert_uncased_L-4_H-512_A-8",
+              "TinyBERT6":"huawei-noah/TinyBERT_General_6L_768D",
+              "BERT_SMALL":"google/bert_uncased_L-4_H-512_A-8",
               "TinyBERT4": "huawei-noah/TinyBERT_General_4L_312D",
               "BERT_MINI": "google/bert_uncased_L-4_H-256_A-4",
-              "BERT_TINY": "google/bert_uncased_L-2_H-128_A-2"}
+              "BERT_TINY":"google/bert_uncased_L-2_H-128_A-2",
+              "ELECTRA_SMALL":"google/electra-small-discriminator"}
 
-glue_list = ["sst-2", "mrpc", "rte", "cola", "qnli", "stsb", "mnli", "qqp"]
-
-
+glue_list = ["sst-2","qnli","stsb","mnli","qqp"]
 def main(args, gpus_per_trial=4):
     w_list = [[0], [1], [2], [0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1], [0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0],
               [2, 0, 1], [2, 1, 0]]
@@ -583,8 +569,8 @@ def main(args, gpus_per_trial=4):
     # }
 
     search_space = {
-        "s_model": tune.choice(list(model_dict.keys())),
-        "task_name": tune.choice(glue_list)
+        "s_model": tune.grid_search(list(model_dict.keys())),
+        "task_name": tune.grid_search(glue_list)
     }
     # search_space = {
     #     "intermediate_strategy": tune.grid_search(["skip", "last"]),
@@ -647,7 +633,7 @@ def main(args, gpus_per_trial=4):
         config=search_space,
         progress_reporter=reporter,
         queue_trials=True)
-    with open('/home/ray/ray_results.json', 'w') as f:
+    with open('/home/ray/ray_results.json','w') as f:
         json.dump(result, f)
     best_trial = result.get_best_trial("score", "max", "last")
     print("Best trial config: {}".format(best_trial.config))
@@ -665,7 +651,6 @@ if __name__ == '__main__':
     ray.init(address='auto', _redis_password='5241590000000000', ignore_reinit_error=True)
     args = parse()
     import time
-
     time.sleep(30)
     # set_start_method('spawn')
     if args.S_model_name_or_path is None:
