@@ -130,12 +130,8 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
 
     # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
-        s_model = torch.nn.parallel.DistributedDataParallel(s_model, device_ids=[args.local_rank],
-                                                            output_device=args.local_rank,
-                                                            )
-        t_model = torch.nn.parallel.DistributedDataParallel(t_model, device_ids=[args.local_rank],
-                                                            output_device=args.local_rank,
-                                                            )
+        s_model = torch.nn.parallel.DistributedDataParallel(s_model)
+        t_model = torch.nn.parallel.DistributedDataParallel(t_model)
     actual_batch_size = args.per_gpu_train_batch_size
     num_train_steps = len(train_dataloader) // args.gradient_accumulation_steps * actual_batch_size
     if augmenter:
