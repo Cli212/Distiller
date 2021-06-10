@@ -255,7 +255,8 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
 def remote_fn(config, checkpoint_dir=None):
     set_start_method('spawn')
     if args.ddp:
-        args.local_rank = int(os.environ['CUDA_VISIBLE_DEVICES'])
+        print(torch.distributed.get_rank())
+        args.local_rank = torch.distributed.get_rank()
     if is_distributed_trainable():
         logger.info("Can distributed")
     else:
@@ -339,6 +340,7 @@ def remote_fn(config, checkpoint_dir=None):
         s_model = model_class.from_pretrained(args.S_model_name_or_path, config=s_config)
     s_model.to(args.device)
     t_model.to(args.device)
+    # if args.local_rank not in [-1, 0]:
     # if args.local_rank not in [-1, 0]:
     #     torch.distributed.barrier()
     # else:
@@ -620,7 +622,7 @@ def main(args, gpus_per_trial=4):
     result = tune.run(
         train_fn,
         resources_per_trial=None if args.ddp else {
-            "cpu": 32,
+            "cpu": 8,
             "gpu": gpus_per_trial
         },
         config=search_space,
