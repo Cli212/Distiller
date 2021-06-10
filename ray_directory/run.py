@@ -281,16 +281,16 @@ def remote_fn(config, checkpoint_dir=None):
             args.__setattr__("task_name", task_name)
             if task_name == 'sst-2':
                 args.__setattr__("T_model_name_or_path", "howey/electra-large-sst2")
-                # args.__setattr__("data_dir", "~/Distillation_QA_benchmark/datasets/glue_data/SST-2")
+                args.__setattr__("data_dir", "~/Distillation_QA_benchmark/datasets/glue_data/SST-2")
             elif task_name == "stsb":
                 args.__setattr__("T_model_name_or_path", "howey/electra-large-stsb")
-                # args.__setattr__("data_dir", "~/Distillation_QA_benchmark/datasets/glue_data/STS-B")
+                args.__setattr__("data_dir", "~/Distillation_QA_benchmark/datasets/glue_data/STS-B")
             elif task_name == "cola":
                 args.__setattr__("T_model_name_or_path", "howey/electra-large-cola")
-                # args.__setattr__("data_dir", "~/Distillation_QA_benchmark/datasets/glue_data/CoLA")
+                args.__setattr__("data_dir", "~/Distillation_QA_benchmark/datasets/glue_data/CoLA")
             else:
                 args.__setattr__("T_model_name_or_path", f"howey/electra-large-{task_name}")
-                # args.__setattr__("data_dir", f"~/Distillation_QA_benchmark/datasets/glue_data/{task_name.upper()}")
+                args.__setattr__("data_dir", f"~/Distillation_QA_benchmark/datasets/glue_data/{task_name.upper()}")
         else:
             raise NotImplementedError
     globals()['best_evaluation'] = 0.0
@@ -300,9 +300,9 @@ def remote_fn(config, checkpoint_dir=None):
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-        # torch.cuda.set_device(args.local_rank)
+        torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", 0)
-        # torch.distributed.init_process_group(backend="nccl")
+        torch.distributed.init_process_group(backend="nccl")
         args.n_gpu = 1
     args.device = device
     # Setup logging
