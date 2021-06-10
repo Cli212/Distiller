@@ -565,7 +565,8 @@ def main(args, gpus_per_trial=4):
     # }
 
     search_space = {
-        "s_model": tune.grid_search(list(model_dict.keys()))
+        "s_model": tune.choice(list(model_dict.keys())),
+        "task_name": tune.choice(glue_list)
     }
     # search_space = {
     #     "intermediate_strategy": tune.grid_search(["skip", "last"]),

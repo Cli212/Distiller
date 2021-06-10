@@ -47,6 +47,7 @@ python run.py \
     --train \
     --eval \
     --fp16 \
+    --ddp \
     --doc_stride 128 \
     --per_gpu_train_batch_size ${batch_size} \
     --seed ${torch_seed} \
