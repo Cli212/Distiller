@@ -121,12 +121,8 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
 
     # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
-        s_model = torch.nn.parallel.DistributedDataParallel(s_model, device_ids=[args.local_rank],
-                                                            output_device=args.local_rank,
-                                                            )
-        t_model = torch.nn.parallel.DistributedDataParallel(t_model, device_ids=[args.local_rank],
-                                                            output_device=args.local_rank,
-                                                            )
+        s_model = torch.nn.parallel.DistributedDataParallel(s_model)
+        t_model = torch.nn.parallel.DistributedDataParallel(t_model)
     actual_batch_size = args.per_gpu_train_batch_size
     num_train_steps = len(train_dataloader) // args.gradient_accumulation_steps * actual_batch_size
     if augmenter:
@@ -307,7 +303,7 @@ def remote_fn(config, checkpoint_dir=None):
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-        torch.cuda.set_device(args.local_rank)
+        #torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", 0)
         #torch.distributed.init_process_group(backend="nccl")
         args.n_gpu = 1
@@ -610,6 +606,7 @@ def main(args, gpus_per_trial=4):
             num_workers=4,
             num_gpus_per_worker=1,
             num_cpus_per_worker=8,
+            num_workers_per_host=4,
             backend="nccl",
         )
     # distributed_remote_fn = DistributedTrainableCreator(
