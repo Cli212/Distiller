@@ -342,12 +342,8 @@ def remote_fn(config, checkpoint_dir=None):
 
     # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
-        s_model = torch.nn.parallel.DistributedDataParallel(s_model, device_ids=[args.local_rank],
-                                                            output_device=args.local_rank,
-                                                            )
-        t_model = torch.nn.parallel.DistributedDataParallel(t_model, device_ids=[args.local_rank],
-                                                            output_device=args.local_rank,
-                                                            )
+        s_model = torch.nn.parallel.DistributedDataParallel(s_model)
+        t_model = torch.nn.parallel.DistributedDataParallel(t_model)
     # if args.local_rank not in [-1, 0]:
     # if args.local_rank not in [-1, 0]:
     #     torch.distributed.barrier()
