@@ -259,6 +259,7 @@ def main(args):
     # Create output directory if needed
     if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
         os.makedirs(args.output_dir)
+    print(os.environ['CUDA_VISIBLE_DEVICES'])
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")

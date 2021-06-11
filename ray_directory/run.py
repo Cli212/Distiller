@@ -564,7 +564,7 @@ model_dict = {"BERT_BASE": "google/bert_uncased_L-12_H-768_A-12",
               "BERT_TINY":"google/bert_uncased_L-2_H-128_A-2",
               "ELECTRA_SMALL":"google/electra-small-discriminator"}
 
-glue_list = ["sst-2","qnli","stsb","mnli","qqp"]
+glue_list = ["rte","mrpc","stsb","cola"]
 def main(args, gpus_per_trial=4):
     w_list = [[0], [1], [2], [0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1], [0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0],
               [2, 0, 1], [2, 1, 0]]
@@ -575,8 +575,11 @@ def main(args, gpus_per_trial=4):
     # }
 
     search_space = {
-        "s_model": tune.choice(list(model_dict.keys())),
-        "task_name": tune.choice(glue_list)
+        "s_model": tune.grid_search(list(model_dict.keys())),
+        "task_name": tune.grid_search(glue_list),
+        "w": tune.grid_search([[0,2]]),
+        "mixup": tune.grid_search([True, False]),
+        "aug_p": tune.grid_search([0.1, 0.3, 0.5])
     }
     # search_space = {
     #     "intermediate_strategy": tune.grid_search(["skip", "last"]),

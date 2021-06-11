@@ -9,7 +9,7 @@ OUTPUT_ROOT_DIR=output-student
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
 accu=2
 ep=20
-lr=5
+lr=10
 alpha=0.9
 #augmenter_config_path=augmenter_config.json
 intermediate_strategy=skip
@@ -21,7 +21,7 @@ batch_size=8
 temperature=1
 length=128
 torch_seed=9580
-hard_label_weight=0.0
+hard_label_weight=0.5
 kd_loss_weight=1.0
 task_name=mnli
 task_type=glue
@@ -47,7 +47,8 @@ python run.py \
     --train \
     --eval \
     --fp16 \
-    --ddp \
+    --aug_pipeline \
+    --soft_label_weight 1.0 \
     --doc_stride 128 \
     --per_gpu_train_batch_size ${batch_size} \
     --seed ${torch_seed} \
