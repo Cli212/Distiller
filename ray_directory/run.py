@@ -114,15 +114,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
     #         raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
     #     s_model, optimizer = amp.initialize(s_model, optimizer, opt_level=args.fp16_opt_level)
 
-    # multi-gpu training (should be after apex fp16 initialization)
-    if args.n_gpu > 1 and args.local_rank == -1:
-        t_model = torch.nn.DataParallel(t_model)
-        s_model = torch.nn.DataParallel(s_model)
 
-    # Distributed training (should be after apex fp16 initialization)
-    if args.local_rank != -1:
-        s_model = torch.nn.parallel.DistributedDataParallel(s_model)
-        t_model = torch.nn.parallel.DistributedDataParallel(t_model)
     actual_batch_size = args.per_gpu_train_batch_size
     num_train_steps = len(train_dataloader) // args.gradient_accumulation_steps * actual_batch_size
     if augmenter:
@@ -343,6 +335,19 @@ def remote_fn(config, checkpoint_dir=None):
         s_model = model_class.from_pretrained(args.S_model_name_or_path, config=s_config)
     s_model.to(args.device)
     t_model.to(args.device)
+    # multi-gpu training (should be after apex fp16 initialization)
+    if args.n_gpu > 1 and args.local_rank == -1:
+        t_model = torch.nn.DataParallel(t_model)
+        s_model = torch.nn.DataParallel(s_model)
+
+    # Distributed training (should be after apex fp16 initialization)
+    if args.local_rank != -1:
+        s_model = torch.nn.parallel.DistributedDataParallel(s_model, device_ids=[args.local_rank],
+                                                            output_device=args.local_rank,
+                                                            )
+        t_model = torch.nn.parallel.DistributedDataParallel(t_model, device_ids=[args.local_rank],
+                                                            output_device=args.local_rank,
+                                                            )
     # if args.local_rank not in [-1, 0]:
     # if args.local_rank not in [-1, 0]:
     #     torch.distributed.barrier()
@@ -476,6 +481,7 @@ def remote_fn(config, checkpoint_dir=None):
             augmenter = AutoAugmenter.init_pipeline(w=w, threads=args.thread,aug_p=args.aug_p)
         else:
             pass
+
         train(args, examples, train_dataset, t_model, s_model, t_tokenizer, augmenter, matches, predict_callback,
               q=q, processor=processor if args.repeated_aug > 1 else None)
         s_tokenizer.save_pretrained(os.path.join(args.output_dir, 'best_model'))
