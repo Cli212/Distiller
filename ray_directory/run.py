@@ -258,12 +258,11 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
 def remote_fn(config, checkpoint_dir=None):
     set_start_method('spawn')
     if args.ddp:
-        print(torch.distributed.get_rank())
         args.local_rank = torch.distributed.get_rank()
     if is_distributed_trainable():
-        logger.info("Can distributed")
+        print("Can distributed")
     else:
-        logger.info("Can't distributed")
+        print("Can't distributed")
     # Set ray tune hyper parameters
     w=[]
     # for c in config.items():
@@ -294,8 +293,13 @@ def remote_fn(config, checkpoint_dir=None):
             else:
                 args.__setattr__("T_model_name_or_path", f"howey/electra-large-{task_name}")
                 args.__setattr__("data_dir", f"/home/ray/Distillation_QA_benchmark/datasets/glue_data/{task_name.upper()}")
+        if c[0] == 'intermediate_loss_type' and 'mi' in c[1]:
+            args.__setattr__('intermediate_loss_type', c[1].split('_')[0])
+            args.__setattr__('alpha', float(c[1].split('_')[1]))
+        elif c[0] == "w":
+            w = c[1]
         else:
-            raise NotImplementedError
+            args.__setattr__(c[0], c[1])
     globals()['best_evaluation'] = 0.0
     # Setup CUDA, GPU & distributed training
     # init_distributed_mode(args)
@@ -456,8 +460,8 @@ def remote_fn(config, checkpoint_dir=None):
         if args.aug_pipeline and args.repeated_aug <= 1:
             q = Queue()
             if args.local_rank not in [-1, 0]:
-                # torch.distributed.barrier()
-                pass
+                torch.distributed.barrier()
+                # pass
             else:
                 augmenter = AutoAugmenter.init_pipeline(w=w, threads=args.thread,aug_p=args.aug_p)
                 if len(augmenter) and args.repeated_aug <= 1:
@@ -470,8 +474,8 @@ def remote_fn(config, checkpoint_dir=None):
                     # train_dataset = generate_aug_data(examples, train_dataset, augmenter, args, t_tokenizer, s_tokenizer)
                     # process.start()
                     # process.join()
-                # if args.local_rank == 0:
-                #     torch.distributed.barrier()
+                if args.local_rank == 0:
+                    torch.distributed.barrier()
         elif args.aug_pipeline and args.repeated_aug>1:
             augmenter = AutoAugmenter.init_pipeline(w=w, threads=args.thread,aug_p=args.aug_p)
         else:
