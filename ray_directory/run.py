@@ -296,7 +296,7 @@ def remote_fn(config, checkpoint_dir=None):
         args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         #torch.cuda.set_device(args.local_rank)
-        device = torch.device("cuda", 0)
+        device = torch.device("cuda", args.local_rank)
         #torch.distributed.init_process_group(backend="nccl")
         args.n_gpu = 1
     args.device = device
@@ -342,8 +342,12 @@ def remote_fn(config, checkpoint_dir=None):
 
     # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
-        s_model = torch.nn.parallel.DistributedDataParallel(s_model)
-        t_model = torch.nn.parallel.DistributedDataParallel(t_model)
+        s_model = torch.nn.parallel.DistributedDataParallel(s_model, device_ids=[args.local_rank],
+                                                            output_device=args.local_rank,
+                                                            )
+        t_model = torch.nn.parallel.DistributedDataParallel(t_model, device_ids=[args.local_rank],
+                                                            output_device=args.local_rank,
+                                                            )
     # if args.local_rank not in [-1, 0]:
     # if args.local_rank not in [-1, 0]:
     #     torch.distributed.barrier()
@@ -571,8 +575,8 @@ def main(args, gpus_per_trial=4):
     # }
 
     search_space = {
-        "s_model": tune.grid_search(list(model_dict.keys())),
-        "task_name": tune.grid_search(glue_list)
+        "s_model": tune.choice(list(model_dict.keys())),
+        "task_name": tune.choice(glue_list)
     }
     # search_space = {
     #     "intermediate_strategy": tune.grid_search(["skip", "last"]),
@@ -654,7 +658,7 @@ if __name__ == '__main__':
     ray.init(address='auto', _redis_password='5241590000000000', ignore_reinit_error=True)
     args = parse()
     import time
-    time.sleep(30)
+    # time.sleep(30)
     # set_start_method('spawn')
     if args.S_model_name_or_path is None:
         args.S_model_name_or_path = args.T_model_name_or_path
