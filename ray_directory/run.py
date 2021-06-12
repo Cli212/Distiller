@@ -292,6 +292,8 @@ def remote_fn(config, checkpoint_dir=None):
             args.__setattr__(c[0], c[1])
     globals()['best_evaluation'] = 0.0
     # Setup CUDA, GPU & distributed training
+    if args.mixup:
+        args.per_gpu_train_batch_size /= 2
     # init_distributed_mode(args)
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
