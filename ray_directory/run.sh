@@ -7,7 +7,7 @@ DATA_ROOT_DIR=~/Distillation_QA_benchmark/datasets/glue_data/MNLI
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
-accu=2
+accu=3
 ep=20
 lr=10
 alpha=0.9
@@ -17,7 +17,7 @@ intermediate_loss_type=mi
 intermediate_features=hidden
 kd_loss_type=mse
 ## if you use mixup or augmenter, then the actual batch size will be batch_size * 2
-batch_size=8
+batch_size=6
 temperature=1
 length=128
 torch_seed=9580
