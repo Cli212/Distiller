@@ -244,6 +244,8 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
 
 
 def remote_fn(config, checkpoint_dir=None):
+    if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
+        os.makedirs(args.output_dir)
     set_start_method('spawn')
     if args.ddp:
         args.local_rank = torch.distributed.get_rank()
