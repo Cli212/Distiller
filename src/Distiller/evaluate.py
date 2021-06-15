@@ -109,7 +109,7 @@ def _squad_evaluate(args, tokenizer, eval_examples, eval_features, all_results, 
         output_null_log_odds_file = None
     all_predictions = write_predictions_squad(tokenizer, eval_examples, eval_features, all_results,
                                                args.n_best_size, args.max_answer_length,
-                                               tokenizer.do_lower_case, output_prediction_file,
+                                               True, output_prediction_file,
                                                output_nbest_file, output_null_log_odds_file,
                                                version_2_with_negative,
                                                args.null_score_diff_threshold, write_prediction=write_prediction)

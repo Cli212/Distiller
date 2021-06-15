@@ -1,12 +1,12 @@
 #set hyperparameters
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
-TEACHER_DIR=howey/electra-large-rte
-STUDENT_DIR=google/bert_uncased_L-4_H-512_A-8
-DATA_ROOT_DIR=../datasets/glue_data/RTE
+TEACHER_DIR=howey/electra-large-mnli
+STUDENT_DIR=bert-base-uncased
+DATA_ROOT_DIR=../datasets/glue_data/MNLI
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
-accu=4
+accu=2
 ep=20
 lr=5
 alpha=0.9
@@ -14,15 +14,15 @@ alpha=0.9
 intermediate_strategy=skip
 intermediate_loss_type=mi
 intermediate_features=hidden
-kd_loss_type=ce
+kd_loss_type=mse
 ## if you use mixup or augmenter, then the actual batch size will be batch_size * 2
-batch_size=4
+batch_size=16
 temperature=1
 length=128
 torch_seed=9580
-hard_label_weight=0.5
+hard_label_weight=0.0
 kd_loss_weight=1.0
-task_name=rte
+task_name=mnli
 task_type=glue
 aug_p=0.3
 NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_alpha${alpha}_h${hard_label_weight}_k${kd_loss_weight}_${kd_loss_type}_${aug_p}
@@ -54,9 +54,6 @@ python -m torch.distributed.launch --nproc_per_node=${gpu_nums} --master_port=12
     --learning_rate ${lr}e-5 \
     --max_grad_norm -1.0 \
     --thread 64 \
-    --aug_pipeline \
-    --aug_p ${aug_p} \
-    --soft_label_weight 1.0 \
     --gradient_accumulation_steps ${accu} \
     --temperature ${temperature} \
     --alpha ${alpha} \
