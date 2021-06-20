@@ -578,18 +578,18 @@ def main(args, gpus_per_trial=4):
     #     "w": tune.grid_search(w_list)
     # }
 
-    search_space = {
-        "s_model": tune.grid_search(list(model_dict.keys())),
-        "task_name": tune.grid_search(glue_list),
-        "w": tune.grid_search([[0,2]]),
-        "mixup": tune.grid_search([True, False]),
-        "aug_p": tune.grid_search([0.1, 0.3, 0.5])
-    }
     # search_space = {
-    #     "intermediate_strategy": tune.grid_search(["skip", "last"]),
-    #     "intermediate_loss_type": tune.grid_search(["ce", "mse", "cos", "pkd","mi_0.1","mi_0.5","mi_0.9"]),
-    #     "kd_loss_type": tune.grid_search(["ce","mse"]),
-    #     "mixup": tune.grid_search([True, False])}
+    #     "s_model": tune.grid_search(list(model_dict.keys())),
+    #     "task_name": tune.grid_search(glue_list),
+    #     "w": tune.grid_search([[0,2]]),
+    #     "mixup": tune.grid_search([True, False]),
+    #     "aug_p": tune.grid_search([0.1, 0.3, 0.5])
+    # }
+    search_space = {
+        "intermediate_strategy": tune.grid_search(["skip", "last"]),
+        "intermediate_loss_type": tune.grid_search(["ce", "mse", "cos", "pkd","mi_0.1","mi_0.5","mi_0.9"]),
+        "kd_loss_type": tune.grid_search(["ce","mse"]),
+        "mixup": tune.grid_search([True, False])}
     # search_space = {
     #     "intermediate_strategy": tune.choice(["skip"]),
     #     "kd_loss_type": tune.choice(["ce", "mse"]),
