@@ -1,20 +1,20 @@
 #set hyperparameters
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
-TEACHER_DIR=howey/electra-large-mnli
-STUDENT_DIR=bert-base-uncased
-DATA_ROOT_DIR=../datasets/glue_data/MNLI
+TEACHER_DIR=csarron/bert-base-uncased-squad-v1
+STUDENT_DIR=huawei-noah/TinyBERT_General_4L_312D
+DATA_ROOT_DIR=../datasets/squadv1
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
 accu=1
-ep=20
+ep=30
 lr=5
 alpha=0.9
 #augmenter_config_path=augmenter_config.json
 intermediate_strategy=skip
 intermediate_loss_type=mi
 intermediate_features=hidden
-kd_loss_type=mse
+kd_loss_type=ce
 ## if you use mixup or augmenter, then the actual batch size will be batch_size * 2
 batch_size=32
 temperature=1

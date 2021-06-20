@@ -21,6 +21,7 @@ def augment_data(iter_sample, augmenter, task_type, max_length=512, tokenizer=No
     if task_type in ['squad', 'squad2']:
         for ii, dd in enumerate(augmenter.augment([i.question_text for i in iter_sample])):
             result[ii].question_text = dd
+
     elif task_type == "glue":
         for ii, dd in enumerate(augmenter.augment([i.text_a for i in iter_sample])):
             result[ii].text_a = dd

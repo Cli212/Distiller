@@ -470,10 +470,14 @@ class BasicDistiller(AbstractDistiller):
         labels = []
         for i in range(self.t_config.repeated_aug - 1):
             tmp_batch = batch.copy()
-            for ii, dd in enumerate(self.t_config.augmenter.augment([i.text_a for i in tmp_batch])):
-                tmp_batch[ii].text_a = dd
+            if hasattr(tmp_batch[0], "text_b") and tmp_batch[0].text_b:
+                for ii, dd in enumerate(self.t_config.augmenter.augment([i.text_a for i in tmp_batch])):
+                    tmp_batch[ii].text_a = dd
             if hasattr(tmp_batch[0], "text_b") and tmp_batch[0].text_b:
                 for ii, dd in enumerate(self.t_config.augmenter.augment([i.text_b for i in tmp_batch])):
+                    tmp_batch[ii].text_b = dd
+            if hasattr(tmp_batch[0],"question_text"):
+                for ii, dd in enumerate(self.t_config.augmenter.augment([i.question_text for i in tmp_batch])):
                     tmp_batch[ii].text_b = dd
             if self.d_config.soft_label_weight > 0.0:
                 labels.extend([int(i.label) for i in tmp_batch])
