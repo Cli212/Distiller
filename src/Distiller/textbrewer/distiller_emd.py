@@ -69,7 +69,21 @@ class EMDDistiller(BasicDistiller):
                 self.projs_group.append(dict())
 
     def train_on_batch(self, batch, args):
-
+        if self.d_config.soft_label_weight>0.0:
+            self.model_T.eval()
+            if self.t_config.task_type == "glue":
+                if self.t_config.task_name != "stsb":
+                    pre_labels = self.model_T(**batch['teacher']).logits.detach().cpu().argmax(dim=-1)
+                else:
+                    pre_labels = self.model_T(**batch['teacher']).logits.detach().cpu()[:,0]
+                batch['student']['labels'] = pre_labels
+            elif self.t_config.task_type in ["squad","squad2"]:
+                pre_outputs = self.model_T(**batch['teacher'])
+                # batch_start_logits = pre_outputs.start_logits.detach().cpu()
+                # batch_end_logits = pre_outputs.end_logits.detach().cpu()
+                batch['student']['start_positions'] = pre_outputs.start_logits.max(dim=-1).indices.detach().cpu()
+                batch['student']['end_positions'] = pre_outputs.end_logits.max(dim=-1).indices.detach().cpu()
+            self.model_T.train()
         (teacher_batch, results_T), (student_batch, results_S) = get_outputs_from_batch(batch, self.t_config.device,
                                                                                         self.model_T, self.model_S,self.local_rank,
                                                                                         args,mixup=self.t_config.mixup,task_type=self.t_config.task_type)
@@ -146,8 +160,17 @@ class EMDDistiller(BasicDistiller):
             for t in range(feature_num_T):
                 f_T = feature_maps_T[t]
                 if loss_type == 'mi':
-                    distance_matrix[s][t + feature_num_S] = distance_matrix[t + feature_num_S][s] = match_loss(f_S, f_T, self.d_config.critic, self.d_config.baseline_fn,
+                    # from .losses import hid_mse_loss
+                    # proj = PROJ_MAP['linear'](f_S.shape[-1], f_T.shape[-1]).to(self.t_config.device)
+                    # f_S = proj(f_S)
+                    # distance_matrix[s][t + feature_num_S] = distance_matrix[t + feature_num_S][s] = hid_mse_loss(f_S,
+                    #                                                                                              f_T,
+                    #                                                                                              mask=inputs_mask_S)
+                    # m_l = match_loss(f_S, f_T, self.d_config.critic[s*feature_num_T+t], self.d_config.baseline_fn[s*feature_num_T+t],
+                    #                                self.d_config.alpha)
+                    distance_matrix[s][t + feature_num_S] = distance_matrix[t + feature_num_S][s] = 10+match_loss(f_S, f_T, self.d_config.critic[s*feature_num_T+t], self.d_config.baseline_fn[s*feature_num_T+t],
                                                    self.d_config.alpha)
+
                 else:
                     distance_matrix[s][t + feature_num_S] = distance_matrix[t + feature_num_S][s] = match_loss(f_S, f_T,
                                                                                                            mask=inputs_mask_S)
@@ -183,20 +206,17 @@ class EMDDistiller(BasicDistiller):
 
         # embedding matching
         if loss_type == 'mi':
-            embedding_loss = match_loss(embeddings_S, embeddings_T, self.d_config.critic, self.d_config.baseline_fn, self.d_config.alpha)
+            # from .losses import hid_mse_loss
+            # proj = PROJ_MAP['linear'](embeddings_S.shape[-1], embeddings_T.shape[-1]).to(self.t_config.device)
+            # embeddings_S = proj(embeddings_S)
+            # embedding_loss = hid_mse_loss(embeddings_S, embeddings_T, mask=inputs_mask_S)
+            embedding_loss = match_loss(embeddings_S, embeddings_T, self.d_config.critic[-1], self.d_config.baseline_fn[-1],
+                                        self.d_config.alpha)
+
         else:
             embedding_loss = match_loss(embeddings_S, embeddings_T, mask=inputs_mask_S)
-        # embedding_loss = match_loss(embeddings_S, embeddings_T, mask=inputs_mask_S)
         total_loss += embedding_loss * emd_loss_weight  # sharing the same weight
         losses_dict[f'unweighted_embedding_{loss_type}'] = embedding_loss
-
-        if 'losses' in results_S:
-            total_hl_loss = 0
-            for loss in results_S['losses']:
-                # in case of multi-GPU
-                total_hl_loss += loss.mean()
-            total_loss += total_hl_loss * self.d_config.hard_label_weight
-            losses_dict['unweighted_hard_label_loss'] = total_hl_loss
         if 'loss' in results_S:
             total_hl_loss = 0
             if results_S['loss'].shape == torch.Size([]):

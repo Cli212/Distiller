@@ -138,37 +138,115 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
         baseline_fn = None
         if args.intermediate_loss_type == 'mi':
             from Distiller.utils import mlp_critic
-            # baseline_fn = mlp_critic(t_model.module.config.hidden_size if hasattr(t_model,
-            #                                               "module") else t_model.config.hidden_size, hidden_size=64, out_dim=1)
-            baseline_fn = mlp_critic(
-                t_model.module.config.hidden_size if hasattr(t_model, "module") else t_model.config.hidden_size,
-                hidden_size=128, out_dim=1)
-            # for name, param in baseline_fn.named_parameters():
-            #     if 'weight' in name:
-            #         torch.nn.init.xavier_uniform(param)
-            #     elif 'bias' in name:
-            #         torch.nn.init.constant_(param, 0)
-            baseline_fn.to(args.device)
-            # critic = mlp_critic(t_model.module.config.hidden_size if hasattr(t_model,
-            #                                               "module") else t_model.config.hidden_size, s_model.module.config.hidden_size if hasattr(s_model,
-            #                                               "module") else s_model.config.hidden_size, 128, 32)
-            critic = mlp_critic(
-                t_model.module.config.hidden_size if hasattr(t_model, "module") else t_model.config.hidden_size,
-                s_model.module.config.hidden_size if hasattr(s_model, "module") else s_model.config.hidden_size,
-                256, 32)
-            critic.to(args.device)
-            critic_no_decay=['bias']
-            critic_parameters = [
-                {"params": [p for n, p in critic.named_parameters() if not any(nd in n for nd in critic_no_decay)],
-                 "weight_decay": args.weight_decay},
-                {"params": [p for n, p in critic.named_parameters() if any(nd in n for nd in critic_no_decay)],
-                 "weight_decay": 0.0},
-                {"params": [p for n, p in baseline_fn.named_parameters() if not any(nd in n for nd in critic_no_decay)],
-                 "weight_decay": args.weight_decay},
-                {"params": [p for n, p in baseline_fn.named_parameters() if any(nd in n for nd in critic_no_decay)],
-                 "weight_decay": 0.0}
-            ]
-            optimizer_grouped_parameters.extend(critic_parameters)
+            if args.intermediate_strategy == "emd":
+                t_layer = t_model.module.config.num_hidden_layers if hasattr(t_model.module.config,
+                                                                             "num_hidden_layers") else t_model.module.config.num_hidden_layers
+                s_layer = s_model.module.config.num_hidden_layers if hasattr(s_model.module.config,
+                                                                             "num_hidden_layers") else s_model.module.config.num_hidden_layers
+                critic_all = []
+                baseline_fn_all = []
+                for t in range(s_layer):
+                    for s in range(t_layer):
+                        baseline_fn = mlp_critic(t_model.module.config.hidden_size if hasattr(t_model,
+                                                                                              "module") else t_model.config.hidden_size,
+                                                 hidden_size=64, out_dim=1)
+                        baseline_fn.to(args.device)
+                        critic = mlp_critic(t_model.module.config.hidden_size if hasattr(t_model,
+                                                                                         "module") else t_model.config.hidden_size,
+                                            s_model.module.config.hidden_size if hasattr(s_model,
+                                                                                         "module") else s_model.config.hidden_size,
+                                            64, 32)
+                        critic.to(args.device)
+                        critic_no_decay = ['bias']
+                        critic_parameters = [
+                            {"params": [p for n, p in critic.named_parameters() if
+                                        not any(nd in n for nd in critic_no_decay)],
+                             "weight_decay": args.weight_decay},
+                            {"params": [p for n, p in critic.named_parameters() if
+                                        any(nd in n for nd in critic_no_decay)],
+                             "weight_decay": 0.0},
+                            {"params": [p for n, p in baseline_fn.named_parameters() if
+                                        not any(nd in n for nd in critic_no_decay)],
+                             "weight_decay": args.weight_decay},
+                            {"params": [p for n, p in baseline_fn.named_parameters() if
+                                        any(nd in n for nd in critic_no_decay)],
+                             "weight_decay": 0.0}
+                        ]
+                        optimizer_grouped_parameters.extend(critic_parameters)
+                        critic_all.append(critic)
+                        baseline_fn_all.append(baseline_fn)
+                if hasattr(t_model, "module"):
+                    t_emb_size = t_model.module.config.emb_size if hasattr(t_model.module.config,
+                                                                           "emb_size") else t_model.module.config.hidden_size
+                else:
+                    t_emb_size = t_model.config.emb_size if hasattr(t_model.config,
+                                                                    "emb_size") else t_model.config.hidden_size
+
+                if hasattr(s_model, "module"):
+                    s_emb_size = s_model.module.config.emb_size if hasattr(s_model.module.config,
+                                                                           "emb_size") else s_model.module.config.hidden_size
+                else:
+                    s_emb_size = s_model.config.emb_size if hasattr(s_model.config,
+                                                                    "emb_size") else s_model.config.hidden_size
+                baseline_fn_emb = mlp_critic(
+                    t_emb_size,
+                    hidden_size=128, out_dim=1)
+                # for name, param in baseline_fn.named_parameters():
+                #     if 'weight' in name:
+                #         torch.nn.init.xavier_uniform(param)
+                #     elif 'bias' in name:
+                #         torch.nn.init.constant_(param, 0)
+                baseline_fn_emb.to(args.device)
+                # critic = mlp_critic(args.max_seq_length * (t_model.module.config.hidden_size if hasattr(t_model,
+                #                                               "module") else t_model.config.hidden_size), args.max_seq_length* (s_model.module.config.hidden_size if hasattr(s_model,
+                #                                               "module") else s_model.config.hidden_size), 256, 32)
+                critic_emb = mlp_critic(
+                    t_emb_size,
+                    s_emb_size,
+                    128, 64)
+                critic_emb.to(args.device)
+                critic_no_decay = ['bias']
+                critic_parameters = [
+                    {"params": [p for n, p in critic_emb.named_parameters() if
+                                not any(nd in n for nd in critic_no_decay)],
+                     "weight_decay": args.weight_decay},
+                    {"params": [p for n, p in critic_emb.named_parameters() if any(nd in n for nd in critic_no_decay)],
+                     "weight_decay": 0.0},
+                    {"params": [p for n, p in baseline_fn_emb.named_parameters() if
+                                not any(nd in n for nd in critic_no_decay)],
+                     "weight_decay": args.weight_decay},
+                    {"params": [p for n, p in baseline_fn_emb.named_parameters() if
+                                any(nd in n for nd in critic_no_decay)],
+                     "weight_decay": 0.0}
+                ]
+                optimizer_grouped_parameters.extend(critic_parameters)
+                critic_all.append(critic_emb)
+                baseline_fn_all.append(baseline_fn_emb)
+                critic = critic_all
+                baseline_fn = baseline_fn_all
+            else:
+                baseline_fn = mlp_critic(
+                    t_model.module.config.hidden_size if hasattr(t_model, "module") else t_model.config.hidden_size,
+                    hidden_size=128, out_dim=1)
+                baseline_fn.to(args.device)
+                critic = mlp_critic(
+                    t_model.module.config.hidden_size if hasattr(t_model, "module") else t_model.config.hidden_size,
+                    s_model.module.config.hidden_size if hasattr(s_model, "module") else s_model.config.hidden_size,
+                    128, 64)
+                critic.to(args.device)
+                critic_no_decay = ['bias']
+                critic_parameters = [
+                    {"params": [p for n, p in critic.named_parameters() if not any(nd in n for nd in critic_no_decay)],
+                     "weight_decay": args.weight_decay},
+                    {"params": [p for n, p in critic.named_parameters() if any(nd in n for nd in critic_no_decay)],
+                     "weight_decay": 0.0},
+                    {"params": [p for n, p in baseline_fn.named_parameters() if
+                                not any(nd in n for nd in critic_no_decay)],
+                     "weight_decay": args.weight_decay},
+                    {"params": [p for n, p in baseline_fn.named_parameters() if any(nd in n for nd in critic_no_decay)],
+                     "weight_decay": 0.0}
+                ]
+                optimizer_grouped_parameters.extend(critic_parameters)
         optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
 
         def sigmoid_reverse(x):
@@ -267,20 +345,18 @@ def remote_fn(config, checkpoint_dir=None):
             args.__setattr__("S_model_name_or_path", model_dict[c[1]])
         elif c[0] == "task_name":
             task_name = c[1]
-            if task_name in ["mnli","qnli","qqp"]:
-                args.__setattr__("kd_loss_type", "mse")
             args.__setattr__("task_name", task_name)
             if task_name == 'sst-2':
-                args.__setattr__("T_model_name_or_path", "howey/electra-large-sst2")
+                args.__setattr__("T_model_name_or_path", "howey/bert-base-uncased-sst2")
                 args.__setattr__("data_dir", "/home/ray/Distillation_QA_benchmark/datasets/glue_data/SST-2")
             elif task_name == "stsb":
-                args.__setattr__("T_model_name_or_path", "howey/electra-large-stsb")
+                args.__setattr__("T_model_name_or_path", "howey/bert-base-uncased-stsb")
                 args.__setattr__("data_dir", "/home/ray/Distillation_QA_benchmark/datasets/glue_data/STS-B")
             elif task_name == "cola":
-                args.__setattr__("T_model_name_or_path", "howey/electra-large-cola")
+                args.__setattr__("T_model_name_or_path", "howey/bert-base-uncased-cola")
                 args.__setattr__("data_dir", "/home/ray/Distillation_QA_benchmark/datasets/glue_data/CoLA")
             else:
-                args.__setattr__("T_model_name_or_path", f"howey/electra-large-{task_name}")
+                args.__setattr__("T_model_name_or_path", f"howey/bert-base-uncased-{task_name}")
                 args.__setattr__("data_dir", f"/home/ray/Distillation_QA_benchmark/datasets/glue_data/{task_name.upper()}")
         if c[0] == 'intermediate_loss_type' and 'mi' in c[1]:
             args.__setattr__('intermediate_loss_type', c[1].split('_')[0])
@@ -567,7 +643,7 @@ model_dict = {"BERT_BASE": "google/bert_uncased_L-12_H-768_A-12",
               "BERT_TINY":"google/bert_uncased_L-2_H-128_A-2",
               "ELECTRA_SMALL":"google/electra-small-discriminator"}
 
-glue_list = ["rte","mrpc","stsb","cola"]
+glue_list = ["rte","mrpc","stsb","cola","qnli","sst-2","mnli","qqp"]
 def main(args, gpus_per_trial=4):
     w_list = [[0], [1], [2], [0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1], [0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0],
               [2, 0, 1], [2, 1, 0]]
@@ -585,9 +661,9 @@ def main(args, gpus_per_trial=4):
     #     "aug_p": tune.grid_search([0.1, 0.3, 0.5])
     # }
     search_space = {
-        "intermediate_strategy": tune.grid_search(["skip", "last"]),
-        "intermediate_loss_type": tune.grid_search(["ce", "mse", "cos", "pkd","mi_0.1","mi_0.5","mi_0.9"]),
+        "intermediate_loss_type": tune.grid_search(["mse", "mi_0.1","mi_0.5","mi_0.9"]),
         "kd_loss_type": tune.grid_search(["ce","mse"]),
+        "task_name": tune.grid_search(glue_list),
         "mixup": tune.grid_search([True, False])}
     # search_space = {
     #     "intermediate_strategy": tune.choice(["skip"]),

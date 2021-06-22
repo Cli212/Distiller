@@ -1,7 +1,6 @@
 
 from .distiller_utils import *
 from .distiller_basic import BasicDistiller
-from .emd import transformer_loss
 
 
 def cross_entropy(input, target):

@@ -257,17 +257,6 @@ class BasicDistiller(AbstractDistiller):
             logger.info(f"Length of current epoch in forward batch: {len(dataloader)}")
             for step, batch in tqdm(enumerate(dataloader), disable=tqdm_disable):
                 if self.t_config.repeated_aug > 1:
-                    # if self.local_rank not in [-1,0]:
-                    #     torch.distributed.barrier()
-                    # else:
-                    #     batch = augment_data(batch, self.t_config.augmenter, self.t_config.repeated_aug)
-                    #     features, s_features = self.t_config.processor.convert_examples_to_features(batch, disable=True)
-                    #     batch = self.t_config.processor.convert_features_to_bacth(features, s_features)
-                    #     torch.save(batch,'batch.bin')
-                    #     if self.local_rank == 0:
-                    #         torch.distributed.barrier()
-                    # if self.local_rank not in [-1,0]:
-                    #     batch = torch.load('batch.bin')
                     batch = self.augment_data(batch)
                     features, s_features = self.t_config.processor.convert_examples_to_features(batch, disable=True)
                     batch = self.t_config.processor.convert_features_to_bacth(features, s_features)
