@@ -38,7 +38,7 @@ setup(
         'sentencepiece',
         "fastBPE",
         "boto3",
-        "nlpaug",
+        "nlpaug==1.1.3",
         "transformers==4.3.2",
     ],
 

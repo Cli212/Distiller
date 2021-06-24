@@ -37,7 +37,7 @@ class AutoAugmenter:
         config_list = [{
           "aug_type": "contextual",
           "model_type": "distilbert",
-          "top_k": 50,
+          "top_p": 0.8,
           "aug_p": aug_p,
           "device": "cuda:3"
             },{
