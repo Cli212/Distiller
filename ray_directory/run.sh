@@ -7,17 +7,17 @@ DATA_ROOT_DIR=~/Distillation_QA_benchmark/datasets/glue_data/CoLA
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
-accu=1
+accu=4
 ep=20
 lr=5
 alpha=0.9
 #augmenter_config_path=augmenter_config.json
-intermediate_strategy=emd
+intermediate_strategy=skip
 intermediate_loss_type=mi
 intermediate_features=hidden
-kd_loss_type=mse
+kd_loss_type=ce
 ## if you use mixup or augmenter, then the actual batch size will be batch_size * 2
-batch_size=32
+batch_size=4
 temperature=1
 length=128
 torch_seed=9580
@@ -57,6 +57,8 @@ python run.py \
     --gradient_accumulation_steps ${accu} \
     --temperature ${temperature} \
     --alpha ${alpha} \
+    --aug_pipeline \
+    --soft_label_weight 1.0 \
     --hard_label_weight ${hard_label_weight} \
     --kd_loss_weight ${kd_loss_weight} \
     --kd_loss_type ${kd_loss_type}

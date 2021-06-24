@@ -347,16 +347,16 @@ def remote_fn(config, checkpoint_dir=None):
             task_name = c[1]
             args.__setattr__("task_name", task_name)
             if task_name == 'sst-2':
-                args.__setattr__("T_model_name_or_path", "howey/bert-base-uncased-sst2")
+                args.__setattr__("T_model_name_or_path", "howey/roberta-large-sst2")
                 args.__setattr__("data_dir", "/home/ray/Distillation_QA_benchmark/datasets/glue_data/SST-2")
             elif task_name == "stsb":
-                args.__setattr__("T_model_name_or_path", "howey/bert-base-uncased-stsb")
+                args.__setattr__("T_model_name_or_path", "howey/roberta-large-stsb")
                 args.__setattr__("data_dir", "/home/ray/Distillation_QA_benchmark/datasets/glue_data/STS-B")
             elif task_name == "cola":
-                args.__setattr__("T_model_name_or_path", "howey/bert-base-uncased-cola")
+                args.__setattr__("T_model_name_or_path", "howey/roberta-large-cola")
                 args.__setattr__("data_dir", "/home/ray/Distillation_QA_benchmark/datasets/glue_data/CoLA")
             else:
-                args.__setattr__("T_model_name_or_path", f"howey/bert-base-uncased-{task_name}")
+                args.__setattr__("T_model_name_or_path", f"howey/roberta-large-{task_name}")
                 args.__setattr__("data_dir", f"/home/ray/Distillation_QA_benchmark/datasets/glue_data/{task_name.upper()}")
         if c[0] == 'intermediate_loss_type' and 'mi' in c[1]:
             args.__setattr__('intermediate_loss_type', c[1].split('_')[0])
@@ -653,18 +653,17 @@ def main(args, gpus_per_trial=4):
     #     "w": tune.grid_search(w_list)
     # }
 
-    # search_space = {
-    #     "s_model": tune.grid_search(list(model_dict.keys())),
-    #     "task_name": tune.grid_search(glue_list),
-    #     "w": tune.grid_search([[0,2]]),
-    #     "mixup": tune.grid_search([True, False]),
-    #     "aug_p": tune.grid_search([0.1, 0.3, 0.5])
-    # }
     search_space = {
-        "intermediate_loss_type": tune.grid_search(["mse", "mi_0.1","mi_0.5","mi_0.9"]),
-        "kd_loss_type": tune.grid_search(["ce","mse"]),
-        "task_name": tune.grid_search(glue_list),
-        "mixup": tune.grid_search([True, False])}
+        "s_model": tune.grid_search(list(model_dict.keys())),
+        "task_name": tune.grid_search(glue_list[1:3]),
+        "w": tune.grid_search([[0,2]]),
+        "mixup": tune.grid_search([True, False])
+    }
+    # search_space = {
+    #     "intermediate_loss_type": tune.grid_search(["mse", "mi_0.1","mi_0.5","mi_0.9"]),
+    #     "kd_loss_type": tune.grid_search(["ce","mse"]),
+    #     "task_name": tune.grid_search(glue_list),
+    #     "mixup": tune.grid_search([True, False])}
     # search_space = {
     #     "intermediate_strategy": tune.choice(["skip"]),
     #     "kd_loss_type": tune.choice(["ce", "mse"]),
