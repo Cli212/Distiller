@@ -6,7 +6,6 @@ import numpy as np
 import argparse
 from Distiller.glue_preprocess import load_and_cache_examples, glue_compute_metrics
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoConfig, AdamW
-from transformers import InputExample, InputFeatures
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
@@ -21,7 +20,7 @@ def eval(args, model, tokenizer):
     preds = []
     label_list = []
     model.eval()
-    for step, batch in enumerate(eval_dataloader):
+    for batch in tqdm(eval_dataloader):
 
         # labels = batch['labels']
         # batch = tuple(t.to(args.device) for t in batch)
@@ -36,7 +35,7 @@ def eval(args, model, tokenizer):
             predictions = predictions[:, 0]
         label_list.extend(batch['labels'].cpu().tolist())
         preds.extend(predictions.tolist())
-
+    model.train()
     # eval_metric_compute = metric.compute()
     eval_metric = glue_compute_metrics(args.task_name, np.array(preds), np.array(label_list))
     print(f"Eval result: {eval_metric}")
@@ -44,6 +43,7 @@ def eval(args, model, tokenizer):
 
 
 def main(args):
+    best_result = 0.0
     if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
         os.makedirs(args.output_dir)
     # Setup CUDA, GPU & distributed training
@@ -57,6 +57,7 @@ def main(args):
         args.n_gpu = 1
     args.device = device
     config = AutoConfig.from_pretrained(args.model_path)
+    config.num_labels = 1
     model = AutoModelForSequenceClassification.from_pretrained(args.model_path, config=config)
     tokenizer = AutoTokenizer.from_pretrained(args.model_path,use_fast=False,
                                                 config=config)
@@ -71,7 +72,7 @@ def main(args):
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     model.to(args.device)
-
+    optimizer.zero_grad()
 
     for i in range(args.epoch):
         print(f"Epoch {i+1}")
@@ -81,20 +82,33 @@ def main(args):
             loss = outputs.loss
             loss.backward()
             optimizer.step()
+            optimizer.zero_grad()
         eval_result = eval(args, model, tokenizer)
+        if eval_result['acc'] > best_result:
+            best_result = eval_result['acc']
+            model_to_save = model.module if hasattr(model,
+                                                    "module") else model  # Take care of distributed/parallel training
+            model_to_save.save_pretrained(args.output_dir)
+            if tokenizer:
+                tokenizer.save_pretrained(args.output_dir)
+            torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
+            with open(os.path.join(args.output_dir, "training_args.json"), 'w') as f:
+                arg_dict = vars(args)
+                arg_dict['device'] = str(arg_dict['device'])
+                json.dump(arg_dict, f)
 
 
 
-    model_to_save = model.module if hasattr(model,
-                                              "module") else model  # Take care of distributed/parallel training
-    model_to_save.save_pretrained(args.output_dir)
-    if tokenizer:
-        tokenizer.save_pretrained(args.output_dir)
-    torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
-    with open(os.path.join(args.output_dir, "training_args.json"), 'w') as f:
-        arg_dict = vars(args)
-        arg_dict['device'] = str(arg_dict['device'])
-        json.dump(arg_dict, f)
+    # model_to_save = model.module if hasattr(model,
+    #                                           "module") else model  # Take care of distributed/parallel training
+    # model_to_save.save_pretrained(args.output_dir)
+    # if tokenizer:
+    #     tokenizer.save_pretrained(args.output_dir)
+    # torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
+    # with open(os.path.join(args.output_dir, "training_args.json"), 'w') as f:
+    #     arg_dict = vars(args)
+    #     arg_dict['device'] = str(arg_dict['device'])
+    #     json.dump(arg_dict, f)
 
 
 
@@ -107,14 +121,15 @@ if __name__ == "__main__":
     parser.add_argument("--model_path", required=True)
     parser.add_argument("--output_dir", default="finetuned_kaggle/")
     parser.add_argument("--data_dir", required=True)
-    parser.add_argument("--max_seq_length", default=128)
+    parser.add_argument("--max_seq_length", default=256)
     parser.add_argument("--epoch", default=5)
     parser.add_argument("--local_rank", default=-1)
     parser.add_argument("--task_name",default="kaggle")
     parser.add_argument("--overwrite_cache",default=False)
-    parser.add_argument("--learning_rate",default=3e-5)
+    parser.add_argument("--learning_rate",default=5e-5)
     parser.add_argument("--adam_epsilon",default=1e-8)
-    parser.add_argument("--train_batch_size", default=32)
+    parser.add_argument("--train_batch_size", default=16, type=int)
+    parser.add_argument("--eval_batch_size", default=64, type=int)
     parser.add_argument("--weight_decay", default=0.1, type=float,
                         help="Weight decay if we apply some.")
     args = parser.parse_args()

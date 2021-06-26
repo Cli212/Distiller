@@ -794,7 +794,7 @@ class KaggleProcessor(DataProcessor):
 
     def get_labels(self):
         """See base class."""
-        return [None]
+        return ["0", "1", "2", "3"]
 
     def _create_examples(self, df, set_type):
         """Creates examples for the training, dev and test sets."""
@@ -803,7 +803,7 @@ class KaggleProcessor(DataProcessor):
         text_a = df["Product_Description"].values.tolist()
         ids = df["Text_ID"].values.tolist()
         for i in range(df.shape[0]):
-            label = None if set_type == "test" else df.loc[i, "Sentiment"]
+            label = None if set_type == "test" else str(df.loc[i, "Sentiment"])
             examples.append(InputExample(guid=f"{set_type}-{ids[i]}", text_a=text_a[i], text_b=None, label=label))
         return examples
 class StsbProcessor(DataProcessor):
@@ -1047,7 +1047,7 @@ glue_tasks_num_labels = {
     "qnli": 2,
     "rte": 2,
     "wnli": 2,
-    "kaggle": 1,
+    "kaggle": 4,
 }
 
 glue_processors = {
@@ -1076,7 +1076,7 @@ glue_output_modes = {
     "qnli": "classification",
     "rte": "classification",
     "wnli": "classification",
-    "kaggle": "regression"
+    "kaggle": "classification"
 }
 
 
@@ -1129,6 +1129,6 @@ def glue_compute_metrics(task_name, preds, labels):
     elif task_name == "hans":
         return {"acc": simple_accuracy(preds, labels)}
     elif task_name == "kaggle":
-        return pearson_and_spearman(preds, labels)
+        return simple_accuracy(preds, labels)
     else:
         raise KeyError(task_name)

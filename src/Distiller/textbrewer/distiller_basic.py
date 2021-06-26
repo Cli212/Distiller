@@ -488,7 +488,7 @@ class BasicDistiller(AbstractDistiller):
                       for key, value in inputs.items()}
             outputs = self.model_T(**inputs, labels=labels)
             predictions = outputs.logits.detach().cpu()
-            if finetuning_task not in ["stsb","kaggle"]:
+            if finetuning_task != "stsb":
                 predictions = predictions.argmax(dim=-1)
             else:
                 predictions = predictions[:, 0]
