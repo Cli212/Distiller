@@ -764,8 +764,48 @@ class Sst2Processor(DataProcessor):
             label = None if set_type == "test" else line[1]
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
         return examples
+import pandas as pd
+class KaggleProcessor(DataProcessor):
+    """Processor for the kaggle sentiment classification data set (https://www.kaggle.com/akash14/product-sentiment-classification)."""
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
+    def get_example_from_tensor_dict(self, tensor_dict):
+        """See base class."""
+        return InputExample(
+            tensor_dict["idx"].numpy(),
+            tensor_dict["sentence1"].numpy().decode("utf-8"),
+            tensor_dict["sentence2"].numpy().decode("utf-8"),
+            str(tensor_dict["label"].numpy()),
+        )
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(pd.read_csv(os.path.join(data_dir, "Train.csv")), "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(pd.read_csv(os.path.join(data_dir, "Dev.csv")), "dev")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(pd.read_csv(os.path.join(data_dir, "Test.csv")), "test")
+
+    def get_labels(self):
+        """See base class."""
+        return [None]
+
+    def _create_examples(self, df, set_type):
+        """Creates examples for the training, dev and test sets."""
+        examples = []
+        df["Product_Description"] = "Product type is " + df["Product_Type"].astype(str) + "." + df["Product_Description"]
+        text_a = df["Product_Description"].values.tolist()
+        ids = df["Text_ID"].values.tolist()
+        for i in range(df.shape[0]):
+            label = None if set_type == "test" else df.loc[i, "Sentiment"]
+            examples.append(InputExample(guid=f"{set_type}-{ids[i]}", text_a=text_a[i], text_b=None, label=label))
+        return examples
 class StsbProcessor(DataProcessor):
     """Processor for the STS-B data set (GLUE version)."""
 
@@ -1007,6 +1047,7 @@ glue_tasks_num_labels = {
     "qnli": 2,
     "rte": 2,
     "wnli": 2,
+    "kaggle": 1,
 }
 
 glue_processors = {
@@ -1020,7 +1061,9 @@ glue_processors = {
     "qnli": QnliProcessor,
     "rte": RteProcessor,
     "wnli": WnliProcessor,
+    'kaggle': KaggleProcessor
 }
+
 
 glue_output_modes = {
     "cola": "classification",
@@ -1033,6 +1076,7 @@ glue_output_modes = {
     "qnli": "classification",
     "rte": "classification",
     "wnli": "classification",
+    "kaggle": "regression"
 }
 
 
@@ -1084,5 +1128,7 @@ def glue_compute_metrics(task_name, preds, labels):
         return {"acc": simple_accuracy(preds, labels)}
     elif task_name == "hans":
         return {"acc": simple_accuracy(preds, labels)}
+    elif task_name == "kaggle":
+        return pearson_and_spearman(preds, labels)
     else:
         raise KeyError(task_name)
