@@ -72,7 +72,7 @@ class EMDDistiller(BasicDistiller):
         if self.d_config.soft_label_weight>0.0:
             self.model_T.eval()
             if self.t_config.task_type == "glue":
-                if self.t_config.task_name != "stsb":
+                if self.t_config.task_name not in ["stsb","kaggle"]:
                     pre_labels = self.model_T(**batch['teacher']).logits.detach().cpu().argmax(dim=-1)
                 else:
                     pre_labels = self.model_T(**batch['teacher']).logits.detach().cpu()[:,0]

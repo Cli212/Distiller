@@ -1,0 +1,8 @@
+2021-06-26 18:21:45,338 - /Users/haoyuhe/Documents/code/Distillation_QA_benchmark/src/Distiller/glue_preprocess.py[line:421] - INFO: Creating features from dataset file at datasets/kaggle
+2021-06-26 18:21:45,338 - /Users/haoyuhe/Documents/code/Distillation_QA_benchmark/src/Distiller/glue_preprocess.py[line:421] - INFO: Creating features from dataset file at datasets/kaggle
+2021-06-26 18:21:48,562 - /Users/haoyuhe/Documents/code/Distillation_QA_benchmark/src/Distiller/glue_preprocess.py[line:425] - INFO: Saving features into cached file datasets/kaggle/cached_train_kaggle_bert-base-uncased_128
+2021-06-26 18:21:48,562 - /Users/haoyuhe/Documents/code/Distillation_QA_benchmark/src/Distiller/glue_preprocess.py[line:425] - INFO: Saving features into cached file datasets/kaggle/cached_train_kaggle_bert-base-uncased_128
+2021-06-26 18:22:28,385 - /Users/haoyuhe/Documents/code/Distillation_QA_benchmark/src/Distiller/glue_preprocess.py[line:417] - INFO: Loading features from cached file datasets/kaggle/cached_train_kaggle_bert-base-uncased_128
+2021-06-26 18:22:28,385 - /Users/haoyuhe/Documents/code/Distillation_QA_benchmark/src/Distiller/glue_preprocess.py[line:417] - INFO: Loading features from cached file datasets/kaggle/cached_train_kaggle_bert-base-uncased_128
+2021-06-26 18:23:19,098 - /Users/haoyuhe/Documents/code/Distillation_QA_benchmark/src/Distiller/glue_preprocess.py[line:417] - INFO: Loading features from cached file datasets/kaggle/cached_train_kaggle_bert-base-uncased_128
+2021-06-26 18:23:19,098 - /Users/haoyuhe/Documents/code/Distillation_QA_benchmark/src/Distiller/glue_preprocess.py[line:417] - INFO: Loading features from cached file datasets/kaggle/cached_train_kaggle_bert-base-uncased_128

@@ -44,7 +44,7 @@ def augment_data(iter_sample, augmenter, task_type, max_length=512, tokenizer=No
                 with torch.no_grad():
                     outputs = model(**inputs, labels=labels)
                 predictions = outputs.logits.detach().cpu()
-                if model.config.finetuning_task != "stsb":
+                if model.config.finetuning_task not in ["stsb","kaggle"]:
                     predictions = predictions.argmax(dim=-1)
                 else:
                     predictions = predictions[:, 0]
