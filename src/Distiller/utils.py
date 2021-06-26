@@ -638,5 +638,6 @@ def glue_criterion(task_name):
             'qnli':['acc'],
             'rte':['acc'],
             'wnli':['acc'],
+            'kaggle':['acc'],
             'squad':['exact','f1'],
             'squad2':['exact','f1']}[task_name]

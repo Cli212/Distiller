@@ -1,14 +1,14 @@
 
 #set hyperparameters
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
-TEACHER_DIR=howey/bert-base-uncased-cola
+TEACHER_DIR=howey/bert-base-uncased-kaggle
 STUDENT_DIR=huawei-noah/TinyBERT_General_4L_312D
-DATA_ROOT_DIR=~/Distillation_QA_benchmark/datasets/glue_data/CoLA
+DATA_ROOT_DIR=~/Distillation_QA_benchmark/kaggle
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
-accu=4
-ep=20
+accu=1
+ep=15
 lr=5
 alpha=0.9
 #augmenter_config_path=augmenter_config.json
@@ -17,13 +17,13 @@ intermediate_loss_type=mi
 intermediate_features=hidden
 kd_loss_type=ce
 ## if you use mixup or augmenter, then the actual batch size will be batch_size * 2
-batch_size=4
+batch_size=32
 temperature=1
 length=128
 torch_seed=9580
 hard_label_weight=0.0
 kd_loss_weight=1.0
-task_name=cola
+task_name=kaggle
 task_type=glue
 NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_alpha${alpha}_h${hard_label_weight}_k${kd_loss_weight}_${kd_loss_type}
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}

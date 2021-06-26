@@ -29,7 +29,7 @@ def eval(args, model, tokenizer):
             outputs = model(**batch)
         # outputs = model(**batch)
         predictions = outputs.logits.detach().cpu()
-        if args.task_name not in ["stsb", "kaggle"]:
+        if args.task_name != "stsb":
             predictions = predictions.argmax(dim=-1)
         else:
             predictions = predictions[:, 0]
@@ -57,7 +57,7 @@ def main(args):
         args.n_gpu = 1
     args.device = device
     config = AutoConfig.from_pretrained(args.model_path)
-    config.num_labels = 1
+    config.num_labels = 4
     model = AutoModelForSequenceClassification.from_pretrained(args.model_path, config=config)
     tokenizer = AutoTokenizer.from_pretrained(args.model_path,use_fast=False,
                                                 config=config)

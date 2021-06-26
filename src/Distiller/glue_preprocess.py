@@ -1129,6 +1129,6 @@ def glue_compute_metrics(task_name, preds, labels):
     elif task_name == "hans":
         return {"acc": simple_accuracy(preds, labels)}
     elif task_name == "kaggle":
-        return simple_accuracy(preds, labels)
+        return {"acc": simple_accuracy(preds, labels)}
     else:
         raise KeyError(task_name)
