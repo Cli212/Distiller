@@ -122,7 +122,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_path", required=True)
     parser.add_argument("--output_dir", default="finetuned_kaggle/")
     parser.add_argument("--data_dir", required=True)
-    parser.add_argument("--max_seq_length", default=256)
+    parser.add_argument("--max_seq_length", default=512)
     parser.add_argument("--epoch", default=5)
     parser.add_argument("--local_rank", default=-1)
     parser.add_argument("--task_name",default="kaggle")

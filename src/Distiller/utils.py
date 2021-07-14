@@ -639,5 +639,6 @@ def glue_criterion(task_name):
             'rte':['acc'],
             'wnli':['acc'],
             'kaggle':['acc'],
+            'fake': ["roc_auc"],
             'squad':['exact','f1'],
             'squad2':['exact','f1']}[task_name]
