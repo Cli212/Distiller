@@ -57,7 +57,7 @@ def main(args):
         args.n_gpu = 1
     args.device = device
     config = AutoConfig.from_pretrained(args.model_path)
-    config.num_labels = 4
+    config.num_labels = args.num_labels
     model = AutoModelForSequenceClassification.from_pretrained(args.model_path, config=config)
     tokenizer = AutoTokenizer.from_pretrained(args.model_path,use_fast=False,
                                                 config=config)
@@ -73,30 +73,32 @@ def main(args):
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     model.to(args.device)
     optimizer.zero_grad()
-    eval_result = eval(args, model, tokenizer)
-    print(eval_result)
-    for i in range(args.epoch):
-        print(f"Epoch {i+1}")
-        for step, batch in tqdm(enumerate(train_dataloader)):
-            batch = {key: value.to(args.device) for key, value in batch.items()}
-            outputs = model(**batch)
-            loss = outputs.loss
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
+    if args.train:
+        for i in range(args.epoch):
+            print(f"Epoch {i+1}")
+            for step, batch in tqdm(enumerate(train_dataloader)):
+                batch = {key: value.to(args.device) for key, value in batch.items()}
+                outputs = model(**batch)
+                loss = outputs.loss
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+            eval_result = eval(args, model, tokenizer)
+            if eval_result['acc'] > best_result:
+                best_result = eval_result['acc']
+                model_to_save = model.module if hasattr(model,
+                                                        "module") else model  # Take care of distributed/parallel training
+                model_to_save.save_pretrained(args.output_dir)
+                if tokenizer:
+                    tokenizer.save_pretrained(args.output_dir)
+                torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
+                with open(os.path.join(args.output_dir, "training_args.json"), 'w') as f:
+                    arg_dict = vars(args)
+                    arg_dict['device'] = str(arg_dict['device'])
+                    json.dump(arg_dict, f)
+    if args.eval:
         eval_result = eval(args, model, tokenizer)
-        if eval_result['acc'] > best_result:
-            best_result = eval_result['acc']
-            model_to_save = model.module if hasattr(model,
-                                                    "module") else model  # Take care of distributed/parallel training
-            model_to_save.save_pretrained(args.output_dir)
-            if tokenizer:
-                tokenizer.save_pretrained(args.output_dir)
-            torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
-            with open(os.path.join(args.output_dir, "training_args.json"), 'w') as f:
-                arg_dict = vars(args)
-                arg_dict['device'] = str(arg_dict['device'])
-                json.dump(arg_dict, f)
+        print(eval_result)
 
 
 
@@ -133,6 +135,9 @@ if __name__ == "__main__":
     parser.add_argument("--eval_batch_size", default=64, type=int)
     parser.add_argument("--weight_decay", default=0.1, type=float,
                         help="Weight decay if we apply some.")
+    parser.add_argument("--num_labels", default=2, type=int)
+    parser.add_argument("--train", action="store_true")
+    parser.add_argument("--eval", action="store_true")
     args = parser.parse_args()
     main(args)
 
