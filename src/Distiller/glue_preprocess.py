@@ -29,7 +29,7 @@ from .transformers import PreTrainedTokenizer
 from .utils import Logger
 from torch.utils.data import Dataset, DataLoader, RandomSampler, SequentialSampler, TensorDataset, ConcatDataset
 from torch.utils.data.distributed import DistributedSampler
-from sklearn.metrics import f1_score, matthews_corrcoef
+from sklearn.metrics import f1_score, matthews_corrcoef, roc_auc_score
 from scipy.stats import pearsonr, spearmanr
 
 # logger = logging.getLogger(__name__)
@@ -765,6 +765,48 @@ class Sst2Processor(DataProcessor):
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
         return examples
 import pandas as pd
+
+class FakeProcessor(DataProcessor):
+    """Processor for the SST-2 data set (GLUE version)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def get_example_from_tensor_dict(self, tensor_dict):
+        """See base class."""
+        return InputExample(
+            tensor_dict["idx"].numpy(),
+            tensor_dict["sentence"].numpy().decode("utf-8"),
+            None,
+            str(tensor_dict["label"].numpy()),
+        )
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(pd.read_csv(os.path.join(data_dir, "train.csv")), "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(pd.read_csv(os.path.join(data_dir, "dev.csv")), "dev")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(pd.read_csv(os.path.join(data_dir, "dev.csv")), "dev")
+
+    def get_labels(self):
+        """See base class."""
+        return ["0", "1"]
+
+    def _create_examples(self, df, set_type):
+        """Creates examples for the training, dev and test sets."""
+        examples = []
+        text_a = df["description"].values.tolist()
+        ids = df["index"].values.tolist()
+        for i in range(df.shape[0]):
+            label = None if set_type == "test" else str(df.loc[i, "fraudulent"])
+            examples.append(InputExample(guid=f"{set_type}-{ids[i]}", text_a=text_a[i], text_b=None, label=label))
+        return examples
+
 class KaggleProcessor(DataProcessor):
     """Processor for the kaggle sentiment classification data set (https://www.kaggle.com/akash14/product-sentiment-classification)."""
 
@@ -1048,6 +1090,7 @@ glue_tasks_num_labels = {
     "rte": 2,
     "wnli": 2,
     "kaggle": 4,
+    "fake": 2
 }
 
 glue_processors = {
@@ -1061,7 +1104,8 @@ glue_processors = {
     "qnli": QnliProcessor,
     "rte": RteProcessor,
     "wnli": WnliProcessor,
-    'kaggle': KaggleProcessor
+    'kaggle': KaggleProcessor,
+    "fake": FakeProcessor
 }
 
 
@@ -1076,7 +1120,8 @@ glue_output_modes = {
     "qnli": "classification",
     "rte": "classification",
     "wnli": "classification",
-    "kaggle": "classification"
+    "kaggle": "classification",
+    "fake": "classification"
 }
 
 
@@ -1102,6 +1147,9 @@ def pearson_and_spearman(preds, labels):
         "spearmanr": spearman_corr,
         "corr": (pearson_corr + spearman_corr) / 2,
     }
+
+def roc_auc_score(preds, labels):
+    return roc_auc_score(labels, preds)
 
 
 def glue_compute_metrics(task_name, preds, labels):
@@ -1130,5 +1178,7 @@ def glue_compute_metrics(task_name, preds, labels):
         return {"acc": simple_accuracy(preds, labels)}
     elif task_name == "kaggle":
         return {"acc": simple_accuracy(preds, labels)}
+    elif task_name == "fake":
+        return {"roc_auc": roc_auc_score(preds, labels)}
     else:
         raise KeyError(task_name)

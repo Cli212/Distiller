@@ -73,7 +73,8 @@ def main(args):
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     model.to(args.device)
     optimizer.zero_grad()
-
+    eval_result = eval(args, model, tokenizer)
+    print(eval_result)
     for i in range(args.epoch):
         print(f"Epoch {i+1}")
         for step, batch in tqdm(enumerate(train_dataloader)):
