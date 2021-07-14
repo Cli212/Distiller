@@ -1148,7 +1148,7 @@ def pearson_and_spearman(preds, labels):
         "corr": (pearson_corr + spearman_corr) / 2,
     }
 
-def roc_auc_score(preds, labels):
+def roc_auc(preds, labels):
     return roc_auc_score(labels, preds)
 
 
@@ -1179,6 +1179,6 @@ def glue_compute_metrics(task_name, preds, labels):
     elif task_name == "kaggle":
         return {"acc": simple_accuracy(preds, labels)}
     elif task_name == "fake":
-        return {"roc_auc": roc_auc_score(preds, labels)}
+        return {"roc_auc": roc_auc(preds, labels)}
     else:
         raise KeyError(task_name)
