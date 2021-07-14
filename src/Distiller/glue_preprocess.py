@@ -1179,6 +1179,6 @@ def glue_compute_metrics(task_name, preds, labels):
     elif task_name == "kaggle":
         return {"acc": simple_accuracy(preds, labels)}
     elif task_name == "fake":
-        return {"roc_auc": roc_auc(preds, labels)}
+        return {'acc': roc_auc(preds, labels), "roc_auc": roc_auc(preds, labels)}
     else:
         raise KeyError(task_name)
