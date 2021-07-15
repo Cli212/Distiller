@@ -29,8 +29,8 @@ from .transformers import PreTrainedTokenizer
 from .utils import Logger
 from torch.utils.data import Dataset, DataLoader, RandomSampler, SequentialSampler, TensorDataset, ConcatDataset
 from torch.utils.data.distributed import DistributedSampler
-from sklearn.metrics import f1_score, matthews_corrcoef, roc_auc_score
 from scipy.stats import pearsonr, spearmanr
+from sklearn.metrics import f1_score, matthews_corrcoef, roc_auc_score
 
 # logger = logging.getLogger(__name__)
 logger = Logger("all.log",level="debug").logger

@@ -656,9 +656,9 @@ def main(args, gpus_per_trial=4):
     # }
 
     search_space = {
-        "s_model": tune.grid_search(["BERT_MEDIUM","TinyBERT4","ELECTRA_SMALL","BERT_TINY"]),
-        "intermediate_loss_type": tune.grid_search(["mse", "ce" ,"pkd" , "mi_0.9"]),
-        "intermediate_strategy": tune.grid_search(["skip", "last", "emd"]),
+        "s_model": tune.grid_search(["TinyBERT4","ELECTRA_SMALL"]),
+        "intermediate_loss_type": tune.grid_search(["mse", "ce" , "mi_0.9"]),
+        "intermediate_strategy": tune.grid_search(["skip", "emd"]),
         "kd_loss_type": tune.grid_search(["ce", "mse"]),
         "mixup": tune.grid_search([True, False])
     }

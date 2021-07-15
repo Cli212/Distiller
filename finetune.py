@@ -84,6 +84,7 @@ def main(args):
                 optimizer.step()
                 optimizer.zero_grad()
             eval_result = eval(args, model, tokenizer)
+            model.train()
             if eval_result['acc'] > best_result:
                 best_result = eval_result['acc']
                 model_to_save = model.module if hasattr(model,
@@ -92,10 +93,14 @@ def main(args):
                 if tokenizer:
                     tokenizer.save_pretrained(args.output_dir)
                 torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
+                output_eval_file = os.path.join(args.output_dir, f"eval_results.txt")
+                with open(output_eval_file, "a") as writer:
+                    writer.write(f"Output: {json.dumps(eval_result, indent=2)}\n")
                 with open(os.path.join(args.output_dir, "training_args.json"), 'w') as f:
                     arg_dict = vars(args)
                     arg_dict['device'] = str(arg_dict['device'])
                     json.dump(arg_dict, f)
+
     if args.eval:
         eval_result = eval(args, model, tokenizer)
         print(eval_result)
@@ -129,7 +134,7 @@ if __name__ == "__main__":
     parser.add_argument("--local_rank", default=-1)
     parser.add_argument("--task_name",default="kaggle")
     parser.add_argument("--overwrite_cache",default=False)
-    parser.add_argument("--learning_rate",default=5e-5)
+    parser.add_argument("--learning_rate",default=5e-5,type=float)
     parser.add_argument("--adam_epsilon",default=1e-8)
     parser.add_argument("--train_batch_size", default=16, type=int)
     parser.add_argument("--eval_batch_size", default=64, type=int)
