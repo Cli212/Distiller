@@ -490,7 +490,7 @@ def remote_fn(config, checkpoint_dir=None):
                 writer.write(f"Output: {json.dumps(evaluation_result, indent=2)}\n")
             if 'exact' in evaluation_result.keys():
                 tune.report(score=evaluation_result['exact'],exact=evaluation_result['exact'], f1=evaluation_result['f1'])
-            if 'f1' in evaluation_result.keys():
+            elif 'f1' in evaluation_result.keys():
                 tune.report(score=evaluation_result['acc_and_f1'],f1=evaluation_result['f1'], accuracy=evaluation_result['acc'])
             elif 'acc' in evaluation_result.keys():
                 tune.report(score=evaluation_result['acc'], accuracy=evaluation_result['acc'])
