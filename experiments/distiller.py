@@ -153,13 +153,13 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                     for s in range(t_layer):
                         baseline_fn = mlp_critic(t_model.module.config.hidden_size if hasattr(t_model,
                                                                                               "module") else t_model.config.hidden_size,
-                                                 hidden_size=128, out_dim=1,length=args.max_seq_length if args.task_type in ['squad','squad2'] else None)
+                                                 hidden_size=128, out_dim=1)
+                        # , length = args.max_seq_length if args.task_type in ['squad', 'squad2'] else None
                         baseline_fn.to(args.device)
                         critic = mlp_critic(t_model.module.config.hidden_size if hasattr(t_model,
                                                                                          "module") else t_model.config.hidden_size,
                                             s_model.module.config.hidden_size if hasattr(s_model,
                                                                                          "module") else s_model.config.hidden_size,
-                                            length = args.max_seq_length if args.task_type in ['squad', 'squad2'] else None,
                                             hidden_size=128, out_dim=64)
                         critic.to(args.device)
                         critic_no_decay = ['bias']
@@ -227,13 +227,11 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
             else:
                 baseline_fn = mlp_critic(
                     t_model.module.config.hidden_size if hasattr(t_model, "module") else t_model.config.hidden_size,
-                    length = args.max_seq_length if args.task_type in ['squad', 'squad2'] else None,
                     hidden_size=128, out_dim=1)
                 baseline_fn.to(args.device)
                 critic = mlp_critic(
                     t_model.module.config.hidden_size if hasattr(t_model, "module") else t_model.config.hidden_size,
                     s_model.module.config.hidden_size if hasattr(s_model, "module") else s_model.config.hidden_size,
-                    length=args.max_seq_length if args.task_type in ['squad', 'squad2'] else None,
                     hidden_size=128, out_dim=64)
                 critic.to(args.device)
                 critic_no_decay = ['bias']
