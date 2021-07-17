@@ -635,7 +635,7 @@ class mlp_critic(torch.nn.Module):
     def forward(self, x=None, y=None):
         if x==None:
             if self.length:
-                mean_tensor(self._t(y),self.length,self.out_dim)
+                return mean_tensor(self._t(y),self.length,self.out_dim)
             else:
                 return self._t(y)
         else:
