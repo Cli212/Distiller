@@ -615,18 +615,34 @@ def mlp(in_dim, hidden_size, out_dim):
     )
 
 
+def mean_tensor(t,length,out_dim):
+    return t.unsqueeze(1).view(-1,length,out_dim).mean(dim=1)
+
+
 class mlp_critic(torch.nn.Module):
-    def __init__(self, t_dim, s_dim=None, hidden_size=64, out_dim=32):
+    def __init__(self, t_dim, s_dim=None, length=None, hidden_size=64, out_dim=32):
         super(mlp_critic, self).__init__()
+        if length:
+            self.length = length
+        else:
+            self.length = None
+        self.out_dim = out_dim
         self._t = mlp(t_dim, hidden_size, out_dim)
         if s_dim:
             self._s = mlp(s_dim, hidden_size, out_dim)
 
+
     def forward(self, x=None, y=None):
         if x==None:
-            return self._t(y)
+            if self.length:
+                mean_tensor(self._t(y),self.length,self.out_dim)
+            else:
+                return self._t(y)
         else:
-            return torch.matmul(self._s(x), self._t(y).T)
+            if self.length:
+                return torch.matmul(mean_tensor(self._s(x),self.length,self.out_dim), mean_tensor(self._t(y),self.length,self.out_dim).T)
+            else:
+                return torch.matmul(self._s(x), self._t(y).T)
 
 def glue_criterion(task_name):
     return {'cola':['mcc'],
