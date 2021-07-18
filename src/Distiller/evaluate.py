@@ -167,7 +167,7 @@ def evaluate_glue(args, model, tokenizer, prefix="",write_prediction=False):
             outputs = model(**batch)
         # outputs = model(**batch)
         predictions = outputs.logits.detach().cpu()
-        if args.task_name != "stsb":
+        if args.task_name not in ["stsb","cloth"]:
             predictions = predictions.argmax(dim=-1)
         else:
             predictions = predictions[:,0]

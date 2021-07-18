@@ -29,7 +29,7 @@ def eval(args, model, tokenizer):
             outputs = model(**batch)
         # outputs = model(**batch)
         predictions = outputs.logits.detach().cpu()
-        if args.task_name != "stsb":
+        if args.task_name not in ["stsb","cloth"]:
             predictions = predictions.argmax(dim=-1)
         else:
             predictions = predictions[:, 0]
@@ -129,8 +129,8 @@ if __name__ == "__main__":
     parser.add_argument("--model_path", required=True)
     parser.add_argument("--output_dir", default="finetuned_kaggle/")
     parser.add_argument("--data_dir", required=True)
-    parser.add_argument("--max_seq_length", default=512)
-    parser.add_argument("--epoch", default=5)
+    parser.add_argument("--max_seq_length", default=512, type=int)
+    parser.add_argument("--epoch", default=5, type=int)
     parser.add_argument("--local_rank", default=-1)
     parser.add_argument("--task_name",default="kaggle")
     parser.add_argument("--overwrite_cache",default=False)
@@ -140,7 +140,7 @@ if __name__ == "__main__":
     parser.add_argument("--eval_batch_size", default=64, type=int)
     parser.add_argument("--weight_decay", default=0.1, type=float,
                         help="Weight decay if we apply some.")
-    parser.add_argument("--num_labels", default=2, type=int)
+    parser.add_argument("--num_labels", default=2, type=int, required=True)
     parser.add_argument("--train", action="store_true")
     parser.add_argument("--eval", action="store_true")
     args = parser.parse_args()
