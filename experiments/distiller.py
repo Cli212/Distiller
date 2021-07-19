@@ -520,7 +520,7 @@ def main(args):
             arg_dict = vars(args)
             arg_dict['device'] = str(arg_dict['device'])
             json.dump(arg_dict, f)
-        uploadDirectory(args.output_dir)
+        # uploadDirectory(args.output_dir)
         model = model_class.from_pretrained(args.output_dir)  # , force_download=True)
         model.to(args.device)
         # Good practice: save your training arguments together with the trained model
