@@ -336,16 +336,7 @@ def main(args):
     # Create output directory if needed
     if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
         os.makedirs(args.output_dir)
-    # Setup CUDA, GPU & distributed training
-    if args.local_rank == -1 or args.no_cuda:
-        device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
-    else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
-        torch.cuda.set_device(args.local_rank)
-        device = torch.device("cuda", args.local_rank)
-        torch.distributed.init_process_group(backend="nccl")
-        args.n_gpu = 1
-    args.device = device
+
     # Setup logging
     logging.basicConfig(format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
                         datefmt="%m/%d/%Y %H:%M:%S",
@@ -578,9 +569,19 @@ if __name__ == '__main__':
         from Distiller.adapters import BertForGLUEAdptor as adaptor_func
     logger = Logger(f"{args.output_dir}/all.log", level="debug").logger
     # logger = logging.getLogger(__name__)
+    # Setup CUDA, GPU & distributed training
+    if args.local_rank == -1 or args.no_cuda:
+        device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+        args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
+    else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
+        torch.cuda.set_device(args.local_rank)
+        device = torch.device("cuda", args.local_rank)
+        torch.distributed.init_process_group(backend="nccl")
+        args.n_gpu = 1
+    args.device = device
 
     import pandas as pd
-    df = pd.read_csv('../auto_distiller_candidates.csv')
+    df = pd.read_csv('./audo_distiller_candidates.csv')
     df["distill_result"] = 0
     for i in range(df.shape[0]):
         print(df.loc[i,:])
@@ -604,6 +605,7 @@ if __name__ == '__main__':
                 w[backtranslation-1] = 1
             if random_aug != 0:
                 w[random_aug-1] = 2
+
         main(args)
         df.loc[i,'distill_result'] = best_evaluation
     df.to_csv("./auto_distiller_results.csv",index=False)
