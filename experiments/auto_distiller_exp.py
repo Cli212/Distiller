@@ -580,7 +580,7 @@ if __name__ == '__main__':
     # logger = logging.getLogger(__name__)
 
     import pandas as pd
-    df = pd.read_csv('../fake_random.csv')
+    df = pd.read_csv('../auto_distiller_candidates.csv')
     df["distill_result"] = 0
     for i in range(df.shape[0]):
         print(df.loc[i,:])
@@ -590,6 +590,7 @@ if __name__ == '__main__':
         args.intermediate_strategy = df.loc[i, 'intermediate_strategy']
         args.kd_loss_type = df.loc[i, 'kd_loss_type']
         args.mixup = (str(df.loc[i, 'kd_loss_type']) == "TRUE")
+        args.aug_p = float(df.loc[i,'aug_p'])
         contextual = int(df.loc[i, 'contextual'])
         backtranslation = int(df.loc[i, 'backtranslation'])
         random_aug = int(df.loc[i, 'random'])
@@ -605,7 +606,7 @@ if __name__ == '__main__':
                 w[random_aug-1] = 2
         main(args)
         df.loc[i,'distill_result'] = best_evaluation
-    df.to_csv("../fake_random_results.csv",index=False)
+    df.to_csv("./auto_distiller_results.csv",index=False)
 
 
 
