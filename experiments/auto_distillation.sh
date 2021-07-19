@@ -1,8 +1,8 @@
 #set hyperparameters
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
-TEACHER_DIR=howey/bert-base-uncased-kaggle
+TEACHER_DIR=howey/bert-base-uncased-cloth
 STUDENT_DIR=huawei-noah/TinyBERT_General_4L_312D
-DATA_ROOT_DIR=../datasets/kaggle
+DATA_ROOT_DIR=../datasets/auto_mm/women_clothing_review/
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
