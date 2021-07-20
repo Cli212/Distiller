@@ -1,8 +1,8 @@
 #set hyperparameters
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
-TEACHER_DIR=csarron/bert-base-uncased-squad-v1
+TEACHER_DIR=howey/bert-base-uncased-rte
 STUDENT_DIR=huawei-noah/TinyBERT_General_4L_312D
-DATA_ROOT_DIR=../datasets/squadv1
+DATA_ROOT_DIR=../datasets/glue_data/RTE
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
@@ -22,13 +22,13 @@ length=128
 torch_seed=9580
 hard_label_weight=0.0
 kd_loss_weight=1.0
-task_name=mnli
-task_type=squad
+task_name=rte
+task_type=glue
 aug_p=0.3
 w=None
 aug_pipeline=False
 mixup=False
-NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_alpha${alpha}_h${hard_label_weight}_k${kd_loss_weight}_${kd_loss_type}_${mixup}_${aug_pipeline}_${aug_p}
+NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_alpha${alpha}_h${hard_label_weight}_k${kd_loss_weight}_${kd_loss_type}_${mixup}_${aug_pipeline}_${w}_${aug_p}
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
 
 gpu_nums=4
