@@ -13,7 +13,7 @@ def parse():
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model predictions and checkpoints will be written.")
     ## optional arguments
-    parser.add_argument("--task_name", type=str, default="cola", choices=["cola", "sst-2", "mrpc", "stsb", "qqp", "mnli", "mnli-mm","qnli", "rte", "wnli", "kaggle", "fake","cloth"], help="Only used when task type is glue")
+    parser.add_argument("--task_name", type=str, default="cola", choices=["cola", "sst-2", "mrpc", "stsb", "qqp", "mnli", "mnli-mm","qnli", "rte", "wnli", "kaggle", "fake","cloth","boolq"], help="Only used when task type is glue")
     parser.add_argument("--data_dir", type=str, required=False)
     parser.add_argument("--S_model_name_or_path", type=str, default=None, help="student model name or path")
     parser.add_argument("--T_config_file", type=str, help="config file path of teacher model")

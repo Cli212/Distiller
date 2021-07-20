@@ -31,7 +31,7 @@ from torch.utils.data import Dataset, DataLoader, RandomSampler, SequentialSampl
 from torch.utils.data.distributed import DistributedSampler
 from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import f1_score, matthews_corrcoef, roc_auc_score, r2_score
-
+from datasets import load_dataset
 # logger = logging.getLogger(__name__)
 logger = Logger("all.log",level="debug").logger
 
@@ -1118,6 +1118,52 @@ class RteProcessor(DataProcessor):
         return examples
 
 
+
+class BoolQProcessor(DataProcessor):
+    """Processor for the QNLI data set (GLUE version)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.dataset = load_dataset("boolq")
+    def get_example_from_tensor_dict(self, tensor_dict):
+        """See base class."""
+        return InputExample(
+            tensor_dict["idx"].numpy(),
+            tensor_dict["question"].numpy().decode("utf-8"),
+            tensor_dict["sentence"].numpy().decode("utf-8"),
+            str(tensor_dict["label"].numpy()),
+        )
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self.dataset['train'], "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self.dataset['validation'], "dev")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self.dataset['validation'], "test")
+
+    def get_labels(self):
+        """See base class."""
+        return ["True", "False"]
+
+    def _create_examples(self, dataset, set_type):
+        """Creates examples for the training, dev and test sets."""
+        examples = []
+        for (i, line) in enumerate(dataset['passage']):
+            if i == 0:
+                continue
+            guid = f"{set_type}-{i}"
+            text_a = dataset['question'][i]
+            text_b = line
+            label = None if set_type == "test" else dataset['answer'][i]
+            examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+        return examples
+
+
 class WnliProcessor(DataProcessor):
     """Processor for the WNLI data set (GLUE version)."""
 
@@ -1176,7 +1222,8 @@ glue_tasks_num_labels = {
     "kaggle": 4,
     "fake": 2,
     "prod": 4,
-    "cloth": 1
+    "cloth": 1,
+    "boolq": 2
 }
 
 glue_processors = {
@@ -1193,7 +1240,8 @@ glue_processors = {
     'kaggle': KaggleProcessor,
     "fake": FakeProcessor,
     "prod": ProdProcessor,
-    "cloth":ClothProcessor
+    "cloth":ClothProcessor,
+    'boolq': BoolQProcessor
 }
 
 
@@ -1211,7 +1259,8 @@ glue_output_modes = {
     "kaggle": "classification",
     "fake": "classification",
     "prod": "classification",
-    "cloth": "regression"
+    "cloth": "regression",
+    "boolq": "classification"
 }
 
 
@@ -1274,5 +1323,7 @@ def glue_compute_metrics(task_name, preds, labels):
         return {"acc": simple_accuracy(preds, labels)}
     elif task_name == "cloth":
         return {"acc":r2_score(labels, preds),"r2":r2_score(labels, preds)}
+    elif task_name == "boolq":
+        return {"acc":simple_accuracy(preds, labels)}
     else:
         raise KeyError(task_name)
