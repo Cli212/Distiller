@@ -47,7 +47,7 @@ def main(args):
     if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
         os.makedirs(args.output_dir)
     if not os.path.exists(args.data_dir) and args.local_rank in [-1, 0]:
-        os.makedirs(args.output_dir)
+        os.makedirs(args.data_dir)
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

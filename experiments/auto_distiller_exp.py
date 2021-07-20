@@ -336,6 +336,8 @@ def main(args):
     # Create output directory if needed
     if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
         os.makedirs(args.output_dir)
+    if not os.path.exists(args.data_dir) and args.local_rank in [-1, 0]:
+        os.makedirs(args.data_dir)
 
     # Setup logging
     logging.basicConfig(format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
