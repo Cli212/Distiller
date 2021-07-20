@@ -658,4 +658,5 @@ def glue_criterion(task_name):
             'fake': ["roc_auc"],
             'cloth': ['r2'],
             'squad':['exact','f1'],
+            'boolq': ['acc'],
             'squad2':['exact','f1']}[task_name]
