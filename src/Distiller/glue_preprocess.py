@@ -1159,7 +1159,7 @@ class BoolQProcessor(DataProcessor):
             guid = f"{set_type}-{i}"
             text_a = dataset['question'][i]
             text_b = line
-            label = None if set_type == "test" else dataset['answer'][i]
+            label = None if set_type == "test" else str(dataset['answer'][i])
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
