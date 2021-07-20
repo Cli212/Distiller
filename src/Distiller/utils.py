@@ -659,4 +659,5 @@ def glue_criterion(task_name):
             'cloth': ['r2'],
             'boolq': ['acc'],
             'squad':['exact','f1'],
+            'boolq': ['acc'],
             'squad2':['exact','f1']}[task_name]
