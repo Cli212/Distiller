@@ -40,6 +40,7 @@ setup(
         "boto3",
         "nlpaug==1.1.3",
         "transformers==4.3.2",
+        "datasets"
     ],
 
     scripts = [],

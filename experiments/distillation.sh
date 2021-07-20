@@ -1,13 +1,13 @@
 #set hyperparameters
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
-TEACHER_DIR=howey/bert-base-uncased-rte
+TEACHER_DIR=howey/bert-base-uncased-boolq
 STUDENT_DIR=huawei-noah/TinyBERT_General_4L_312D
-DATA_ROOT_DIR=../datasets/glue_data/RTE
+DATA_ROOT_DIR=../datasets/superGLUE/boolq
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
 accu=1
-ep=30
+ep=12
 lr=5
 alpha=0.9
 #augmenter_config_path=augmenter_config.json
@@ -16,19 +16,19 @@ intermediate_loss_type=mi
 intermediate_features=hidden
 kd_loss_type=ce
 ## if you use mixup or augmenter, then the actual batch size will be batch_size * 2
-batch_size=32
+batch_size=16
 temperature=1
 length=128
 torch_seed=9580
 hard_label_weight=0.0
 kd_loss_weight=1.0
-task_name=rte
+task_name=boolq
 task_type=glue
 aug_p=0.3
 w=None
 aug_pipeline=False
 mixup=False
-NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_alpha${alpha}_h${hard_label_weight}_k${kd_loss_weight}_${kd_loss_type}_${mixup}_${aug_pipeline}_${w}_${aug_p}
+NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_alpha${alpha}_h${hard_label_weight}_k${kd_loss_weight}_${kd_loss_type}_${mixup}_${aug_pipeline}_${aug_p}
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
 
 gpu_nums=4
@@ -62,6 +62,7 @@ python -m torch.distributed.launch --nproc_per_node=${gpu_nums} --master_port=12
     --alpha ${alpha} \
     --w ${w} \
     --mixup ${mixup}\
+    --aug_p ${aug_p} \
     --aug_pipeline ${aug_pipeline} \
     --hard_label_weight ${hard_label_weight} \
     --kd_loss_weight ${kd_loss_weight} \
