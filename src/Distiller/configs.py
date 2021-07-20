@@ -1,4 +1,5 @@
 import argparse
+import ast
 
 
 def parse():
@@ -36,7 +37,7 @@ def parse():
                         help="Total number of training epochs to perform.")
     parser.add_argument("--augmenter_config_path", type=str, default=None)
     parser.add_argument("--aug_type", type=str, default=None, choices=["random","contextual","back_translation"])
-    parser.add_argument("--aug_pipeline", action="store_true")
+    parser.add_argument("--aug_pipeline", type=ast.literal_eval)
     parser.add_argument("--layer_mapping_strategy", default='skip', choices=["skip", "first", "last"])
     parser.add_argument("--random_student", action="store_true", help="If true, the student model will initiate "
                                                                       "randomly")
@@ -64,7 +65,7 @@ def parse():
     parser.add_argument("--intermediate_features", nargs="+", default=[], choices=["hidden","attention"], help="Not work when intermediate strategy is EMD")
     parser.add_argument("--intermediate_loss_type", type=str, default="ce", choices=["ce","mse","cos","pkd","mi","nce","nwj","tuba"])
     parser.add_argument("--alpha", type=float, default=0.5, help="only useful when using mi loss")
-    parser.add_argument("--mixup", action="store_true")
+    parser.add_argument("--mixup", type=ast.literal_eval)
     parser.add_argument("--kd_loss_weight", default=1.0, type=float, help="weight of kd loss")
     parser.add_argument("--hard_label_weight", default=0.0, type=float, help="weight of hard label loss")
     parser.add_argument("--soft_label_weight", default=0.0, type=float, help="weight of soft label loss")
