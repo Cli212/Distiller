@@ -25,6 +25,7 @@ kd_loss_weight=1.0
 task_name=mnli
 task_type=squad
 aug_p=0.3
+w=None
 NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_alpha${alpha}_h${hard_label_weight}_k${kd_loss_weight}_${kd_loss_type}_${aug_p}
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
 
@@ -57,6 +58,7 @@ python -m torch.distributed.launch --nproc_per_node=${gpu_nums} --master_port=12
     --gradient_accumulation_steps ${accu} \
     --temperature ${temperature} \
     --alpha ${alpha} \
+    --w ${w} \
     --hard_label_weight ${hard_label_weight} \
     --kd_loss_weight ${kd_loss_weight} \
     --kd_loss_type ${kd_loss_type}
