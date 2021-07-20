@@ -3,7 +3,7 @@
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
 TEACHER_DIR=csarron/bert-base-uncased-squad-v1
 STUDENT_DIR=huawei-noah/TinyBERT_General_4L_312D
-DATA_ROOT_DIR=~/Distillation_QA_benchmark/datasets/squadv1
+DATA_ROOT_DIR=~/Distillation_QA_benchmark/datasets/glue_data/
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
@@ -17,9 +17,9 @@ intermediate_loss_type=mi
 intermediate_features=hidden
 kd_loss_type=ce
 ## if you use mixup or augmenter, then the actual batch size will be batch_size * 2
-batch_size=8
+batch_size=16
 temperature=1
-length=384
+length=128
 torch_seed=9580
 hard_label_weight=0.0
 kd_loss_weight=1.0

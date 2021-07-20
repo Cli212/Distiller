@@ -232,7 +232,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                 critic = mlp_critic(
                     t_model.module.config.hidden_size if hasattr(t_model, "module") else t_model.config.hidden_size,
                     s_model.module.config.hidden_size if hasattr(s_model, "module") else s_model.config.hidden_size,
-                    128, 64)
+                    hidden_size=128, out_dim=64)
                 critic.to(args.device)
                 critic_no_decay = ['bias']
                 critic_parameters = [
@@ -347,16 +347,16 @@ def remote_fn(config, checkpoint_dir=None):
             task_name = c[1]
             args.__setattr__("task_name", task_name)
             if task_name == 'sst-2':
-                args.__setattr__("T_model_name_or_path", "howey/roberta-large-sst2")
+                args.__setattr__("T_model_name_or_path", "howey/bert-base-uncased-sst2")
                 args.__setattr__("data_dir", "/home/ray/Distillation_QA_benchmark/datasets/glue_data/SST-2")
             elif task_name == "stsb":
-                args.__setattr__("T_model_name_or_path", "howey/roberta-large-stsb")
+                args.__setattr__("T_model_name_or_path", "howey/bert-base-uncased-stsb")
                 args.__setattr__("data_dir", "/home/ray/Distillation_QA_benchmark/datasets/glue_data/STS-B")
             elif task_name == "cola":
-                args.__setattr__("T_model_name_or_path", "howey/roberta-large-cola")
+                args.__setattr__("T_model_name_or_path", "howey/bert-base-uncased-cola")
                 args.__setattr__("data_dir", "/home/ray/Distillation_QA_benchmark/datasets/glue_data/CoLA")
             else:
-                args.__setattr__("T_model_name_or_path", f"howey/roberta-large-{task_name}")
+                args.__setattr__("T_model_name_or_path", f"howey/bert-base-uncased-{task_name}")
                 args.__setattr__("data_dir", f"/home/ray/Distillation_QA_benchmark/datasets/glue_data/{task_name.upper()}")
         if c[0] == 'intermediate_loss_type' and 'mi' in c[1]:
             args.__setattr__('intermediate_loss_type', c[1].split('_')[0])
@@ -655,18 +655,19 @@ def main(args, gpus_per_trial=4):
     #     "w": tune.grid_search(w_list)
     # }
 
-    search_space = {
-        "s_model": tune.grid_search(["TinyBERT4","ELECTRA_SMALL"]),
-        "intermediate_loss_type": tune.grid_search(["mse", "ce" , "mi_0.9"]),
-        "intermediate_strategy": tune.grid_search(["skip", "emd"]),
-        "kd_loss_type": tune.grid_search(["ce", "mse"]),
-        "mixup": tune.grid_search([True, False])
-    }
     # search_space = {
-    #     "intermediate_loss_type": tune.grid_search(["mse", "mi_0.1","mi_0.5","mi_0.9"]),
-    #     "kd_loss_type": tune.grid_search(["ce","mse"]),
-    #     "task_name": tune.grid_search(glue_list),
-    #     "mixup": tune.grid_search([True, False])}
+    #     "s_model": tune.grid_search(["TinyBERT4","ELECTRA_SMALL"]),
+    #     "intermediate_loss_type": tune.grid_search(["mse", "ce" , "mi_0.9"]),
+    #     "intermediate_strategy": tune.grid_search(["skip", "emd"]),
+    #     "kd_loss_type": tune.grid_search(["ce", "mse"]),
+    #     "mixup": tune.grid_search([True, False])
+    # }
+    search_space = {
+        "intermediate_loss_type": tune.grid_search(["mi_0.1","mi_0.9"]),
+        "intermediate_strategy": tune.grid_search(["emd"]),
+        "task_name": tune.grid_search(glue_list),
+        "kd_loss_type": tune.grid_search(["ce","mse"]),
+        "mixup": tune.grid_search([True, False])}
     # search_space = {
     #     "intermediate_strategy": tune.choice(["skip"]),
     #     "kd_loss_type": tune.choice(["ce", "mse"]),
