@@ -345,18 +345,20 @@ def remote_fn(config, checkpoint_dir=None):
             args.__setattr__("S_model_name_or_path", model_dict[c[1]])
         elif c[0] == "task_name":
             task_name = c[1]
+            teacher_name = config['teacher_name']
             args.__setattr__("task_name", task_name)
             if task_name == 'sst-2':
-                args.__setattr__("T_model_name_or_path", "howey/bert-base-uncased-sst2")
+                args.__setattr__("T_model_name_or_path", f"howey/{teacher_name}-sst2")
                 args.__setattr__("data_dir", "/home/ray/Distillation_QA_benchmark/datasets/glue_data/SST-2")
+                args.__setattr__("kd_loss_type","ce")
             elif task_name == "stsb":
-                args.__setattr__("T_model_name_or_path", "howey/bert-base-uncased-stsb")
+                args.__setattr__("T_model_name_or_path", f"howey/{teacher_name}-stsb")
                 args.__setattr__("data_dir", "/home/ray/Distillation_QA_benchmark/datasets/glue_data/STS-B")
             elif task_name == "cola":
-                args.__setattr__("T_model_name_or_path", "howey/bert-base-uncased-cola")
+                args.__setattr__("T_model_name_or_path", f"howey/{teacher_name}-cola")
                 args.__setattr__("data_dir", "/home/ray/Distillation_QA_benchmark/datasets/glue_data/CoLA")
             else:
-                args.__setattr__("T_model_name_or_path", f"howey/bert-base-uncased-{task_name}")
+                args.__setattr__("T_model_name_or_path", f"howey/{teacher_name}-{task_name}")
                 args.__setattr__("data_dir", f"/home/ray/Distillation_QA_benchmark/datasets/glue_data/{task_name.upper()}")
         if c[0] == 'intermediate_loss_type' and 'mi' in c[1]:
             args.__setattr__('intermediate_loss_type', c[1].split('_')[0])
@@ -655,19 +657,17 @@ def main(args, gpus_per_trial=4):
     #     "w": tune.grid_search(w_list)
     # }
 
-    # search_space = {
-    #     "s_model": tune.grid_search(["TinyBERT4","ELECTRA_SMALL"]),
-    #     "intermediate_loss_type": tune.grid_search(["mse", "ce" , "mi_0.9"]),
-    #     "intermediate_strategy": tune.grid_search(["skip", "emd"]),
-    #     "kd_loss_type": tune.grid_search(["ce", "mse"]),
-    #     "mixup": tune.grid_search([True, False])
-    # }
     search_space = {
-        "intermediate_loss_type": tune.grid_search(["mi_0.1","mi_0.9"]),
-        "intermediate_strategy": tune.grid_search(["emd"]),
-        "task_name": tune.grid_search(glue_list),
-        "kd_loss_type": tune.grid_search(["ce","mse"]),
-        "mixup": tune.grid_search([True, False])}
+        "s_model": tune.grid_search(list(model_dict.keys())),
+        "task_name": tune.grid_search(['mnli','qnli','qqp','sst-2']),
+        "teacher_name": tune.grid_search(['bert-base-uncased','roberta-large'])
+    }
+    # search_space = {
+    #     "intermediate_loss_type": tune.grid_search(["mi_0.1","mi_0.9"]),
+    #     "intermediate_strategy": tune.grid_search(["emd"]),
+    #     "task_name": tune.grid_search(glue_list),
+    #     "kd_loss_type": tune.grid_search(["ce","mse"]),
+    #     "mixup": tune.grid_search([True, False])}
     # search_space = {
     #     "intermediate_strategy": tune.choice(["skip"]),
     #     "kd_loss_type": tune.choice(["ce", "mse"]),
