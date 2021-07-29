@@ -12,7 +12,7 @@ def add_name(value):
             lines[i] = line.strip('\n')+"_"+value+"\n"
 
 
-df = pd.read_csv('../audo_distiller_candidates.csv')
+df = pd.read_csv('../auto_distiller_candidates.csv')
 df.dropna(inplace=True)
 df.reset_index(drop=True,inplace=True)
 df["distill_result"] = 0
@@ -52,5 +52,5 @@ for i in range(df.shape[0]):
         add_name('_'.join([str(i) for i in w]))
     else:
         lines.pop(-9)
-    with open(f'./tmp/random_distillation_{i}.sh','w') as f:
+    with open(f'./tmp/random_distillation_{i}_cloth.sh','w') as f:
         f.writelines(lines)

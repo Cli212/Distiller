@@ -597,7 +597,7 @@ def remote_fn(config, checkpoint_dir=None):
             arg_dict = vars(args)
             arg_dict['device'] = str(arg_dict['device'])
             json.dump(arg_dict, f)
-        uploadDirectory(args.output_dir)
+        # uploadDirectory(args.output_dir)
         model = model_class.from_pretrained(args.output_dir)  # , force_download=True)
         model.to(args.device)
         # Good practice: save your training arguments together with the trained model
@@ -658,9 +658,9 @@ def main(args, gpus_per_trial=4):
     # }
 
     search_space = {
-        "s_model": tune.grid_search(list(model_dict.keys())),
-        "task_name": tune.grid_search(['mnli','qnli','qqp','sst-2']),
-        "teacher_name": tune.grid_search(['bert-base-uncased','roberta-large'])
+        "s_model": tune.grid_search(['TinyBERT4']),
+        "task_name": tune.grid_search(glue_list),
+        "teacher_name": tune.grid_search(['bert-base-uncased'])
     }
     # search_space = {
     #     "intermediate_loss_type": tune.grid_search(["mi_0.1","mi_0.9"]),
