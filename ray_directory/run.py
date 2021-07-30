@@ -155,7 +155,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                                                                                          "module") else t_model.config.hidden_size,
                                             s_model.module.config.hidden_size if hasattr(s_model,
                                                                                          "module") else s_model.config.hidden_size,
-                                            64, 32)
+                                            hidden_size=128, out_dim=64)
                         critic.to(args.device)
                         critic_no_decay = ['bias']
                         critic_parameters = [
@@ -203,7 +203,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                 critic_emb = mlp_critic(
                     t_emb_size,
                     s_emb_size,
-                    128, 64)
+                    hidden_size=128, out_dim=64)
                 critic_emb.to(args.device)
                 critic_no_decay = ['bias']
                 critic_parameters = [
