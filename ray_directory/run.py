@@ -643,6 +643,7 @@ model_dict = {"BERT_BASE": "google/bert_uncased_L-12_H-768_A-12",
               "TinyBERT6":"huawei-noah/TinyBERT_General_6L_768D",
               "BERT_SMALL":"google/bert_uncased_L-4_H-512_A-8",
               "TinyBERT4": "huawei-noah/TinyBERT_General_4L_312D",
+              "MiniLM": "microsoft/MiniLM-L12-H384-uncased",
               "BERT_MINI": "google/bert_uncased_L-4_H-256_A-4",
               "BERT_TINY":"google/bert_uncased_L-2_H-128_A-2",
               "ELECTRA_SMALL":"google/electra-small-discriminator"}
@@ -658,9 +659,10 @@ def main(args, gpus_per_trial=4):
     # }
 
     search_space = {
-        "s_model": tune.grid_search(['TinyBERT4']),
+        "s_model": tune.grid_search(['MiniLM']),
         "task_name": tune.grid_search(glue_list),
-        "teacher_name": tune.grid_search(['bert-base-uncased'])
+        "teacher_name": tune.grid_search(['bert-base-uncased']),
+        "kd_loss_type": tune.grid_search(["ce", "mse"])
     }
     # search_space = {
     #     "intermediate_loss_type": tune.grid_search(["mi_0.1","mi_0.9"]),
