@@ -676,7 +676,7 @@ class lstm_critic(torch.nn.Module):
             return torch.sum(h_n, 0)
         else:
             _, (h_n_t, c_n_t) = self._t(y)
-            _, (h_n_s, c_n_s) = self._s(y)
+            _, (h_n_s, c_n_s) = self._s(x)
             return torch.matmul(torch.sum(h_n_s,0), torch.sum(h_n_t, 0))
 
 class Critic(torch.nn.Module):
