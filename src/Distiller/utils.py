@@ -683,6 +683,7 @@ class Critic(torch.nn.Module):
     def __init__(self, type, t_dim, s_dim=None, hidden_size=512, out_dim=32, length=None, num_layers=1,
                  bidirectional=True, dropout=0.1, nhead=8):
         super(Critic, self).__init__()
+        self.type = type
         if type == 'mlp':
             self.critic = mlp_critic(t_dim, s_dim, length, hidden_size, out_dim)
         elif type == 'lstm':
