@@ -310,6 +310,7 @@ def mi_loss(state_S, state_T, critic, baseline_fn, alpha):
     return -interpolated_lower_bound(scores, log_baseline, alpha)
 
 
+
 def log_prob_gaussian(x):
     return torch.sum(torch.distributions.normal.Normal(0.,1.).log_prob(x), dim=-1, keepdim=False)
 

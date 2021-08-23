@@ -141,7 +141,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
         critic = None
         baseline_fn = None
         if args.intermediate_loss_type == 'mi':
-            from Distiller.utils import mlp_critic
+            from Distiller.utils import Critic
 
             if args.intermediate_strategy == "emd":
                 t_layer = t_model.module.config.num_hidden_layers if hasattr(t_model.module.config, "num_hidden_layers") else t_model.module.config.num_hidden_layers
@@ -151,14 +151,14 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                 baseline_fn_all = []
                 for t in range(s_layer):
                     for s in range(t_layer):
-                        baseline_fn = mlp_critic(t_model.module.config.hidden_size if hasattr(t_model,
+                        baseline_fn = Critic(type='lstm', t_dim=t_model.module.config.hidden_size if hasattr(t_model,
                                                                                               "module") else t_model.config.hidden_size,
                                                  hidden_size=128, out_dim=1)
                         # , length = args.max_seq_length if args.task_type in ['squad', 'squad2'] else None
                         baseline_fn.to(args.device)
-                        critic = mlp_critic(t_model.module.config.hidden_size if hasattr(t_model,
+                        critic = Critic(type='lstm', t_dim=t_model.module.config.hidden_size if hasattr(t_model,
                                                                                          "module") else t_model.config.hidden_size,
-                                            s_model.module.config.hidden_size if hasattr(s_model,
+                                            s_dim=s_model.module.config.hidden_size if hasattr(s_model,
                                                                                          "module") else s_model.config.hidden_size,
                                             hidden_size=128, out_dim=64)
                         critic.to(args.device)
@@ -190,8 +190,8 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                     s_emb_size = s_model.module.config.emb_size if hasattr(s_model.module.config, "emb_size") else s_model.module.config.hidden_size
                 else:
                     s_emb_size = s_model.config.emb_size if hasattr(s_model.config, "emb_size") else s_model.config.hidden_size
-                baseline_fn_emb = mlp_critic(
-                    t_emb_size,
+                baseline_fn_emb = Critic(type='lstm',
+                    t_dim=t_emb_size,
                     hidden_size=128, out_dim=1)
                 # for name, param in baseline_fn.named_parameters():
                 #     if 'weight' in name:
@@ -202,9 +202,10 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                 # critic = mlp_critic(args.max_seq_length * (t_model.module.config.hidden_size if hasattr(t_model,
                 #                                               "module") else t_model.config.hidden_size), args.max_seq_length* (s_model.module.config.hidden_size if hasattr(s_model,
                 #                                               "module") else s_model.config.hidden_size), 256, 32)
-                critic_emb = mlp_critic(
-                    t_emb_size,
-                    s_emb_size,
+                critic_emb = Critic(
+                    type='lstm',
+                    t_dim=t_emb_size,
+                    s_dim=s_emb_size,
                     hidden_size=128, out_dim=64)
                 critic_emb.to(args.device)
                 critic_no_decay = ['bias']
@@ -225,13 +226,13 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                 critic = critic_all
                 baseline_fn = baseline_fn_all
             else:
-                baseline_fn = mlp_critic(
-                    t_model.module.config.hidden_size if hasattr(t_model, "module") else t_model.config.hidden_size,
+                baseline_fn = Critic(type='lstm',
+                    t_dim=t_model.module.config.hidden_size if hasattr(t_model, "module") else t_model.config.hidden_size,
                     hidden_size=128, out_dim=1)
                 baseline_fn.to(args.device)
-                critic = mlp_critic(
-                    t_model.module.config.hidden_size if hasattr(t_model, "module") else t_model.config.hidden_size,
-                    s_model.module.config.hidden_size if hasattr(s_model, "module") else s_model.config.hidden_size,
+                critic = Critic(type='lstm',
+                    t_dim=t_model.module.config.hidden_size if hasattr(t_model, "module") else t_model.config.hidden_size,
+                    s_dim=s_model.module.config.hidden_size if hasattr(s_model, "module") else s_model.config.hidden_size,
                     hidden_size=128, out_dim=64)
                 critic.to(args.device)
                 critic_no_decay = ['bias']
