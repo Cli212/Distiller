@@ -691,29 +691,29 @@ class PositionalEncoding(torch.nn.Module):
 
 class transformer_encoder(torch.nn.Module):
     
-    def __init__(self,d_model=512, length=128, nhead=8, hidden_size=2048, num_layers=3, dropout=0.0,out_dim=1):
+    def __init__(self,d_model=512, length=128, nhead=8, hidden_size=2048, num_layers=3, dropout=0.0):
         super(transformer_encoder, self).__init__()
         encoder_layer = torch.nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=hidden_size, batch_first=True, dropout=dropout)
         self.encoder = torch.nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.pos_encoder = PositionalEncoding(d_model, dropout)
-        self.decoder = torch.nn.Linear(d_model, out_dim)
         self.d_model = d_model
     def forward(self, x):
-        opt = self.pos_encoder(self.encoder(x) * math.sqrt(self.d_model))
-        return self.decoder(opt.mean(1))
+        return self.pos_encoder(self.encoder(x) * math.sqrt(self.d_model))
 
 
 class transformer_critic(torch.nn.Module):
     def __init__(self, t_dim, s_dim=None, hidden_size=512, out_dim=32, nhead=8,
                  num_layers=6, dropout=0.1, length=128):
         super(transformer_critic, self).__init__()
-        self._t = transformer_encoder(t_dim, length, nhead, hidden_size, num_layers, dropout=dropout, out_dim=out_dim)
+        self._t = transformer_encoder(t_dim, length, nhead, hidden_size, num_layers, dropout=dropout)
+        self.decoder = torch.nn.Linear(t_dim*length, 1)
         if s_dim:
-            self._s = transformer_encoder(s_dim, length, nhead, hidden_size, num_layers, dropout=dropout, out_dim=out_dim)
+            self._s = transformer_encoder(s_dim, length, nhead, hidden_size, num_layers, dropout=dropout)
 
     def forward(self, x=None, y=None):
         if x==None:
-            return self._t(y)
+            t_density = self._t(y)
+            return self.decoder(t_density.view(t_density.shape[0], -1))
         else:
             return torch.matmul(self._s(x), self._t(y).T)
 
