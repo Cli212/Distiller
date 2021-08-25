@@ -696,12 +696,11 @@ class transformer_encoder(torch.nn.Module):
         encoder_layer = torch.nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=hidden_size, batch_first=True, dropout=dropout)
         self.encoder = torch.nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.pos_encoder = PositionalEncoding(d_model, dropout)
-        self.decoder = torch.nn.Linear(d_model*length, out_dim)
+        self.decoder = torch.nn.Linear(d_model, out_dim)
         self.d_model = d_model
     def forward(self, x):
         opt = self.pos_encoder(self.encoder(x) * math.sqrt(self.d_model))
-        opt = opt.view(opt.shape[0], -1)
-        return self.decoder(opt)
+        return self.decoder(opt.mean(1))
 
 
 class transformer_critic(torch.nn.Module):
