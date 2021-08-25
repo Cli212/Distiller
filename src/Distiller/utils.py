@@ -644,23 +644,80 @@ class mlp_critic(torch.nn.Module):
             else:
                 return torch.matmul(self._s(x), self._t(y).T)
 
-def transformer_encoder(d_model=512, nhead=8, hidden_size=2048, num_layers=3):
-    encoder_layer = torch.nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=hidden_size, batch_first=True)
-    return torch.nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
+class PositionalEncoding(torch.nn.Module):
+    r"""Inject some information about the relative or absolute position of the tokens
+        in the sequence. The positional encodings have the same dimension as
+        the embeddings, so that the two can be summed. Here, we use sine and cosine
+        functions of different frequencies.
+    .. math::
+        \text{PosEncoder}(pos, 2i) = sin(pos/10000^(2i/d_model))
+        \text{PosEncoder}(pos, 2i+1) = cos(pos/10000^(2i/d_model))
+        \text{where pos is the word position and i is the embed idx)
+    Args:
+        d_model: the embed dim (required).
+        dropout: the dropout value (default=0.1).
+        max_len: the max. length of the incoming sequence (default=5000).
+    Examples:
+        >>> pos_encoder = PositionalEncoding(d_model)
+    """
+
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = torch.nn.Dropout(p=dropout)
+
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).transpose(0, 1)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        r"""Inputs of forward function
+        Args:
+            x: the sequence fed to the positional encoder model (required).
+        Shape:
+            x: [sequence length, batch size, embed dim]
+            output: [sequence length, batch size, embed dim]
+        Examples:
+            >>> output = pos_encoder(x)
+        """
+
+        x = x + self.pe[:x.size(0), :]
+        return self.dropout(x)
+
+
+class transformer_encoder(torch.nn.Module):
+    
+    def __init__(self,d_model=512, length=128, nhead=8, hidden_size=2048, num_layers=3, dropout=0.0,out_dim=1):
+        super(transformer_encoder, self).__init__()
+        encoder_layer = torch.nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=hidden_size, batch_first=True, dropout=dropout)
+        self.encoder = torch.nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        self.pos_encoder = PositionalEncoding(d_model, dropout)
+        self.decoder = torch.nn.Linear(d_model*length, out_dim)
+        self.d_model = d_model
+    def forward(self, x):
+        opt = self.pos_encoder(self.encoder(x) * math.sqrt(self.d_model))
+        return self.decoder(opt.view(opt.shape[0], -1))
+
 
 class transformer_critic(torch.nn.Module):
     def __init__(self, t_dim, s_dim=None, hidden_size=512, out_dim=32, nhead=8,
-                 num_layers=6):
+                 num_layers=6, dropout=0.1, length=128):
         super(transformer_critic, self).__init__()
-        self.out_dim = out_dim
-        self._t = transformer_encoder(t_dim, nhead, hidden_size, num_layers)
+        self._t = transformer_encoder(t_dim, length, nhead, hidden_size, num_layers, dropout=dropout, out_dim=out_dim)
         if s_dim:
-            self._s = transformer_encoder(s_dim, nhead, hidden_size, num_layers)
+            self._s = transformer_encoder(s_dim, length, nhead, hidden_size, num_layers, dropout=dropout, out_dim=out_dim)
+
     def forward(self, x=None, y=None):
         if x==None:
             return self._t(y)
         else:
             return torch.matmul(self._s(x), self._t(y).T)
+
+
 
 class lstm_critic(torch.nn.Module):
     def __init__(self, t_dim, s_dim=None, hidden_size=512, out_dim=32, num_layers=1, bidirectional=True, dropout=0.1):
@@ -689,7 +746,7 @@ class Critic(torch.nn.Module):
         elif type == 'lstm':
             self.critic = lstm_critic(t_dim, s_dim, hidden_size, out_dim, num_layers, bidirectional, dropout)
         elif type == 'transformer':
-            self.critic = transformer_critic(t_dim, s_dim, hidden_size, out_dim, nhead, num_layers)
+            self.critic = transformer_critic(t_dim, s_dim, hidden_size, out_dim, nhead, num_layers, dropout=dropout, length=length)
         else:
             raise NotImplementedError
 

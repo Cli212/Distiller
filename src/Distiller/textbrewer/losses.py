@@ -396,7 +396,7 @@ def interpolated_lower_bound(scores, baseline, alpha_logit):
     critic_joint = torch.diagonal(scores, offset=0)[:, None] - interpolated_baseline
     joint_term = (torch.sum(critic_joint) -
                 torch.sum(torch.diagonal(critic_joint, offset=0))) / (batch_size * (batch_size - 1.))
-    return torch.tensor(1.) + joint_term  - marg_term
+    return torch.tensor(1.) + joint_term - marg_term
 
 
 def infonce_lower_bound(scores):
