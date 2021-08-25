@@ -714,7 +714,9 @@ class transformer_critic(torch.nn.Module):
         if x==None:
             return self._t(y).mean(1)
         else:
-            return torch.matmul(self._s(x), self._t(y).T)
+            s_opt = self._s(x)
+            t_opt = self._t(y)
+            return torch.matmul(s_opt.view(s_opt.shape[0], -1), t_opt.view(t_opt.shape[0], -1).T)
 
 
 
