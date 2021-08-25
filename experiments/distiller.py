@@ -227,13 +227,16 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                 baseline_fn = baseline_fn_all
             else:
                 baseline_fn = Critic(type='transformer',
-                    t_dim=t_model.module.config.hidden_size if hasattr(t_model, "module") else t_model.config.hidden_size,
-                    hidden_size=128, out_dim=1, length=args.max_seq_length)
+                                     t_dim=t_model.module.config.hidden_size if hasattr(t_model,
+                                                                                        "module") else t_model.config.hidden_size,
+                                     hidden_size=2048, out_dim=1, length=args.max_seq_length, num_layers=3)
                 baseline_fn.to(args.device)
                 critic = Critic(type='transformer',
-                    t_dim=t_model.module.config.hidden_size if hasattr(t_model, "module") else t_model.config.hidden_size,
-                    s_dim=s_model.module.config.hidden_size if hasattr(s_model, "module") else s_model.config.hidden_size,
-                    hidden_size=128, out_dim=64, length=args.max_seq_length)
+                                t_dim=t_model.module.config.hidden_size if hasattr(t_model,
+                                                                                   "module") else t_model.config.hidden_size,
+                                s_dim=s_model.module.config.hidden_size if hasattr(s_model,
+                                                                                   "module") else s_model.config.hidden_size,
+                                hidden_size=2048, out_dim=512, length=args.max_seq_length, num_layers=3)
                 critic.to(args.device)
                 critic_no_decay = ['bias']
                 critic_parameters = [

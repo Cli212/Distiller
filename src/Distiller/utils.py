@@ -700,7 +700,8 @@ class transformer_encoder(torch.nn.Module):
         self.d_model = d_model
     def forward(self, x):
         opt = self.pos_encoder(self.encoder(x) * math.sqrt(self.d_model))
-        return self.decoder(opt.view(opt.shape[0], -1))
+        opt = opt.view(opt.shape[0], -1)
+        return self.decoder(opt)
 
 
 class transformer_critic(torch.nn.Module):
