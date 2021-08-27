@@ -632,7 +632,7 @@ class mlp_critic(torch.nn.Module):
             self._s = mlp(s_dim, hidden_size, out_dim)
 
 
-    def forward(self, x=None, y=None):
+    def forward(self, x=None, y=None, mask_S=None, mask_T=None):
         if x==None:
             if self.length:
                 return mean_tensor(self._t(y),self.length,self.out_dim)
@@ -698,8 +698,8 @@ class transformer_encoder(torch.nn.Module):
         self.pos_encoder = PositionalEncoding(d_model, dropout)
         self.decoder = torch.nn.Linear(d_model, out_dim)
         self.d_model = d_model
-    def forward(self, x):
-        return self.decoder(self.pos_encoder(self.encoder(x) * math.sqrt(self.d_model)))
+    def forward(self, x, mask=None):
+        return self.decoder(self.pos_encoder(self.encoder(x, mask=mask) * math.sqrt(self.d_model)))
 
 
 class transformer_critic(torch.nn.Module):
@@ -710,12 +710,12 @@ class transformer_critic(torch.nn.Module):
         if s_dim:
             self._s = transformer_encoder(s_dim, length, nhead, hidden_size, num_layers, dropout=dropout, out_dim=out_dim)
 
-    def forward(self, x=None, y=None):
+    def forward(self, x=None, y=None, mask_S=None, mask_T=None):
         if x==None:
-            return self._t(y).mean(1)
+            return self._t(y, mask_T).mean(1)
         else:
-            s_opt = torch.nn.functional.normalize(self._s(x))
-            t_opt = torch.nn.functional.normalize(self._t(y))
+            s_opt = torch.nn.functional.normalize(self._s(x, mask_S))
+            t_opt = torch.nn.functional.normalize(self._t(y, mask_T))
             return torch.matmul(s_opt.view(s_opt.shape[0], -1), t_opt.view(t_opt.shape[0], -1).T)
 
 
@@ -727,7 +727,7 @@ class lstm_critic(torch.nn.Module):
         if s_dim:
             self._s = torch.nn.LSTM(s_dim, hidden_size, num_layers, batch_first=True, bidirectional=bidirectional, dropout=dropout, proj_size=out_dim)
 
-    def forward(self, x=None, y=None):
+    def forward(self, x=None, y=None, mask_S=None, mask_T=None):
 
         if x==None:
             output, (h_n, c_n) = self._t(y)
@@ -751,8 +751,8 @@ class Critic(torch.nn.Module):
         else:
             raise NotImplementedError
 
-    def forward(self, x=None, y=None):
-        return self.critic(x, y)
+    def forward(self, x=None, y=None, mask_S=None, mask_T=None):
+        return self.critic(x, y, mask_S, mask_T)
 
 def glue_criterion(task_name):
     return {'cola':['mcc'],

@@ -284,7 +284,7 @@ def mmd_loss(state_S, state_T, mask=None):
     return loss
 
 
-def mi_loss(state_S, state_T, critic, baseline_fn, alpha):
+def mi_loss(state_S, state_T, critic, baseline_fn, alpha, mask_T=None, mask_S=None):
     if state_T.dim() == 3:
         # cls label states
         if critic.type != 'mlp':
@@ -305,8 +305,8 @@ def mi_loss(state_S, state_T, critic, baseline_fn, alpha):
         # cls_S = state_S.view(state_S.shape[0], -1)
     else:
         cls_S = state_S
-    log_baseline = torch.squeeze(baseline_fn(y=cls_T))
-    scores = critic(cls_S, cls_T)
+    log_baseline = torch.squeeze(baseline_fn(y=cls_T, mask_T=mask_T))
+    scores = critic(cls_S, cls_T, mask_S=mask_S, mask_T=mask_T)
     return -interpolated_lower_bound(scores, log_baseline, alpha)
 
 
