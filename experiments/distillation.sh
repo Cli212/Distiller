@@ -1,29 +1,29 @@
 #set hyperparameters
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
-TEACHER_DIR=howey/bert-base-uncased-boolq
+TEACHER_DIR=csarron/bert-base-uncased-squad-v1
 STUDENT_DIR=huawei-noah/TinyBERT_General_4L_312D
-DATA_ROOT_DIR=../datasets/superGLUE/boolq
+DATA_ROOT_DIR=../datasets/squadv1
 OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
 accu=1
-ep=12
+ep=30
 lr=5
 alpha=0.9
 #augmenter_config_path=augmenter_config.json
 intermediate_strategy=skip
 intermediate_loss_type=mi
 intermediate_features=hidden
-kd_loss_type=ce
+kd_loss_type=mse
 ## if you use mixup or augmenter, then the actual batch size will be batch_size * 2
 batch_size=16
 temperature=1
-length=128
+length=320
 torch_seed=9580
 hard_label_weight=0.0
 kd_loss_weight=1.0
 task_name=boolq
-task_type=glue
+task_type=squad
 aug_p=0.3
 w=None
 aug_pipeline=False
@@ -60,7 +60,6 @@ python -m torch.distributed.launch --nproc_per_node=${gpu_nums} --master_port=12
     --gradient_accumulation_steps ${accu} \
     --temperature ${temperature} \
     --alpha ${alpha} \
-    --w ${w} \
     --mixup ${mixup}\
     --aug_p ${aug_p} \
     --aug_pipeline ${aug_pipeline} \
