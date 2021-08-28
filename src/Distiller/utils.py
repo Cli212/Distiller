@@ -721,7 +721,6 @@ class transformer_critic(torch.nn.Module):
         else:
             s_opt = torch.nn.functional.normalize(self._s(x, mask_S))
             t_opt = torch.nn.functional.normalize(self._t(y, mask_T))
-            torch.cuda.empty_cache()
             return torch.matmul(s_opt.view(s_opt.shape[0], -1), t_opt.view(t_opt.shape[0], -1).T)
 
 

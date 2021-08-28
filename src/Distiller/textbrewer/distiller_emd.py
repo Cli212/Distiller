@@ -166,10 +166,10 @@ class EMDDistiller(BasicDistiller):
                     # distance_matrix[s][t + feature_num_S] = distance_matrix[t + feature_num_S][s] = hid_mse_loss(f_S,
                     #                                                                                              f_T,
                     #                                                                                              mask=inputs_mask_S)
-                    m_l = match_loss(f_S, f_T, self.d_config.critic[s*feature_num_T+t], self.d_config.baseline_fn[s*feature_num_T+t],
-                                                   self.d_config.alpha)
-                    # distance_matrix[s][t + feature_num_S] = distance_matrix[t + feature_num_S][s] = match_loss(f_S, f_T, self.d_config.critic, self.d_config.baseline_fn,
-                    #                                self.d_config.alpha, mask_T=inputs_mask_T, mask_S=inputs_mask_S)
+                    # m_l = match_loss(f_S, f_T, self.d_config.critic[s*feature_num_T+t], self.d_config.baseline_fn[s*feature_num_T+t],
+                    #                                self.d_config.alpha)
+                    distance_matrix[s][t + feature_num_S] = distance_matrix[t + feature_num_S][s] = match_loss(f_S, f_T, self.d_config.critic[s*feature_num_T+t], self.d_config.baseline_fn[s*feature_num_T+t],
+                                                   self.d_config.alpha, mask_T=inputs_mask_T, mask_S=inputs_mask_S)
 
                 else:
                     distance_matrix[s][t + feature_num_S] = distance_matrix[t + feature_num_S][s] = match_loss(f_S, f_T,
