@@ -699,7 +699,10 @@ class transformer_encoder(torch.nn.Module):
         self.decoder = torch.nn.Linear(d_model, out_dim)
         self.d_model = d_model
     def forward(self, x, mask=None):
-        return self.decoder(self.pos_encoder(self.encoder(x, src_key_padding_mask=mask.float().masked_fill(mask == 0, True).masked_fill(mask == 1, False)) * math.sqrt(self.d_model)))
+        padding_mask = mask.float().masked_fill(mask == 0, True).masked_fill(mask == 1, False)
+        encoder_opt = self.encoder(x, src_key_padding_mask=padding_mask) * math.sqrt(self.d_model)
+        pos_opt = self.pos_encoder(encoder_opt)
+        return self.decoder(pos_opt)
 
 
 class transformer_critic(torch.nn.Module):
