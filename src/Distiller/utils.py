@@ -704,7 +704,7 @@ class transformer_encoder(torch.nn.Module):
 
 class transformer_critic(torch.nn.Module):
     def __init__(self, t_dim, s_dim=None, hidden_size=512, out_dim=32, nhead=8,
-                 num_layers=6, dropout=0.1, length=128):
+                 num_layers=2, dropout=0.1, length=128):
         super(transformer_critic, self).__init__()
         self._t = transformer_encoder(t_dim, length, nhead, hidden_size, num_layers, dropout=dropout, out_dim=out_dim)
         if s_dim:
