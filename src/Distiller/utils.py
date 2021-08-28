@@ -694,7 +694,8 @@ class transformer_encoder(torch.nn.Module):
     def __init__(self,d_model=512, length=128, nhead=8, hidden_size=2048, num_layers=3, dropout=0.0, out_dim=32):
         super(transformer_encoder, self).__init__()
         encoder_layer = torch.nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=hidden_size, batch_first=True, dropout=dropout)
-        self.encoder = torch.nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        encoder_norm = torch.nn.LayerNorm(d_model)
+        self.encoder = torch.nn.TransformerEncoder(encoder_layer, num_layers=num_layers, norm=encoder_norm)
         self.pos_encoder = PositionalEncoding(d_model, dropout)
         self.decoder = torch.nn.Linear(d_model, out_dim)
         self.d_model = d_model
@@ -702,7 +703,9 @@ class transformer_encoder(torch.nn.Module):
         padding_mask = mask.masked_fill(mask == 0, True).masked_fill(mask == 1, False).to(torch.bool)
         encoder_opt = self.encoder(x, src_key_padding_mask=padding_mask) * math.sqrt(self.d_model)
         pos_opt = self.pos_encoder(encoder_opt)
-        return self.decoder(pos_opt)
+        opt = self.decoder(pos_opt)
+        del padding_mask, encoder_opt, pos_opt, opt
+        return opt
 
 
 class transformer_critic(torch.nn.Module):
