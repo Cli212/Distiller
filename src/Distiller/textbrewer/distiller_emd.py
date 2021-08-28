@@ -211,7 +211,7 @@ class EMDDistiller(BasicDistiller):
             # embeddings_S = proj(embeddings_S)
             # embedding_loss = hid_mse_loss(embeddings_S, embeddings_T, mask=inputs_mask_S)
             embedding_loss = match_loss(embeddings_S, embeddings_T, self.d_config.critic[-1], self.d_config.baseline_fn[-1],
-                                        self.d_config.alpha)
+                                        self.d_config.alpha, mask_T=inputs_mask_T, mask_S=inputs_mask_S)
 
         else:
             embedding_loss = match_loss(embeddings_S, embeddings_T, mask=inputs_mask_S)
