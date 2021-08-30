@@ -6,6 +6,7 @@ models/*
 configs/*
 *.ipynb
 .DS_Store
+./predictions/
 <<<<<<< HEAD
 
 =======

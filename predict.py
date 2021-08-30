@@ -32,6 +32,7 @@ glue_processors = {
     "rte": RteProcessor,
     "wnli": WnliProcessor,
 }
+
 def main(args):
     config = AutoConfig.from_pretrained(args.model_path)
     args.model_type = config.model_type
@@ -74,7 +75,7 @@ def main(args):
             predictions = predictions[:, 0]
             preds.extend(predictions.tolist())
         label_list.extend(batch['labels'].cpu().tolist())
-    pd.DataFrame({'prediction':preds}).to_csv(args.output_path)
+    pd.DataFrame({'index':list(range(len(preds))), 'prediction':preds}).to_csv(args.output_path+'.tsv', sep="\t", index=False)
     if args.task_name == "mnli":
         args.task_name = "mnli-mm"
         processor = glue_processors[args.task_name]()
@@ -107,7 +108,7 @@ def main(args):
                 predictions = predictions[:, 0]
                 preds.extend(predictions.tolist())
             label_list.extend(batch['labels'].cpu().tolist())
-        pd.DataFrame({'prediction': preds}).to_csv(args.output_path+"_mm.csv")
+        pd.DataFrame({'index':list(range(len(preds))), 'prediction': preds}).to_csv(args.output_path+"m.tsv", sep="\t", index=False)
 
 glue_output_modes = {
     "cola": "classification",
@@ -129,12 +130,20 @@ if __name__ == "__main__":
     parser.add_argument("--task_name", type=str, default="cola",
                         choices=["cola", "sst-2", "mrpc", "stsb", "qqp", "mnli", "mnli-mm", "qnli", "rte", "wnli"],
                         help="Only used when task type is glue")
-    parser.add_argument("--max_seq_length", default=128)
+    parser.add_argument("--max_seq_length", default=128, type=int)
     parser.add_argument("--tokenizer_path", default="huawei-noah/TinyBERT_General_4L_312D")
     parser.add_argument("--output_path", default="./predictions/")
 
     args = parser.parse_args()
     if not os.path.exists(args.output_path):
         os.makedirs(args.output_path)
-    args.output_path = os.path.join(args.output_path, args.model_path.split('/')[-1]+"_"+args.task_name+".csv")
+    if args.task_name == 'cola':
+        file_name = 'CoLA'
+    elif args.task_name == 'mnli':
+        file_name = 'MNLI-m'
+    elif args.task_name == 'stsb':
+        file_name = 'STS-B'
+    else:
+        file_name = args.task_name.upper()
+    args.output_path = args.output_path + '/' + file_name
     main(args)

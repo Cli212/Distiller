@@ -151,16 +151,18 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                 baseline_fn_all = []
                 for t in range(s_layer):
                     for s in range(t_layer):
-                        baseline_fn = Critic(type='lstm', t_dim=t_model.module.config.hidden_size if hasattr(t_model,
-                                                                                              "module") else t_model.config.hidden_size,
-                                                 hidden_size=128, out_dim=1)
+                        baseline_fn = Critic(type='mlp',
+                                             t_dim=t_model.module.config.hidden_size if hasattr(t_model,
+                                                                                                "module") else t_model.config.hidden_size,
+                                             hidden_size=512, out_dim=1, length=args.max_seq_length, num_layers=2)
                         # , length = args.max_seq_length if args.task_type in ['squad', 'squad2'] else None
                         baseline_fn.to(args.device)
-                        critic = Critic(type='lstm', t_dim=t_model.module.config.hidden_size if hasattr(t_model,
-                                                                                         "module") else t_model.config.hidden_size,
-                                            s_dim=s_model.module.config.hidden_size if hasattr(s_model,
-                                                                                         "module") else s_model.config.hidden_size,
-                                            hidden_size=128, out_dim=64)
+                        critic = Critic(type='mlp',
+                                        t_dim=t_model.module.config.hidden_size if hasattr(t_model,
+                                                                                           "module") else t_model.config.hidden_size,
+                                        s_dim=s_model.module.config.hidden_size if hasattr(s_model,
+                                                                                           "module") else s_model.config.hidden_size,
+                                        hidden_size=512, out_dim=64, length=args.max_seq_length, num_layers=2)
                         critic.to(args.device)
                         critic_no_decay = ['bias']
                         critic_parameters = [
@@ -190,9 +192,9 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                     s_emb_size = s_model.module.config.emb_size if hasattr(s_model.module.config, "emb_size") else s_model.module.config.hidden_size
                 else:
                     s_emb_size = s_model.config.emb_size if hasattr(s_model.config, "emb_size") else s_model.config.hidden_size
-                baseline_fn_emb = Critic(type='transformer',
+                baseline_fn_emb = Critic(type='mlp',
                     t_dim=t_emb_size,
-                    hidden_size=128, out_dim=1, length=args.max_seq_length)
+                    hidden_size=128, out_dim=1, length=args.max_seq_length, num_layers=2)
                 # for name, param in baseline_fn.named_parameters():
                 #     if 'weight' in name:
                 #         torch.nn.init.xavier_uniform(param)
@@ -203,10 +205,10 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                 #                                               "module") else t_model.config.hidden_size), args.max_seq_length* (s_model.module.config.hidden_size if hasattr(s_model,
                 #                                               "module") else s_model.config.hidden_size), 256, 32)
                 critic_emb = Critic(
-                    type='transformer',
+                    type='mlp',
                     t_dim=t_emb_size,
                     s_dim=s_emb_size,
-                    hidden_size=128, out_dim=64, length=args.max_seq_length)
+                    hidden_size=128, out_dim=64, length=args.max_seq_length, num_layers=2)
                 critic_emb.to(args.device)
                 critic_no_decay = ['bias']
                 critic_parameters = [
