@@ -238,7 +238,7 @@ def train(args, examples, train_dataset, t_model, s_model, tokenizer, augmenter=
                                                                                    "module") else t_model.config.hidden_size,
                                 s_dim=s_model.module.config.hidden_size if hasattr(s_model,
                                                                                    "module") else s_model.config.hidden_size,
-                                hidden_size=512, out_dim=64, length=args.max_seq_length, num_layers=2)
+                                hidden_size=512, out_dim=16, length=args.max_seq_length, num_layers=2)
                 critic.to(args.device)
                 critic_no_decay = ['bias']
                 critic_parameters = [
