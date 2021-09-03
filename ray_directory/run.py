@@ -668,7 +668,7 @@ def main(args, gpus_per_trial=4):
         "task_name": tune.grid_search(glue_list),
         "teacher_name": tune.grid_search(['bert-base-uncased']),
         "kd_loss_type": tune.grid_search(["ce", "mse"]),
-        "w": tune.grid_search([0, 2]),
+        "w": tune.grid_search([[0, 2]]),
 
     }
     # search_space = {
