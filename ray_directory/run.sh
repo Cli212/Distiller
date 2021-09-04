@@ -65,6 +65,7 @@ python run.py \
     --aug_pipeline ${aug_pipeline} \
     --hard_label_weight ${hard_label_weight} \
     --soft_label_weight 0.5 \
+    --num_reaug 5 \
     --kd_loss_weight ${kd_loss_weight} \
     --kd_loss_type ${kd_loss_type}
 
