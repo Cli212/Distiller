@@ -700,7 +700,7 @@ class transformer_encoder(torch.nn.Module):
         self.decoder = torch.nn.Linear(d_model, out_dim)
         self.d_model = d_model
     def forward(self, x, mask=None):
-        padding_mask = mask.masked_fill(mask == 0, True).masked_fill(mask == 1, False).to(torch.bool) if mask else None
+        padding_mask = mask.masked_fill(mask == 0, True).masked_fill(mask == 1, False).to(torch.bool) if mask is not None else None
         pos_opt = self.pos_encoder(x)
         encoder_opt = self.encoder(pos_opt, src_key_padding_mask=padding_mask) * math.sqrt(self.d_model)
         opt = self.decoder(encoder_opt)
