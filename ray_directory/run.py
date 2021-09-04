@@ -667,7 +667,7 @@ def main(args, gpus_per_trial=4):
         "s_model": tune.grid_search(list(model_dict.keys())),
         "task_name": tune.grid_search(glue_list),
         "teacher_name": tune.grid_search(['roberta-large']),
-        "kd_loss_type": tune.grid_search(["ce", "mse"]),
+        "kd_loss_type": tune.grid_search(["ce"]),
         "w": tune.grid_search([[0, 2]]),
 
     }
