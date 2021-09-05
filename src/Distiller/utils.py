@@ -693,7 +693,7 @@ class transformer_encoder(torch.nn.Module):
     
     def __init__(self,d_model=512, length=128, nhead=8, hidden_size=2048, num_layers=3, dropout=0.0, out_dim=32):
         super(transformer_encoder, self).__init__()
-        encoder_layer = torch.nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=hidden_size, batch_first=True, dropout=dropout)
+        encoder_layer = torch.nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=hidden_size, dropout=dropout)
         encoder_norm = torch.nn.LayerNorm(d_model)
         self.encoder = torch.nn.TransformerEncoder(encoder_layer, num_layers=num_layers, norm=encoder_norm)
         self.pos_encoder = PositionalEncoding(d_model, dropout)
@@ -702,7 +702,7 @@ class transformer_encoder(torch.nn.Module):
     def forward(self, x, mask=None):
         padding_mask = mask.masked_fill(mask == 0, True).masked_fill(mask == 1, False).to(torch.bool) if mask is not None else None
         pos_opt = self.pos_encoder(x)
-        encoder_opt = self.encoder(pos_opt, src_key_padding_mask=padding_mask) * math.sqrt(self.d_model)
+        encoder_opt = self.encoder(pos_opt.transpose(0,1), src_key_padding_mask=padding_mask) * math.sqrt(self.d_model)
         opt = self.decoder(encoder_opt)
         return opt
 
