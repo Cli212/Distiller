@@ -732,8 +732,6 @@ def main(args, gpus_per_trial=4):
         config=search_space,
         progress_reporter=reporter,
         queue_trials=True,
-        raise_on_failed_trial=True,
-        reuse_actors=True
     )
     with open('/home/ray/ray_results.json','w') as f:
         json.dump(result, f)
