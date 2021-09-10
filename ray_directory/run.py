@@ -664,11 +664,10 @@ def main(args, gpus_per_trial=4):
     # }
 
     search_space = {
-        "s_model": tune.grid_search(list(model_dict.keys())),
         "task_name": tune.grid_search(glue_list),
-        "teacher_name": tune.grid_search(['roberta-large']),
-        "kd_loss_type": tune.grid_search(["ce"]),
-        "w": tune.grid_search([[0, 2]]),
+        "teacher_name": tune.grid_search(['bert-base-uncased']),
+        "intermediate_loss_type": tune.grid_search(["mse", "mi_0.9", "ce"]),
+        "inter_loss_weight": tune.grid_search([0.0, 1.0]),
     }
     # search_space = {
     #     "intermediate_loss_type": tune.grid_search(["mi_0.1","mi_0.9"]),
