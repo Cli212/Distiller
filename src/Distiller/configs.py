@@ -67,6 +67,7 @@ def parse():
     parser.add_argument("--alpha", type=float, default=0.5, help="only useful when using mi loss")
     parser.add_argument("--mixup", type=ast.literal_eval)
     parser.add_argument("--kd_loss_weight", default=1.0, type=float, help="weight of kd loss")
+    parser.add_argument("--inter_loss_weight", default=1.0, type=float, help="weight of intermediate loss")
     parser.add_argument("--hard_label_weight", default=0.0, type=float, help="weight of hard label loss")
     parser.add_argument("--soft_label_weight", default=0.0, type=float, help="weight of soft label loss")
     parser.add_argument("--num_reaug", default=3, type=int)

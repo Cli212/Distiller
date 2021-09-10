@@ -62,7 +62,7 @@ def cal_layer_mapping(args, t_config, s_config):
             raise NotImplementedError
         matches = {'layer_num_S':s_config.num_hidden_layers+1, 'layer_num_T':t_config.num_hidden_layers+1,  #number of hidden_states + embedding_layer
                                           'feature':'hidden','loss':loss_type,
-                                          'weight':1.0,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size and args.intermediate_loss_type != "mi" else None}
+                                          'weight': args.inter_loss_weight,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size and args.intermediate_loss_type != "mi" else None}
     else:
         for feature in args.intermediate_features:
             if args.intermediate_loss_type in ["cos", "pkd","mi","nce","nwj","tuba"]:
@@ -74,19 +74,19 @@ def cal_layer_mapping(args, t_config, s_config):
             if args.intermediate_strategy == "skip":
                 if feature == "hidden":
                     for i in range(s_num_layers+1):
-                        matches.append({'layer_T': int(i*k),'layer_S':i, 'feature':feature, 'loss':loss_type, 'weight':1,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size and args.intermediate_loss_type != "mi" else None})
+                        matches.append({'layer_T': int(i*k),'layer_S':i, 'feature':feature, 'loss':loss_type, 'weight':args.inter_loss_weight,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size and args.intermediate_loss_type != "mi" else None})
                 elif feature == "attention":
                     for i in range(s_num_layers):
-                        matches.append({'layer_T': int((i+1)*k-1), 'layer_S': i, 'feature':feature, 'loss':loss_type, 'weight':1})
+                        matches.append({'layer_T': int((i+1)*k-1), 'layer_S': i, 'feature':feature, 'loss':loss_type, 'weight':args.inter_loss_weight})
                 else:
                     continue
             elif args.intermediate_strategy == "last":
                 if feature == "hidden":
                     for i in range(s_num_layers+1):
-                        matches.append({'layer_T': int(t_num_layers-s_num_layers+i), 'layer_S': i, 'feature':feature, 'loss':loss_type, 'weight':1,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size and args.intermediate_loss_type != "mi" else None})
+                        matches.append({'layer_T': int(t_num_layers-s_num_layers+i), 'layer_S': i, 'feature':feature, 'loss':loss_type, 'weight':args.inter_loss_weight,'proj':['linear',s_config.hidden_size,t_config.hidden_size] if s_config.hidden_size<t_config.hidden_size and args.intermediate_loss_type != "mi" else None})
                 elif feature == "attention":
                     for i in range(s_num_layers):
-                        matches.append({"layer_T": int(t_num_layers-s_num_layers+i),"layer_S":i, 'feature':feature, 'loss':loss_type, 'weight':1})
+                        matches.append({"layer_T": int(t_num_layers-s_num_layers+i),"layer_S":i, 'feature':feature, 'loss':loss_type, 'weight':args.inter_loss_weight})
                 else:
                     continue
             else:

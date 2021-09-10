@@ -669,7 +669,6 @@ def main(args, gpus_per_trial=4):
         "teacher_name": tune.grid_search(['roberta-large']),
         "kd_loss_type": tune.grid_search(["ce"]),
         "w": tune.grid_search([[0, 2]]),
-
     }
     # search_space = {
     #     "intermediate_loss_type": tune.grid_search(["mi_0.1","mi_0.9"]),
@@ -733,7 +732,10 @@ def main(args, gpus_per_trial=4):
         },
         config=search_space,
         progress_reporter=reporter,
-        queue_trials=True)
+        queue_trials=True,
+        raise_on_failed_trial=True,
+        reuse_actors=True
+    )
     with open('/home/ray/ray_results.json','w') as f:
         json.dump(result, f)
     best_trial = result.get_best_trial("score", "max", "last")
