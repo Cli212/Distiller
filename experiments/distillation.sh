@@ -7,7 +7,7 @@ OUTPUT_ROOT_DIR=output-student
 
 #STUDENT_CONF_DIR=student_configs/bert_base_cased_L4.json
 accu=1
-ep=30
+ep=20
 lr=5
 alpha=0.9
 #augmenter_config_path=augmenter_config.json
@@ -22,13 +22,14 @@ length=320
 torch_seed=9580
 hard_label_weight=0.0
 kd_loss_weight=1.0
+inter_loss_weight=1.0
 task_name=boolq
 task_type=squad
 aug_p=0.3
 w=None
 aug_pipeline=False
 mixup=False
-NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_alpha${alpha}_h${hard_label_weight}_k${kd_loss_weight}_${kd_loss_type}_${mixup}_${aug_pipeline}_${aug_p}
+NAME=${TEACHER_DIR}_${STUDENT_DIR}_lr${lr}e-5_e${ep}_${task_type}_${task_name}_${intermediate_strategy}_${intermediate_loss_type}_${inter_loss_weight}_alpha${alpha}_h${hard_label_weight}_k${kd_loss_weight}_${kd_loss_type}_${mixup}_${aug_pipeline}_${aug_p}
 OUTPUT_DIR=${OUTPUT_ROOT_DIR}/${NAME}
 
 gpu_nums=4
@@ -65,6 +66,7 @@ python -m torch.distributed.launch --nproc_per_node=${gpu_nums} --master_port=12
     --aug_pipeline ${aug_pipeline} \
     --hard_label_weight ${hard_label_weight} \
     --kd_loss_weight ${kd_loss_weight} \
+    --inter_loss_weight ${inter_loss_weight} \
     --kd_loss_type ${kd_loss_type}
 
 #aws s3 cp --recursive $OUTPUT_DIR s3://haoyu-nlp/experiments/$OUTPUT_DIR
