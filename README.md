@@ -36,6 +36,12 @@ If you want to download all data of NaturalQuestions(42G), you can check out the
 
 
 
-## TO DOs
-
-1. Benchmark DynaBERT, TinyBERT in NER and QA task.
+## Reference
+BibTeX entry of the EMNLP Workshop Version:
+```@inproceedings{he2021distiller,
+  title={Distiller: A Systematic Study of Model Distillation Methods in Natural Language Processing},
+  author={He, Haoyu and Shi, Xingjian and Mueller, Jonas and Zha, Sheng and Li, Mu and Karypis, George},
+  booktitle={Proceedings of the Second Workshop on Simple and Efficient Natural Language Processing},
+  pages={119--133},
+  year={2021}
+}```
