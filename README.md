@@ -24,10 +24,10 @@ then go to [ray_directory](ray_directory)
 
 ## Dataset
 
-For QA task, you can download SQuAD dataset by using gluon-nlp command:
+For QA task, you can download SQuAD dataset (v1, v2) by using shell command:
 
 ``` shell
-nlp_data prepare_squad --version 1.1
+bash download_squad2.sh
 ```
 
 For downloading other datasets, follow this: https://github.com/dmlc/gluon-nlp/tree/master/scripts/datasets/question_answering
