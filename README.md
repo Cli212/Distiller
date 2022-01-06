@@ -1,16 +1,6 @@
-# Distiller: A Systematic of Knowledge Distillation in NLP
+# Distiller: A Systematic Study of Knowledge Distillation in Natural Language Processing
 
-
-
-## Description 
-
-We aim to benchmark various distillation algorithms for QA and NER tasks. 
-
-Code for experiements can be put in directory /src.
-
-## Experiments
-
-You can do KD experiments now using our code [here](experiments/). We only support experiments on QA tasks now but I am very confident that we will support NER tasks soon.
+This repository includes training and testing code of the paper "Distiller: A Systematic Study of Knowledge Distillation in Natural Language Processing". You can reproduce our experimental results with code [here](experiments/). 
 
 ## Ray Tune
 
@@ -35,14 +25,3 @@ For downloading other datasets, follow this: https://github.com/dmlc/gluon-nlp/t
 If you want to download all data of NaturalQuestions(42G), you can check out the official statement of NaturalQuestions here: https://ai.google.com/research/NaturalQuestions/download
 
 
-
-## Reference
-BibTeX entry of the EMNLP Workshop Version:
-```
-@inproceedings{he2021distiller,
-  title={Distiller: A Systematic Study of Model Distillation Methods in Natural Language Processing},
-  author={He, Haoyu and Shi, Xingjian and Mueller, Jonas and Zha, Sheng and Li, Mu and Karypis, George},
-  booktitle={Proceedings of the Second Workshop on Simple and Efficient Natural Language Processing},
-  pages={119--133},
-  year={2021}
-}
