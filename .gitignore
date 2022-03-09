@@ -19,3 +19,5 @@ configs/*
 /permutation_importance.png
 /student_baseline.csv
 /teacher_baseline.csv
+/predictions/
+/kaggle/

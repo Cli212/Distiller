@@ -1,4 +1,3 @@
-#aws s3 cp --recursive $OUTPUT_DIR s3://haoyu-nlp/experiments/$OUTPUT_DIR
 #set hyperparameters
 #BERT_DIR=output-bert-base/squad_base_cased_lr3e2_teacher
 TEACHER_DIR=csarron/bert-base-uncased-squad-v1
@@ -70,5 +69,3 @@ python run.py \
     --kd_loss_weight ${kd_loss_weight} \
     --inter_loss_weight ${inter_loss_weight} \
     --kd_loss_type ${kd_loss_type}
-
-#aws s3 cp --recursive $OUTPUT_DIR s3://haoyu-nlp/experiments/$OUTPUT_DIR
