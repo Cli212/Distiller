@@ -1284,7 +1284,7 @@ def pearson_and_spearman(preds, labels):
     return {
         "pearson": pearson_corr,
         "spearmanr": spearman_corr,
-        "corr": (pearson_corr + spearman_corr) / 2,
+        "acc": (pearson_corr + spearman_corr) / 2,
     }
 
 def roc_auc(preds, labels):
@@ -1294,7 +1294,7 @@ def roc_auc(preds, labels):
 def glue_compute_metrics(task_name, preds, labels):
     assert len(preds) == len(labels), f"Predictions and labels have mismatched lengths {len(preds)} and {len(labels)}"
     if task_name == "cola":
-        return {"mcc": matthews_corrcoef(labels, preds)}
+        return {"acc": matthews_corrcoef(labels, preds), "mcc": matthews_corrcoef(labels, preds)}
     elif task_name == "sst-2":
         return {"acc": simple_accuracy(preds, labels)}
     elif task_name == "mrpc":
@@ -1304,7 +1304,7 @@ def glue_compute_metrics(task_name, preds, labels):
     elif task_name == "qqp":
         return acc_and_f1(preds, labels)
     elif task_name == "mnli":
-        return {"mnli/acc": simple_accuracy(preds, labels)}
+        return {"acc": simple_accuracy(preds, labels), "mnli/acc": simple_accuracy(preds, labels)}
     elif task_name == "mnli-mm":
         return {"mnli-mm/acc": simple_accuracy(preds, labels)}
     elif task_name == "qnli":

@@ -1523,8 +1523,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
                 loss = loss_fct(logits.view(-1), labels.view(-1))
             else:
                 if mixup_labels is not None:
-                    labels = nn.functional.one_hot(labels,
-                                                            num_classes=self.num_labels)
+                    labels = nn.functional.one_hot(labels, num_classes=self.num_labels)
                     mixup_labels = nn.functional.one_hot(mixup_labels,
                                                                   num_classes=self.num_labels)
                     labels = mixup_value * labels + (1 - mixup_value) * mixup_labels

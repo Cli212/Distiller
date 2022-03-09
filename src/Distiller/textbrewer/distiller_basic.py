@@ -255,7 +255,7 @@ class BasicDistiller(AbstractDistiller):
                 random.shuffle(self.logits_cache)
                 dataloader = self.logits_cache
             logger.info(f"Length of current epoch in forward batch: {len(dataloader)}")
-            for step, batch in tqdm(enumerate(dataloader), disable=tqdm_disable):
+            for step, batch in tqdm(enumerate(dataloader), disable=tqdm_disable, total=len(dataloader), desc=f"Epoch {current_epoch+1}"):
                 if self.t_config.repeated_aug > 1:
                     batch = self.augment_data(batch)
                     features, s_features = self.t_config.processor.convert_examples_to_features(batch, disable=True)

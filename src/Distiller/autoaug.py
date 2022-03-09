@@ -1,3 +1,4 @@
+import torch
 from nlpaug.augmenter import char as nac
 from nlpaug.augmenter import word as naw
 from nlpaug import flow as naf
@@ -39,12 +40,12 @@ class AutoAugmenter:
           "model_type": "distilbert",
           "top_p": 0.8,
           "aug_p": aug_p,
-          "device": "cuda:3"
+          "device": "cuda"
             },{
             "aug_type": "back_translation",
             "from_model_name": "Helsinki-NLP/opus-mt-en-ROMANCE",
             "to_model_name": "Helsinki-NLP/opus-mt-ROMANCE-en",
-            "device": "cuda:2"
+            "device": "cuda:2" if torch.cuda.device_count() >= 4 else "cpu"
         },{
         "aug_type": "random",
         "action": "swap",
