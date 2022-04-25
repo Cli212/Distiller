@@ -1,0 +1,9 @@
+task,Model,student_score
+mnli,TinyBERT4,80.6
+qqp,TinyBERT4,87.1
+qnli,TinyBERT4,85.9
+sst-2,TinyBERT4,88.5
+cola,TinyBERT4,20
+mrpc,TinyBERT4,88.5
+rte,TinyBERT4,66.8
+stsb,TinyBERT4,87.9
